@@ -19,6 +19,7 @@ function useScreenAwake() {
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
+import { ShareCardSheet } from '../../../components/ShareCard.tsx';
 import {
   BallChip,
   Button,
@@ -44,12 +45,12 @@ import {
   addEvent,
   addPlayer,
   canUndo,
+  chaseTargetInfo,
   describeEvent,
   highlights,
   matchState,
   oversLeft,
   oversText,
-  parTarget,
   playerName,
   replaceBall,
   setOvers,
@@ -60,11 +61,11 @@ import {
 } from '../../../engine/engine.ts';
 import { isPlaceholder, playerOfTheMatch, seriesState } from '../../../engine/stats.ts';
 import type { BallEvent, Extra, InningsEvent, Match, WicketKind } from '../../../engine/types.ts';
-import { t } from '../../../i18n.ts';
 import { newId, useMatch, useMatches } from '../../../store/matches.tsx';
-import { usePrefs } from '../../../store/prefs.ts';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
-import { colors, font, gradients, radius, space, type, ink } from '../../../theme.ts';
+import { colors, font, gradients, radius, space, type, ink, hero, edge } from '../../../theme.ts';
+
+const HERO_BG = '#101010';
 
 const rate = (runs: number, balls: number) => (balls ? ((runs * 6) / balls).toFixed(2) : '0.00');
 
@@ -79,8 +80,8 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
 
   return (
     <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
-      <PitchStripes />
-      <GhostWord size={150} style={styles.heroGhost}>
+      <PitchStripes tint="255,255,255" />
+      <GhostWord size={150} style={[styles.heroGhost, { color: hero.ink(0.05) }]}>
         {s.battingTeam.name}
       </GhostWord>
 
@@ -90,8 +91,8 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
           <Text style={styles.liveText}>{index >= 2 ? 'Super over' : index === 0 ? '1st innings' : '2nd innings'}</Text>
         </View>
         <Text style={styles.heroOvers}>
-          OV <Text style={{ color: colors.text }}>{oversText(s.legalBalls)}</Text>
-          <Text style={{ color: colors.faint }}> / {match.rules.overs}</Text>
+          OV <Text style={{ color: hero.text }}>{oversText(s.legalBalls)}</Text>
+          <Text style={{ color: hero.faint }}> / {match.rules.overs}</Text>
         </Text>
       </View>
 
@@ -145,7 +146,7 @@ function Stat({ label, value, hot }: { label: string; value: string; hot?: boole
   return (
     <View style={styles.stat}>
       <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, hot && { color: colors.accent }]}>{value}</Text>
+      <Text style={[styles.statValue, hot && { color: hero.accent }]}>{value}</Text>
     </View>
   );
 }
@@ -169,7 +170,7 @@ function Crease({ match, s, onSwap }: { match: Match; s: InningsState; onSwap: (
                 <Text numberOfLines={1} style={[styles.name, onStrike && { color: colors.text }]}>
                   {playerName(match, id)}
                 </Text>
-                {onStrike && <MaterialCommunityIcons name="cricket" size={15} color={colors.accent} />}
+                {onStrike && <MaterialCommunityIcons name="cricket" size={15} color={colors.accentInk} />}
               </View>
               <Text style={styles.batterMeta}>
                 {b?.fours ?? 0}×4   {b?.sixes ?? 0}×6   SR {b && b.balls ? ((b.runs * 100) / b.balls).toFixed(0) : '–'}
@@ -364,6 +365,7 @@ function MatchMenu({
   onDeadBall,
   onEndInnings,
   inningsLabel,
+  dlsG,
 }: {
   visible: boolean;
   match: Match;
@@ -378,6 +380,8 @@ function MatchMenu({
   onDeadBall: () => void;
   onEndInnings: () => void;
   inningsLabel: string;
+  /** Average first-innings score at this length, for DLS. */
+  dlsG?: number;
 }) {
   const [overs, setOversDraft] = useState(match.rules.overs);
   const [target, setTargetDraft] = useState(0);
@@ -385,11 +389,16 @@ function MatchMenu({
   const [lateTeam, setLateTeam] = useState(match.teams[0].id);
   const [lateName, setLateName] = useState('');
   const original = match.originalOvers ?? match.rules.overs;
-  const fair = firstInningsRuns !== null ? parTarget(firstInningsRuns, original, overs) : null;
+  // What DLS would set if the overs changed to the draft value, and what stands now.
+  const preview = overs !== match.rules.overs ? setOvers(match, overs, dlsG) : match;
+  const firstRuns = matchState(preview).innings[0];
+  const willAffectTarget = firstRuns.status === 'done' || matchState(match).current === 0;
+  const dls = firstInningsRuns !== null || willAffectTarget ? chaseTargetInfo(preview, firstRuns.runs) : null;
+  const now = firstInningsRuns !== null ? chaseTargetInfo(match, firstInningsRuns) : null;
   useEffect(() => {
     if (visible) {
       setOversDraft(match.rules.overs);
-      setTargetDraft(match.revisedTarget ?? (firstInningsRuns ?? 0) + 1);
+      setTargetDraft(firstInningsRuns !== null ? chaseTargetInfo(match, firstInningsRuns).target : 1);
       setArming(false);
       setLateName('');
     }
@@ -409,26 +418,30 @@ function MatchMenu({
           disabled={overs === match.rules.overs}
           onPress={() => onOvers(overs)}
         />
-        {firstInningsRuns !== null && (
+        {overs !== match.rules.overs && dls && firstInningsRuns !== null && (
+          <Text style={styles.editNote}>
+            DLS: the chase target becomes <Text style={styles.dlsStrong}>{dls.target}</Text> in {overs} overs.
+          </Text>
+        )}
+        {overs !== match.rules.overs && firstInningsRuns === null && (
+          <Text style={styles.editNote}>DLS will set a fair target for the chase once this innings ends.</Text>
+        )}
+        {firstInningsRuns !== null && now && (
           <Card style={{ gap: space.sm }}>
-            <Stepper
-              label="Chase target"
-              hint={fair !== null && overs !== original ? `Fair target for ${overs} overs: ${fair}` : `${firstInningsRuns} + 1 as it stands`}
-              value={target}
-              min={1}
-              max={999}
-              onChange={setTargetDraft}
-            />
+            <Text style={styles.dlsNow}>
+              Target <Text style={styles.dlsStrong}>{now.target}</Text>
+              {now.method === 'dls' ? '  ·  set by DLS' : now.method === 'agreed' ? '  ·  agreed by hand' : ''}
+            </Text>
+            <Stepper label="Agree a different target" hint="Only if both captains agree" value={target} min={1} max={999} onChange={setTargetDraft} />
             <View style={{ flexDirection: 'row', gap: space.sm }}>
-              {fair !== null && overs !== original && <Chip label={`Use ${fair}`} onPress={() => setTargetDraft(fair)} />}
-              <Chip label="Back to normal" onPress={() => setTargetDraft(firstInningsRuns + 1)} />
+              {match.revisedTarget !== undefined && <Chip label={match.interruptions?.length ? 'Back to DLS' : 'Back to normal'} onPress={() => onTarget(undefined)} />}
             </View>
             <Button
               variant="ghost"
               label={`Set the target to ${target}`}
               icon="flag-outline"
-              disabled={target === (match.revisedTarget ?? firstInningsRuns + 1)}
-              onPress={() => onTarget(target === firstInningsRuns + 1 ? undefined : target)}
+              disabled={target === now.target}
+              onPress={() => onTarget(target)}
             />
           </Card>
         )}
@@ -576,13 +589,15 @@ const MODE_HINT: Record<Extra, string> = {
   legbye: 'LEG BYE · tap the runs they ran',
 };
 
-/** How the next bouncer counts: fair while the over's allowance lasts, then a wide or no-ball. */
-function bounceHint(match: Match, s: InningsState) {
-  const rule = match.rules.bouncer ?? { fair: 0, calledAs: 'wide' as const };
+/** How the next bounce counts: the umpire's call (fair or wide) while the over's allowance lasts, then called. */
+const ordinal = (n: number) => `${n}${[, 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10] ?? 'th'}`;
+
+function bounceInfo(match: Match, s: InningsState): { choice: boolean; hint: string } {
+  const rule = match.rules.bouncer ?? { fair: 1, calledAs: 'noball' as const };
   const left = rule.fair - s.bouncersThisOver;
   return left > 0
-    ? `BOUNCE · fair ball (${left} more allowed this over)`
-    : `BOUNCE · called as a ${rule.calledAs === 'wide' ? 'wide' : 'no ball'} · tap the runs`;
+    ? { choice: true, hint: `BOUNCE · umpire’s call: fair or wide · ${left === 1 ? 'the next one is' : `${left} left, then`} a ${rule.calledAs === 'wide' ? 'wide' : 'no ball'}` }
+    : { choice: false, hint: `BOUNCE · ${ordinal(s.bouncersThisOver + 1)} this over: a ${rule.calledAs === 'wide' ? 'wide' : 'no ball'} · tap the runs` };
 }
 
 function Key({
@@ -642,18 +657,16 @@ function Pad({
 }: {
   onBall: (b: BallEvent) => void;
   onWicket: (mode: Extra | null) => void;
-  /** What the hint says when Bounce is on. */
-  bounce: string;
+  /** How a bounce would count right now. */
+  bounce: { choice: boolean; hint: string };
 }) {
   const [mode, setMode] = useState<PadMode | null>(null);
-  const { prefs } = usePrefs();
-  const height = prefs.bigKeys ? 84 : 66;
-  // Left-handed scorers get the pad mirrored.
-  const row = <T,>(items: T[]) => (prefs.leftHanded ? [...items].reverse() : items);
+  const [call, setCall] = useState<'fair' | 'wide'>('fair');
   const score = (r: number) => {
     tap(r >= 4 ? 'heavy' : 'light');
-    onBall(mode === 'bouncer' ? { type: 'ball', runs: r, bouncer: true } : { type: 'ball', runs: r, extra: mode ?? undefined });
+    onBall(mode === 'bouncer' ? { type: 'ball', runs: r, bouncer: bounce.choice ? call : 'fair' } : { type: 'ball', runs: r, extra: mode ?? undefined });
     setMode(null);
+    setCall('fair');
   };
   const byes = mode === 'bye' || mode === 'legbye';
   const runKey = (r: number) => {
@@ -662,8 +675,7 @@ function Pad({
       <Key
         key={r}
         label={String(r)}
-        sub={!mode ? (r === 0 ? t('DOT') : r === 4 ? t('FOUR') : r === 6 ? t('SIX') : undefined) : undefined}
-        height={height}
+        sub={!mode ? (r === 0 ? 'DOT' : r === 4 ? 'FOUR' : r === 6 ? 'SIX' : undefined) : undefined}
         variant={mode ? 'mode' : big ? (r === 4 ? 'four' : 'six') : 'plain'}
         disabled={byes && r === 0}
         onPress={() => score(r)}
@@ -674,7 +686,7 @@ function Pad({
   return (
     <View style={styles.pad}>
       <View style={styles.extrasRow}>
-        {row(EXTRAS).map((e) => {
+        {EXTRAS.map((e) => {
           const on = mode === e.value;
           return (
             <PressableScale
@@ -686,25 +698,34 @@ function Pad({
               style={[styles.extraKey, on && styles.extraKeyOn]}
             >
               <Text numberOfLines={1} style={[styles.extraText, on && { color: colors.onAccent }]}>
-                {t(e.label)}
+                {e.label}
               </Text>
             </PressableScale>
           );
         })}
       </View>
       <Text style={[styles.modeHint, mode && { color: colors.violet }]}>
-        {mode === 'bouncer' ? bounce : mode ? MODE_HINT[mode] : t('TAP THE RUNS OFF THIS BALL')}
+        {mode === 'bouncer' ? bounce.hint : mode ? MODE_HINT[mode] : 'TAP THE RUNS OFF THIS BALL'}
       </Text>
-      <View style={styles.grid}>{row([0, 1, 2, 3]).map(runKey)}</View>
+      {mode === 'bouncer' && bounce.choice && (
+        <Segmented
+          value={call}
+          onChange={setCall}
+          options={[
+            { value: 'fair', label: 'Fair ball' },
+            { value: 'wide', label: 'Wide' },
+          ]}
+        />
+      )}
+      <View style={styles.grid}>{[0, 1, 2, 3].map(runKey)}</View>
       <View style={styles.grid}>
-        {row<number | 'out'>([4, 6, 5, 'out']).map((k) =>
+        {([4, 6, 5, 'out'] as const).map((k) =>
           k === 'out' ? (
             <Key
               key="out"
-              label={t('OUT')}
+              label={'OUT'}
               variant="out"
-              height={height}
-              onPress={() => {
+                    onPress={() => {
                 tap('warning');
                 onWicket(mode === 'bouncer' ? null : mode);
                 setMode(null);
@@ -870,7 +891,8 @@ function momentFor(match: Match, s: InningsState, e: InningsEvent): Omit<Moment,
   if (e.type !== 'ball') return null;
   if (e.wicket && e.wicket.kind !== 'retired') return { kind: 'wicket', caption: playerName(match, e.wicket.playerOut) };
   // A bounce that's called a wide is runs to extras, not a boundary off the bat.
-  const wideBounce = e.bouncer && match.rules.bouncer?.calledAs !== 'noball' && s.bouncersThisOver >= (match.rules.bouncer?.fair ?? 0);
+  const pastAllowance = s.bouncersThisOver >= (match.rules.bouncer?.fair ?? 1);
+  const wideBounce = Boolean(e.bouncer) && (pastAllowance ? match.rules.bouncer?.calledAs === 'wide' : e.bouncer === 'wide');
   if ((!e.extra || e.extra === 'noball') && !wideBounce) {
     if (e.runs === 6) return { kind: 'six', caption: playerName(match, s.striker) };
     if (e.runs === 4) return { kind: 'four', caption: playerName(match, s.striker) };
@@ -892,6 +914,7 @@ export default function LiveMatch() {
   const toast = useToast('top');
   const { exportMatches, exportPdf } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
+  const [sharing, setSharing] = useState(false);
   // Nobody wants the screen going dark between balls.
   useScreenAwake();
 
@@ -936,6 +959,15 @@ export default function LiveMatch() {
   const superOver = index >= 2;
   const inningsLabel = superOver ? 'the super over' : index === 0 ? 'the 1st innings' : 'the 2nd innings';
   const firstDone = state.innings[0].status === 'done';
+  // DLS needs a typical full first innings at this length: from your own matches when there are enough.
+  const dlsG = (() => {
+    const length = match.originalOvers ?? match.rules.overs;
+    const firsts = matches
+      .filter((m) => m.id !== match.id && (m.originalOvers ?? m.rules.overs) === length && !m.interruptions?.length)
+      .map((m) => matchState(m).innings[0])
+      .filter((s) => s.status === 'done');
+    return firsts.length >= 3 ? Math.round(firsts.reduce((n, s) => n + s.runs, 0) / firsts.length) : undefined;
+  })();
   const live = !state.result && s.status === 'live';
 
   let body = null;
@@ -965,9 +997,9 @@ export default function LiveMatch() {
               onPress={() => router.push({ pathname: '/player/[key]', params: { key: potm.key } })}
               style={styles.potm}
             >
-              <MaterialCommunityIcons name="star-four-points" size={18} color={colors.accent} />
+              <MaterialCommunityIcons name="star-four-points" size={18} color={colors.accentInk} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.potmLabel}>{t('MAN OF THE MATCH')}</Text>
+                <Text style={styles.potmLabel}>MAN OF THE MATCH</Text>
                 <Text style={styles.potmName} numberOfLines={1}>
                   {potm.name}
                 </Text>
@@ -1002,10 +1034,12 @@ export default function LiveMatch() {
         </View>
         <View style={{ gap: space.md, marginTop: space.lg }}>
           {state.result === 'Match tied' && match.innings.length < 4 && (
-            <Button label={t('Play a super over')} icon="flash" onPress={() => saveMatch(startSuperOver(match))} />
+            <Button label={'Play a super over'} icon="flash" onPress={() => saveMatch(startSuperOver(match))} />
           )}
+          <Button label="Share result picture" icon="image-outline" onPress={() => setSharing(true)} />
           <Button
-            label={t('Full scorecard')}
+            variant="ghost"
+            label={'Full scorecard'}
             icon="list"
             onPress={() => router.push({ pathname: '/match/[id]/scorecard', params: { id: match.id } })}
           />
@@ -1043,7 +1077,7 @@ export default function LiveMatch() {
         {freshChase && (
           <FadeIn>
             <View style={styles.breakCard}>
-              <PitchStripes />
+              <PitchStripes tint="255,255,255" />
               <Text style={styles.breakEyebrow}>{superOver ? 'SUPER OVER · ONE OVER, TWO WICKETS' : 'INNINGS BREAK'}</Text>
               {s.target !== null ? (
                 <>
@@ -1073,7 +1107,7 @@ export default function LiveMatch() {
         )}
         <PlayerPicker
           key={openers.length}
-          title={openers.length === 0 ? t('Who’s on strike?') : t('And at the other end?')}
+          title={openers.length === 0 ? 'Who’s on strike?' : 'And at the other end?'}
           subtitle={`${s.battingTeam.name} · opening pair`}
           match={match}
           ids={pool}
@@ -1110,7 +1144,7 @@ export default function LiveMatch() {
     const limitText = limit ? (extra ? ` · ${extra} can bowl ${limit + 1}, the rest ${limit}` : ` · ${limit} overs each`) : '';
     body = (
       <PlayerPicker
-        title={s.legalBalls === 0 ? t('Opening bowler') : `Over ${Math.floor(s.legalBalls / 6) + 1}`}
+        title={s.legalBalls === 0 ? 'Opening bowler' : `Over ${Math.floor(s.legalBalls / 6) + 1}`}
         subtitle={
           s.legalBalls === 0
             ? `${s.bowlingTeam.name} with the new ball${limitText}`
@@ -1138,7 +1172,7 @@ export default function LiveMatch() {
       <View style={styles.header}>
         <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
         <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={styles.headerTitle}>
-          {match.teams[0].name} <Text style={{ color: colors.accent }}>×</Text> {match.teams[1].name}
+          {match.teams[0].name} <Text style={{ color: colors.accentInk }}>×</Text> {match.teams[1].name}
         </Text>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
           <IconButton icon="arrow-undo" label="Undo" disabled={!canUndo(match)} onPress={undoLast} />
@@ -1161,11 +1195,11 @@ export default function LiveMatch() {
 
       {live && (
         <View style={[styles.padWrap, { paddingBottom: insets.bottom + space.sm }]}>
-          {s.freeHit && <Banner tone="volt" title={t('FREE HIT')} body={t('Only a run out counts on this ball')} />}
+          {s.freeHit && <Banner tone="volt" title={'FREE HIT'} body={'Only a run out counts on this ball'} />}
           {s.bowler && s.streaks[s.bowler] === 2 && (
-            <Banner tone="red" title={t('HAT-TRICK BALL')} body={`${playerName(match, s.bowler)} has two in a row`} />
+            <Banner tone="red" title={'HAT-TRICK BALL'} body={`${playerName(match, s.bowler)} has two in a row`} />
           )}
-          <Pad onBall={push} onWicket={(mode) => setWicketFor(mode)} bounce={bounceHint(match, s)} />
+          <Pad onBall={push} onWicket={(mode) => setWicketFor(mode)} bounce={bounceInfo(match, s)} />
         </View>
       )}
 
@@ -1189,9 +1223,15 @@ export default function LiveMatch() {
         firstInningsRuns={firstDone && !superOver ? state.innings[0].runs : null}
         inningsLabel={inningsLabel}
         onClose={() => setMenu(false)}
+        dlsG={dlsG}
         onOvers={(o) => {
-          saveMatch(setOvers(match, o));
-          toast.show(`Now ${o} overs an innings`, 'success');
+          const next = setOvers(match, o, dlsG);
+          saveMatch(next);
+          const st = matchState(next);
+          toast.show(
+            st.innings[0].status === 'done' && !superOver ? `Now ${o} overs · DLS target ${st.innings[1].target}` : `Now ${o} overs an innings`,
+            'success',
+          );
         }}
         onTarget={(t) => {
           saveMatch({ ...match, revisedTarget: t });
@@ -1228,6 +1268,7 @@ export default function LiveMatch() {
           else exportMatches(chosen);
         }}
       />
+      {state.result && <ShareCardSheet match={match} all={matches} visible={sharing} onClose={() => setSharing(false)} notify={toast.show} />}
       <MomentFlash moment={moment} />
       {toast.element}
       <WicketSheet
@@ -1249,7 +1290,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.sm },
   headerTitle: { flex: 1, color: colors.text, fontSize: 20, fontFamily: font.poster, textAlign: 'center', textTransform: 'uppercase' },
 
-  hero: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden', borderWidth: 1, borderColor: colors.borderHi },
+  hero: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden', borderWidth: 1, borderColor: hero.line },
   heroGhost: { right: -30, bottom: -26 },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   livePill: {
@@ -1264,26 +1305,26 @@ const styles = StyleSheet.create({
   },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger },
   liveText: { ...type.label, fontSize: 11, color: colors.onAccent },
-  heroOvers: { color: colors.muted, fontSize: 18, fontFamily: font.poster, ...type.num },
-  heroTeam: { ...type.poster, color: colors.muted, fontSize: 22, marginTop: space.lg },
+  heroOvers: { color: hero.muted, fontSize: 18, fontFamily: font.poster, ...type.num },
+  heroTeam: { ...type.poster, color: hero.muted, fontSize: 22, marginTop: space.lg },
   heroScoreRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   scoreWrap: { flexDirection: 'row', alignItems: 'flex-end', flexShrink: 1 },
-  heroScore: { ...type.display, color: colors.text },
-  heroWickets: { fontFamily: font.posterBlack, fontSize: 56, lineHeight: 74, color: colors.faint, marginLeft: 2 },
+  heroScore: { ...type.display, color: hero.text },
+  heroWickets: { fontFamily: font.posterBlack, fontSize: 56, lineHeight: 74, color: hero.faint, marginLeft: 2 },
   heroStats: { gap: space.sm, alignItems: 'flex-end', paddingBottom: 14 },
   stat: { alignItems: 'flex-end' },
-  statLabel: { ...type.label, fontSize: 10, color: colors.faint },
-  statValue: { color: colors.text, fontSize: 26, fontFamily: font.posterBlack, lineHeight: 28, ...type.num },
+  statLabel: { ...type.label, fontSize: 10, color: hero.faint },
+  statValue: { color: hero.text, fontSize: 26, fontFamily: font.posterBlack, lineHeight: 28, ...type.num },
   progress: {
     height: 8,
-    backgroundColor: ink(0.08),
+    backgroundColor: hero.ink(0.08),
     borderRadius: 2,
     overflow: 'hidden',
     marginTop: space.md,
   },
   progressFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.accent },
-  notch: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: colors.bg },
-  heroFoot: { color: colors.muted, fontSize: 13, fontFamily: font.semibold, marginTop: space.md },
+  notch: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: '#0A0A0A' },
+  heroFoot: { color: hero.muted, fontSize: 13, fontFamily: font.semibold, marginTop: space.md },
   chase: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1327,6 +1368,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: space.md,
+    ...edge,
   },
   scorebugLabel: { borderRightWidth: 1, borderRightColor: colors.border, paddingRight: space.md },
   scorebugTitle: { color: colors.text, fontSize: 18, fontFamily: font.poster },
@@ -1360,8 +1402,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
+    ...edge,
   },
-  pickNum: { color: colors.accent, fontSize: 24, fontFamily: font.posterBlack, width: 32, ...type.num },
+  pickNum: { color: colors.accentInk, fontSize: 24, fontFamily: font.posterBlack, width: 32, ...type.num },
   pickName: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   pickNote: { color: colors.muted, fontSize: 12, fontFamily: font.medium, marginTop: 1 },
   openersPicked: { flexDirection: 'row', marginTop: space.sm },
@@ -1385,6 +1428,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceHi,
     alignItems: 'center',
     justifyContent: 'center',
+    ...edge,
   },
   extraKeyOn: { backgroundColor: colors.violet, borderColor: colors.violet },
   extraText: { color: colors.muted, fontSize: 13, fontFamily: font.bold },
@@ -1398,6 +1442,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    ...edge,
   },
   keyFour: { backgroundColor: colors.cyanDim, borderColor: colors.cyan, borderWidth: 1.5 },
   keySix: { backgroundColor: colors.accent, borderColor: colors.accent },
@@ -1409,6 +1454,8 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   editNow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   editNowText: { color: colors.text, fontSize: 16, fontFamily: font.bold },
+  dlsStrong: { color: colors.accentInk, fontFamily: font.heavy },
+  dlsNow: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   editNote: { color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 19 },
   editRuns: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   input: {
@@ -1476,21 +1523,21 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
   },
   seriesLineText: { fontFamily: font.poster, fontSize: 20, color: colors.onAccent, textTransform: 'uppercase' },
-  potmLabel: { ...type.label, fontSize: 9, color: colors.accent },
+  potmLabel: { ...type.label, fontSize: 9, color: colors.accentInk },
   potmName: { fontFamily: font.poster, fontSize: 24, color: colors.text, textTransform: 'uppercase' },
   potmLine: { fontFamily: font.poster, fontSize: 18, color: colors.text, ...type.num },
   exportHint: { color: colors.faint, fontSize: 12, fontFamily: font.regular, textAlign: 'center', marginTop: -4 },
 
   breakCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: HERO_BG,
     borderRadius: radius.xl,
     borderWidth: 1.5,
     borderColor: colors.accent,
     padding: space.xl,
     overflow: 'hidden',
   },
-  breakEyebrow: { ...type.label, color: colors.accent },
-  breakTarget: { fontFamily: font.posterBlack, fontSize: 120, lineHeight: 116, color: colors.text, letterSpacing: -3, ...type.num },
-  breakTitle: { ...type.poster, fontSize: 26, color: colors.text },
-  breakSub: { color: colors.muted, fontSize: 13, fontFamily: font.medium, marginTop: space.sm },
+  breakEyebrow: { ...type.label, color: hero.accent },
+  breakTarget: { fontFamily: font.posterBlack, fontSize: 120, lineHeight: 116, color: hero.text, letterSpacing: -3, ...type.num },
+  breakTitle: { ...type.poster, fontSize: 26, color: hero.text },
+  breakSub: { color: hero.muted, fontSize: 13, fontFamily: font.medium, marginTop: space.sm },
 });

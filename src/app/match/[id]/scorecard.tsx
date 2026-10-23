@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
+import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
 import { Card, IconButton, Screen, SectionLabel, Segmented, useToast } from '../../../components/ui.tsx';
 import { dismissal, matchState, oversText, playerName, type InningsState, type MatchState } from '../../../engine/engine.ts';
 import { isPlaceholder, playerKey } from '../../../engine/stats.ts';
 import type { Match, Team } from '../../../engine/types.ts';
 import { useMatch } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
-import { colors, radius, space, type, font } from '../../../theme.ts';
+import { colors, radius, space, type, font, edge } from '../../../theme.ts';
 
 const econ = (runs: number, balls: number) => (balls ? ((runs * 6) / balls).toFixed(1) : '–');
 const sr = (runs: number, balls: number) => (balls ? ((runs * 100) / balls).toFixed(1) : '–');
@@ -86,8 +87,8 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
             <View key={b.id} style={styles.row}>
               <View style={{ flex: 1, paddingRight: space.sm }}>
                 <View style={styles.nameRow}>
-                  <PlayerLink match={match} team={s.battingTeam} id={b.id} style={[styles.name, notOut && { color: colors.accent }]} />
-                  {notOut && atCrease.includes(b.id) && <Text style={[styles.name, { color: colors.accent }]}>*</Text>}
+                  <PlayerLink match={match} team={s.battingTeam} id={b.id} style={[styles.name, notOut && { color: colors.accentInk }]} />
+                  {notOut && atCrease.includes(b.id) && <Text style={[styles.name, { color: colors.accentInk }]}>*</Text>}
                 </View>
                 <Text numberOfLines={1} style={styles.how}>
                   {dismissal(match, b)}
@@ -156,7 +157,7 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
             <Text style={styles.td}>{oversText(b.balls)}</Text>
             <Text style={styles.td}>{b.maidens}</Text>
             <Text style={styles.td}>{b.runs}</Text>
-            <Text style={[styles.td, styles.strong, b.wickets > 0 && { color: colors.accent }]}>{b.wickets}</Text>
+            <Text style={[styles.td, styles.strong, b.wickets > 0 && { color: colors.accentInk }]}>{b.wickets}</Text>
             <Text style={[styles.td, { width: 58 }]}>{econ(b.runs, b.balls)}</Text>
           </View>
         ))}
@@ -206,7 +207,12 @@ export default function Scorecard() {
           options={state.innings.map((inn, i) => ({ value: String(i), label: i >= 2 ? `SO · ${inn.battingTeam.name}` : inn.battingTeam.name }))}
         />
         {started ? (
-          <InningsCard match={match} s={s} />
+          <>
+            <InningsCard match={match} s={s} />
+            <Partnerships match={match} s={s} />
+            <RunRace state={state} />
+            <BallByBall match={match} s={s} />
+          </>
         ) : (
           <Text style={styles.empty}>{s.battingTeam.name} haven’t batted yet.</Text>
         )}
@@ -240,11 +246,11 @@ const styles = StyleSheet.create({
     padding: space.md,
     marginBottom: space.md,
   },
-  bannerDone: { backgroundColor: colors.accent, borderColor: colors.accent },
+  bannerDone: { backgroundColor: colors.accent, borderColor: colors.accent, ...edge },
   bannerText: { color: colors.text, fontSize: 20, fontFamily: font.poster, textTransform: 'uppercase', flex: 1 },
   totalRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: space.xl, paddingHorizontal: space.xs },
   totalTeam: { color: colors.text, fontSize: 30, fontFamily: font.poster, textTransform: 'uppercase', flex: 1 },
-  total: { color: colors.accent, fontSize: 48, lineHeight: 50, fontFamily: font.posterBlack, ...type.num },
+  total: { color: colors.accentInk, fontSize: 48, lineHeight: 50, fontFamily: font.posterBlack, ...type.num },
   totalOvers: { color: colors.muted, fontSize: 18, fontFamily: font.poster },
   head: { flexDirection: 'row', paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.sm },
   th: { ...type.label, fontSize: 10, color: colors.faint, width: 32, textAlign: 'right' },

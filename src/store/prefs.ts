@@ -5,19 +5,13 @@ import { DevSettings, Platform } from 'react-native';
 // Per-phone preferences. Read synchronously at start-up, because the colour theme has to be known before any
 // screen's styles are created.
 
-export type Language = 'en' | 'hi';
 export type Prefs = {
   theme: 'night' | 'day';
-  bigKeys: boolean;
-  leftHanded: boolean;
-  language: Language;
-  /** The first-time scoring tips have been shown. */
-  guideSeen: boolean;
   /** When the last full backup was exported (ms), for the reminder. */
   lastBackup: number | null;
 };
 
-const DEFAULTS: Prefs = { theme: 'night', bigKeys: false, leftHanded: false, language: 'en', guideSeen: false, lastBackup: null };
+const DEFAULTS: Prefs = { theme: 'night', lastBackup: null };
 const KEY = 'crease.prefs.v1';
 
 function prefsFile() {

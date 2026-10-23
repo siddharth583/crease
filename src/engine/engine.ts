@@ -1,3 +1,4 @@
+import { dlsTarget } from './dls.ts';
 import type { BallEvent, Extra, Innings, InningsEvent, Match, Rules, Team, WicketKind } from './types.ts';
 
 // Everything on screen is derived from the innings' event list, so undo is just "drop the last event".
@@ -26,6 +27,18 @@ export type BallTone = 'dot' | 'run' | 'four' | 'six' | 'wicket' | 'extra';
 /** `event` is the delivery's index in its innings' events, so the ball can be edited later. */
 export type BallView = { label: string; tone: BallTone; event?: number; wicket?: boolean };
 
+export type DeliveryLog = {
+  /** e.g. "3.4": the over and the ball of it. */
+  over: string;
+  bowler: string | null;
+  striker: string | null;
+  /** The delivery as it counted (a called bouncer shows as its wide or no-ball). */
+  ball: BallEvent;
+  /** Runs it added to the total. */
+  total: number;
+  label: string;
+};
+
 export type InningsStatus = 'openers' | 'batter' | 'bowler' | 'live' | 'done';
 
 export type InningsState = {
@@ -47,6 +60,10 @@ export type InningsState = {
   /** Runs and wickets in each over, in step with `overs`. */
   overTotals: { runs: number; wickets: number }[];
   partnership: { runs: number; balls: number };
+  /** Every partnership in order; the last one is still going while the innings is. */
+  partnerships: { batters: [string | null, string | null]; runs: number; balls: number }[];
+  /** Ball by ball, for the commentary and batter-against-bowler records. */
+  log: DeliveryLog[];
   available: string[];
   target: number | null;
   status: InningsStatus;
@@ -120,6 +137,8 @@ export function inningsState(match: Match, index: number, target: number | null)
     overs: [[]],
     overTotals: [{ runs: 0, wickets: 0 }],
     partnership: { runs: 0, balls: 0 },
+    partnerships: [],
+    log: [],
     available: [],
     target,
     status: 'openers',
@@ -171,6 +190,7 @@ export function inningsState(match: Match, index: number, target: number | null)
     }
     if (e.type === 'retire') {
       batter(e.batter).retired = true;
+      s.partnerships.push({ batters: [s.striker, s.nonStriker], ...s.partnership });
       if (s.striker === e.batter) s.striker = null;
       if (s.nonStriker === e.batter) s.nonStriker = null;
       s.partnership = { runs: 0, balls: 0 };
@@ -188,11 +208,15 @@ export function inningsState(match: Match, index: number, target: number | null)
       continue;
     }
 
-    // A delivery. A bouncer is a fair ball until the over's allowance is used; after that it's called.
+    // A delivery. Within the over's allowance a bounce is the umpire's call (fair or wide); past it, it's
+    // called by the rule (usually a no-ball).
     let calledBouncer = false;
     if (e.bouncer) {
-      if (bouncersThisOver >= (rules.bouncer?.fair ?? 0)) {
-        e = { ...e, extra: rules.bouncer?.calledAs ?? 'wide' };
+      if (bouncersThisOver >= (rules.bouncer?.fair ?? 1)) {
+        e = { ...e, extra: rules.bouncer?.calledAs ?? 'noball' };
+        calledBouncer = true;
+      } else if (e.bouncer === 'wide') {
+        e = { ...e, extra: 'wide' };
         calledBouncer = true;
       }
       bouncersThisOver += 1;
@@ -231,7 +255,18 @@ export function inningsState(match: Match, index: number, target: number | null)
       if (e.extra === 'noball') line.noballs += 1;
     }
 
-    const view = calledBouncer && !e.wicket ? { label: `Bn${e.runs ? `+${e.runs}` : ''}`, tone: 'extra' as const } : ballView(rules, e);
+    const view =
+      calledBouncer && !e.wicket
+        ? { label: `B${e.extra === 'wide' ? 'Wd' : 'Nb'}${e.runs ? `+${e.runs}` : ''}`, tone: 'extra' as const }
+        : ballView(rules, e);
+    s.log.push({
+      over: `${Math.floor(s.legalBalls / 6)}.${(s.legalBalls % 6) + 1}`,
+      bowler: bowlerId,
+      striker: s.striker,
+      ball: e,
+      total,
+      label: view.label,
+    });
     s.overs[s.overs.length - 1].push({ ...view, event: eventIndex, wicket: Boolean(e.wicket) });
     s.freeHit = Boolean(rules.freeHit) && (e.extra === 'noball' || (s.freeHit && e.extra === 'wide'));
     const overTotal = s.overTotals[s.overTotals.length - 1];
@@ -258,6 +293,7 @@ export function inningsState(match: Match, index: number, target: number | null)
           player: out.id,
         });
       }
+      s.partnerships.push({ batters: [s.striker ?? out.id, s.nonStriker], ...s.partnership });
       if (s.striker === out.id) s.striker = null;
       if (s.nonStriker === out.id) s.nonStriker = null;
       s.partnership = { runs: 0, balls: 0 };
@@ -311,6 +347,8 @@ export function inningsState(match: Match, index: number, target: number | null)
   else s.status = 'live';
 
   s.bouncersThisOver = bouncersThisOver;
+  if (opened && (s.partnership.runs || s.partnership.balls || s.striker || s.nonStriker))
+    s.partnerships.push({ batters: [s.striker, s.nonStriker], ...s.partnership });
   if (s.status === 'done') s.freeHit = false;
   if (s.overs.length > 1 && s.overs[s.overs.length - 1].length === 0 && s.status === 'done') {
     s.overs.pop();
@@ -319,12 +357,28 @@ export function inningsState(match: Match, index: number, target: number | null)
   return s;
 }
 
-/** The chase target: the first innings plus one, unless one was agreed after lost overs. */
-export const chaseTarget = (match: Match, firstRuns: number) => match.revisedTarget ?? firstRuns + 1;
+/** How the chase target was set: agreed by hand, by DLS after lost overs, or simply the first innings plus one. */
+export function chaseTargetInfo(match: Match, firstRuns: number): { target: number; method: 'normal' | 'dls' | 'agreed' } {
+  if (match.revisedTarget) return { target: match.revisedTarget, method: 'agreed' };
+  if (match.interruptions?.length) {
+    const { target } = dlsTarget({
+      firstRuns,
+      originalOvers: match.originalOvers ?? match.rules.overs,
+      interruptions: match.interruptions,
+      g: match.dlsG ?? 8 * (match.originalOvers ?? match.rules.overs),
+      sideSize: match.rules.playersPerSide,
+    });
+    return { target, method: 'dls' };
+  }
+  return { target: firstRuns + 1, method: 'normal' };
+}
+
+export const chaseTarget = (match: Match, firstRuns: number) => chaseTargetInfo(match, firstRuns).target;
 
 export function matchState(match: Match): MatchState {
   const first = inningsState(match, 0, null);
-  const target = chaseTarget(match, first.runs);
+  const { target, method } = chaseTargetInfo(match, first.runs);
+  const tag = method === 'dls' ? ' (DLS)' : '';
   const second = inningsState(match, 1, target);
   const innings = [first, second];
   let current = first.status === 'done' ? 1 : 0;
@@ -335,13 +389,13 @@ export function matchState(match: Match): MatchState {
     if (second.runs >= target) {
       const left = allOutAt(match.rules, second.battingTeam) - second.wickets;
       winner = second.battingTeam.id;
-      result = `${second.battingTeam.name} won by ${left} wicket${left === 1 ? '' : 's'}`;
+      result = `${second.battingTeam.name} won by ${left} wicket${left === 1 ? '' : 's'}${tag}`;
     } else if (second.runs === target - 1) {
       result = 'Match tied';
     } else {
       const margin = target - 1 - second.runs;
       winner = first.battingTeam.id;
-      result = `${first.battingTeam.name} won by ${margin} run${margin === 1 ? '' : 's'}`;
+      result = `${first.battingTeam.name} won by ${margin} run${margin === 1 ? '' : 's'}${tag}`;
     }
 
     // A tie goes to a super over once one is started: the side that batted second bats first.
@@ -379,11 +433,6 @@ export function startSuperOver(match: Match): Match {
       { battingTeam: first.battingTeam, bowlingTeam: second.battingTeam, events: [] },
     ],
   };
-}
-
-/** A fair chase target after overs are lost: the first innings scaled to the overs the chase gets, plus one. */
-export function parTarget(firstRuns: number, originalOvers: number, chaseOvers: number): number {
-  return Math.floor((firstRuns * chaseOvers) / originalOvers) + 1;
 }
 
 /** Add a late arrival (or substitute) to a side mid-match. */
@@ -500,9 +549,23 @@ export function replaceBall(match: Match, inningsIndex: number, eventIndex: numb
 }
 
 /** Change the overs mid-match (rain, light). Never below what has already been bowled. */
-export function setOvers(match: Match, overs: number): Match {
-  const bowled = Math.max(...matchState(match).innings.map((s) => Math.ceil(s.legalBalls / 6)), 1);
-  return { ...match, originalOvers: match.originalOvers ?? match.rules.overs, rules: { ...match.rules, overs: Math.max(overs, bowled) } };
+export function setOvers(match: Match, overs: number, g?: number): Match {
+  const state = matchState(match);
+  // Never below what the innings in play has already bowled; a finished first innings doesn't limit the chase.
+  const bowled = Math.max(Math.ceil(state.innings[Math.min(state.current, 1)].legalBalls / 6), 1);
+  const after = Math.max(overs, bowled);
+  if (after === match.rules.overs) return match;
+  // Note where the innings stood, so DLS can work out what was lost (super overs don't take part).
+  const index = state.current >= 2 ? null : (state.current as 0 | 1);
+  const s = index === null ? null : state.innings[index];
+  const cut = s ? { innings: index!, balls: s.legalBalls, wickets: s.wickets, before: match.rules.overs, after } : null;
+  return {
+    ...match,
+    originalOvers: match.originalOvers ?? match.rules.overs,
+    interruptions: cut ? [...(match.interruptions ?? []), cut] : match.interruptions,
+    dlsG: match.dlsG ?? g,
+    rules: { ...match.rules, overs: after },
+  };
 }
 
 /** One line for what an event was, e.g. for "Undid: FOUR by Rohit". */

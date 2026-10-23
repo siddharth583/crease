@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addEvent, addPlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, parTarget, replaceBall, setOvers, startSuperOver, undo } from './engine.ts';
+import { addEvent, addPlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, setOvers, startSuperOver, undo } from './engine.ts';
 import { playerOfTheMatch } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Rules, Team } from './types.ts';
 
@@ -253,6 +253,7 @@ test('per-bowler over limit and changing the overs', () => {
   assert.equal(oversLeft(m, s, 'b1'), 0);
   assert.equal(oversLeft(m, s, 'b2'), 1);
   assert.equal(setOvers(m, 0).rules.overs, 1, 'never below what was bowled');
+  assert.equal(setOvers(m, 0).interruptions?.[0].balls, 6, 'the cut is noted where the innings stood');
   assert.equal(setOvers(m, 3).rules.overs, 3);
 });
 
@@ -300,7 +301,7 @@ test('bouncers: fair up to the allowance, then called as a wide or no-ball, rese
   let s = matchState(m).innings[0];
   assert.equal(s.runs, 1);
   assert.equal(s.legalBalls, 0);
-  assert.equal(s.overs[0][0].label, 'Bn');
+  assert.equal(s.overs[0][0].label, 'BWd');
 
   // One fair bouncer an over, then a no-ball.
   m = play(start(setup({ bouncer: { fair: 1, calledAs: 'noball' } })), bounce(4), bounce(2));
@@ -349,16 +350,18 @@ test('undo takes away a super over that has not started', () => {
   assert.equal(undo(so).innings.length, 2);
 });
 
-test('rain: a revised target for the chase', () => {
-  assert.equal(parTarget(100, 10, 6), 61);
-  let m = start(setup({ overs: 2 }));
+test('rain: DLS sets the chase target when overs are cut', () => {
+  // First innings: 8 runs in 2 overs, then the chase is cut to 1 over before it starts.
+  let m = start(setup({ overs: 2 }, 11));
   m = play(m, ball(4), ball(4), ball(0), ball(0), ball(0), ball(0), { type: 'bowler', bowler: 'b2' }, ball(0), ball(0), ball(0), ball(0), ball(0), ball(0));
-  m = { ...setOvers(m, 1), revisedTarget: parTarget(8, 2, 1) };
+  m = setOvers(m, 1);
+  const st = matchState(m);
+  assert.equal(m.interruptions?.length, 1);
+  // 1 over against 2 overs with no wicket down: 6.4 / 12.7 of resources.
+  assert.equal(st.innings[1].target, Math.floor((8 * 6.4) / 12.7) + 1);
   m = start(m, 'b1', 'b2', 'a1');
   m = play(m, ball(4), ball(1));
-  const st = matchState(m);
-  assert.equal(st.innings[1].target, 5);
-  assert.equal(st.result, 'B won by 3 wickets');
+  assert.match(matchState(m).result!, /\(DLS\)$/);
 });
 
 test('penalty runs and dead balls', () => {
@@ -384,4 +387,22 @@ test('a wicket can be corrected but stays a wicket of the same batter', () => {
   const caught = replaceBall(m, 0, i, ball(0, undefined, { kind: 'caught', playerOut: 'a1', fielder: 'b3' }));
   assert.equal(dismissal(caught, matchState(caught).innings[0].batters[0]), 'c b3 b b1');
   assert.equal(replaceBall(m, 0, i, ball(0, undefined, { kind: 'bowled', playerOut: 'a2' })), m, 'a different batter is refused');
+});
+
+test('a first bounce is the umpire’s call (fair or wide); the second in the over is a no-ball', () => {
+  const bounce = (call: 'fair' | 'wide', runs = 0): BallEvent => ({ type: 'ball', runs, bouncer: call });
+  // No rule set: one an over, then no-balls.
+  let m = play(start(setup()), bounce('wide'));
+  let s = matchState(m).innings[0];
+  assert.equal(s.extras.wide, 1, 'called wide');
+  assert.equal(s.legalBalls, 0);
+  m = play(m, bounce('fair', 2));
+  s = matchState(m).innings[0];
+  assert.equal(s.extras.noball, 1, 'the second bounce is a no-ball whatever the call');
+  assert.equal(s.overs[0][1].label, 'BNb+2');
+  // A fair first bounce is just a ball.
+  m = play(start(setup()), bounce('fair', 4));
+  s = matchState(m).innings[0];
+  assert.equal(s.legalBalls, 1);
+  assert.equal(s.overs[0][0].label, '4');
 });

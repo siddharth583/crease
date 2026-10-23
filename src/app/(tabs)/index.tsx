@@ -11,9 +11,8 @@ import { SeriesPips } from '../series/[id].tsx';
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
-import { language, t } from '../../i18n.ts';
 import { usePrefs } from '../../store/prefs.ts';
-import { colors, font, radius, space, type } from '../../theme.ts';
+import { colors, font, radius, space, type, hero, edge, isDay } from '../../theme.ts';
 
 function confirmDelete(onYes: () => void) {
   if (Platform.OS === 'web') {
@@ -60,7 +59,7 @@ function LiveHero({ match }: { match: Match }) {
         </Text>
         <View style={styles.liveGo}>
           <Text style={styles.liveGoText}>SCORE</Text>
-          <Ionicons name="arrow-forward" size={16} color={colors.accent} />
+          <Ionicons name="arrow-forward" size={16} color={colors.accentInk} />
         </View>
       </View>
     </PressableScale>
@@ -70,21 +69,17 @@ function LiveHero({ match }: { match: Match }) {
 function PosterHero() {
   return (
     <View style={styles.poster}>
-      <PitchStripes />
-      <GhostWord size={190} style={{ left: -12, bottom: -50 }}>
+      <PitchStripes tint="255,255,255" />
+      <GhostWord size={190} style={{ left: -12, bottom: -50, color: hero.ink(0.05) }}>
         CRICKET
       </GhostWord>
-      <Text style={styles.posterEyebrow}>{t('MATCHDAY')}</Text>
-      {language === 'hi' ? (
-        <Text style={[styles.posterTitle, { fontSize: 64, lineHeight: 80 }]}>{t('GAME ON.')}</Text>
-      ) : (
-        <Text style={styles.posterTitle}>
-          GAME{'\n'}
-          <Text style={{ color: colors.accent }}>ON.</Text>
-        </Text>
-      )}
-      <Text style={styles.posterBody}>{t('Score every ball. Every player’s numbers add up, match after match.')}</Text>
-      <Button label={t('Start a match')} icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
+      <Text style={styles.posterEyebrow}>MATCHDAY</Text>
+      <Text style={styles.posterTitle}>
+        GAME{'\n'}
+        <Text style={{ color: hero.accent }}>ON.</Text>
+      </Text>
+      <Text style={styles.posterBody}>Score every ball. Every player’s numbers add up, match after match.</Text>
+      <Button label={'Start a match'} icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
     </View>
   );
 }
@@ -244,7 +239,7 @@ export default function Home() {
             <View style={styles.backup}>
               <Ionicons name="cloud-upload-outline" size={20} color={colors.gold} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.backupTitle}>{t('Back up your matches')}</Text>
+                <Text style={styles.backupTitle}>Back up your matches</Text>
                 <Text style={styles.backupBody}>
                   {prefs.lastBackup ? 'It’s been over a week.' : 'Not backed up yet.'} Save one file to Drive or WhatsApp.
                 </Text>
@@ -256,7 +251,7 @@ export default function Home() {
                 }}
                 style={styles.backupButton}
               >
-                <Text style={styles.backupButtonText}>{t('Back up now')}</Text>
+                <Text style={styles.backupButtonText}>Back up now</Text>
               </PressableScale>
             </View>
           </FadeIn>
@@ -264,7 +259,7 @@ export default function Home() {
 
         {series.length > 0 && (
           <FadeIn delay={90}>
-            <SectionLabel>{t('Series')}</SectionLabel>
+            <SectionLabel>Series</SectionLabel>
             <View style={{ gap: space.sm }}>
               {series.map((s) => (
                 <SeriesCard key={s.id} s={s} />
@@ -275,26 +270,26 @@ export default function Home() {
 
         {ready && matches.length > 0 && (
           <FadeIn delay={120}>
-            <SectionLabel>{t('This season')}</SectionLabel>
+            <SectionLabel>This season</SectionLabel>
             <Season matches={matches} />
           </FadeIn>
         )}
 
         <FadeIn delay={180}>
-          <SectionLabel>{t('Match files')}</SectionLabel>
+          <SectionLabel>Match files</SectionLabel>
           <View style={styles.files}>
             <View style={{ flex: 1 }}>
               <PressableScale onPress={importFile} style={styles.fileButton}>
-                <Ionicons name="push-outline" size={20} color={colors.accent} />
-                <Text style={styles.fileTitle}>{t('IMPORT')}</Text>
-                <Text style={styles.fileBody}>{t('A match someone sent you')}</Text>
+                <Ionicons name="push-outline" size={20} color={colors.accentInk} />
+                <Text style={styles.fileTitle}>IMPORT</Text>
+                <Text style={styles.fileBody}>A match someone sent you</Text>
               </PressableScale>
             </View>
             <View style={{ flex: 1 }}>
               <PressableScale disabled={!matches.length} onPress={() => setExporting(matches)} style={styles.fileButton}>
-                <Ionicons name="download-outline" size={20} color={colors.accent} />
-                <Text style={styles.fileTitle}>{t('EXPORT')}</Text>
-                <Text style={styles.fileBody}>{t('PDF or match file, any matches')}</Text>
+                <Ionicons name="download-outline" size={20} color={colors.accentInk} />
+                <Text style={styles.fileTitle}>EXPORT</Text>
+                <Text style={styles.fileBody}>PDF or match file, any matches</Text>
               </PressableScale>
             </View>
           </View>
@@ -317,7 +312,7 @@ export default function Home() {
 
         {done.length > 0 && (
           <FadeIn delay={240}>
-            <SectionLabel right={<Text style={styles.hint}>{t('Hold to delete')}</Text>}>{t('Results')}</SectionLabel>
+            <SectionLabel right={<Text style={styles.hint}>Hold to delete</Text>}>Results</SectionLabel>
             <View style={{ gap: space.sm }}>
               {done.map((m) => (
                 <ResultRow key={m.id} match={m} onDelete={() => deleteMatch(m.id)} />
@@ -365,6 +360,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderHi,
+    ...edge,
   },
   gear: {
     width: 36,
@@ -375,22 +371,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderHi,
+    ...edge,
   },
   backup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    backgroundColor: colors.goldDim,
+    backgroundColor: isDay ? colors.surface : colors.goldDim,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: isDay ? colors.border : colors.gold,
     padding: space.md,
     marginTop: space.md,
+    ...edge,
   },
   backupTitle: { color: colors.text, fontSize: 14, fontFamily: font.bold },
   backupBody: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 1 },
-  backupButton: { backgroundColor: colors.gold, borderRadius: radius.sm, paddingHorizontal: space.md, height: 34, justifyContent: 'center' },
-  backupButtonText: { color: colors.onAccent, fontSize: 13, fontFamily: font.heavy },
+  backupButton: { backgroundColor: isDay ? colors.text : colors.gold, borderRadius: isDay ? radius.pill : radius.sm, paddingHorizontal: space.md, height: 34, justifyContent: 'center' },
+  backupButtonText: { color: isDay ? colors.surface : colors.onAccent, fontSize: 13, fontFamily: font.heavy },
   clubText: { color: colors.text, fontSize: 13, fontFamily: font.bold, flexShrink: 1 },
 
   poster: {
@@ -398,13 +396,13 @@ const styles = StyleSheet.create({
     padding: space.xl,
     paddingTop: space.xxl,
     overflow: 'hidden',
-    backgroundColor: colors.surface,
+    backgroundColor: '#101010',
     borderWidth: 1,
-    borderColor: colors.borderHi,
+    borderColor: hero.line,
   },
-  posterEyebrow: { ...type.label, color: colors.accent },
-  posterTitle: { fontFamily: font.posterBlack, fontSize: 116, lineHeight: 100, color: colors.text, letterSpacing: -3, marginTop: space.sm },
-  posterBody: { color: colors.muted, fontSize: 15, fontFamily: font.medium, lineHeight: 21, marginTop: space.md, maxWidth: 270 },
+  posterEyebrow: { ...type.label, color: hero.accent },
+  posterTitle: { fontFamily: font.posterBlack, fontSize: 116, lineHeight: 100, color: hero.text, letterSpacing: -3, marginTop: space.sm },
+  posterBody: { color: hero.muted, fontSize: 15, fontFamily: font.medium, lineHeight: 21, marginTop: space.md, maxWidth: 270 },
 
   liveHero: {
     borderRadius: radius.xl,
@@ -424,7 +422,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.danger },
-  liveTagText: { ...type.label, fontSize: 11, color: colors.accent },
+  liveTagText: { ...type.label, fontSize: 11, color: colors.accentInk },
   liveOvers: { fontFamily: font.poster, fontSize: 18, color: colors.onAccent, ...type.num },
   liveTeam: { fontFamily: font.poster, fontSize: 26, color: colors.onAccent, textTransform: 'uppercase', marginTop: space.lg },
   liveScore: { fontFamily: font.posterBlack, fontSize: 104, lineHeight: 104, color: colors.onAccent, letterSpacing: -3, ...type.num },
@@ -439,7 +437,7 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: radius.md,
   },
-  liveGoText: { fontFamily: font.poster, fontSize: 18, color: colors.accent },
+  liveGoText: { fontFamily: font.poster, fontSize: 18, color: colors.accentInk },
 
   season: {
     flexDirection: 'row',
@@ -449,6 +447,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
+    ...edge,
   },
   seasonCell: { flex: 1, paddingVertical: space.lg, alignItems: 'center' },
   seasonBorder: { borderLeftWidth: 1, borderLeftColor: colors.border },
@@ -475,8 +474,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.accent,
     padding: space.lg,
+    ...edge,
   },
-  seriesEyebrow: { ...type.label, fontSize: 10, color: colors.accent },
+  seriesEyebrow: { ...type.label, fontSize: 10, color: colors.accentInk },
   seriesName: { fontFamily: font.posterBlack, fontSize: 28, lineHeight: 30, color: colors.text, textTransform: 'uppercase' },
   seriesStatus: { color: colors.muted, fontSize: 13, fontFamily: font.bold },
   seriesScore: { fontFamily: font.posterBlack, fontSize: 54, lineHeight: 56, color: colors.text, ...type.num },
@@ -487,6 +487,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: space.lg,
     gap: 4,
+    ...edge,
   },
   fileTitle: { fontFamily: font.poster, fontSize: 22, color: colors.text, marginTop: space.sm },
   fileBody: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
@@ -514,6 +515,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: space.md,
     alignItems: 'center',
+    ...edge,
   },
   date: {
     width: 54,
@@ -525,11 +527,11 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
   },
   dateDay: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 30, color: colors.text },
-  dateMonth: { ...type.label, fontSize: 10, color: colors.accent },
+  dateMonth: { ...type.label, fontSize: 10, color: colors.accentInk },
   resultLine: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   winBar: { width: 3, height: 16, borderRadius: 2, backgroundColor: 'transparent' },
   resultTeam: { flex: 1, color: colors.muted, fontSize: 15, fontFamily: font.bold },
   resultScore: { color: colors.muted, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
   resultOvers: { fontSize: 14, fontFamily: font.poster, color: colors.faint },
-  resultText: { color: colors.accent, fontSize: 12, fontFamily: font.bold, marginTop: 2, marginLeft: 11 },
+  resultText: { color: colors.accentInk, fontSize: 12, fontFamily: font.bold, marginTop: 2, marginLeft: 11 },
 });

@@ -20,7 +20,10 @@ export type Rules = {
   extraOverBowlers?: number;
   /** The ball after a no-ball is a free hit: only a run out counts. */
   freeHit?: boolean;
-  /** Bouncers (over head height): how many an over are fair, and what the rest are called. */
+  /**
+   * Bounces: up to `fair` an over are the umpire's call (fair, or a wide); after that every bounce is called
+   * as `calledAs` (usually a no-ball). Without the rule: one an over, then no-balls.
+   */
   bouncer?: { fair: number; calledAs: 'wide' | 'noball' };
 };
 
@@ -34,8 +37,8 @@ export type BallEvent = {
   runs: number;
   extra?: Extra;
   wicket?: { kind: WicketKind; playerOut: string; fielder?: string };
-  /** The umpire gave it as a bouncer: fair or called, depending on the house rule and the over so far. */
-  bouncer?: boolean;
+  /** A bounce, and the umpire's call on it ('fair' or 'wide'; true is fair). Past the over's allowance it's called anyway. */
+  bouncer?: boolean | 'fair' | 'wide';
 };
 
 export type InningsEvent =
@@ -64,8 +67,6 @@ export type Match = {
   innings: Innings[];
   /** Part of a series: which one, how long it is, and which match of it this is. */
   series?: SeriesInfo;
-  /** Part of a tournament: which one and which stage. */
-  tournament?: TournamentInfo;
   /** Captain and wicketkeeper for this match, by team id. */
   captains?: Record<string, string>;
   keepers?: Record<string, string>;
@@ -73,9 +74,12 @@ export type Match = {
   revisedTarget?: number;
   /** The overs the match started with, kept when overs are cut. */
   originalOvers?: number;
+  /** Each time the overs were cut: where the innings stood. Drives the DLS target. */
+  interruptions?: Interruption[];
+  /** Average full first-innings score at this length, for DLS when the chase gets more resources. */
+  dlsG?: number;
 };
 
-export type TournamentStage = 'league' | 'semi' | 'final';
-export type TournamentInfo = { id: string; name: string; stage: TournamentStage; teams: string[] };
+import type { Interruption } from './dls.ts';
 
 export type SeriesInfo = { id: string; name: string; of: number; number: number };

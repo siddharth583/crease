@@ -219,7 +219,7 @@ export default function NewMatch() {
       reball: true,
       lastManStands: false,
     };
-    return { maxOversPerBowler: 0, extraOverBowlers: 0, freeHit: false, bouncer: { fair: 0, calledAs: 'wide' as const }, ...r };
+    return { maxOversPerBowler: 0, extraOverBowlers: 0, freeHit: false, bouncer: { fair: 1, calledAs: 'noball' as const }, ...r };
   });
   // The next match of a series carries the series on; otherwise a series can be started here.
   const ongoing = continueSeries && source?.series ? seriesState(matches.filter((m) => m.series?.id === source.series!.id)) : null;
@@ -299,7 +299,7 @@ export default function NewMatch() {
           {ongoing?.next ? (
             <>
               <Text style={styles.title}>
-                MATCH <Text style={{ color: colors.accent }}>{ongoing.next}</Text>
+                MATCH <Text style={{ color: colors.accentInk }}>{ongoing.next}</Text>
               </Text>
               <Text style={styles.subtitle}>
                 {ongoing.name} · best of {ongoing.of} · {ongoing.status}
@@ -309,7 +309,7 @@ export default function NewMatch() {
             <>
               <Text style={styles.title}>
                 {source ? 'RE' : 'NEW '}
-                <Text style={{ color: colors.accent }}>MATCH</Text>
+                <Text style={{ color: colors.accentInk }}>MATCH</Text>
               </Text>
               <Text style={styles.subtitle}>
                 {source ? 'Same teams, same rules. Just do the toss.' : 'Two teams, your rules, then the toss.'}
@@ -436,23 +436,23 @@ export default function NewMatch() {
             />
             <View style={styles.divider} />
             <Stepper
-              label="Fair bouncers an over"
+              label="Bounces allowed an over"
               hint={
-                (rules.bouncer?.fair ?? 0)
-                  ? `After ${rules.bouncer!.fair}, a bounce is a ${rules.bouncer!.calledAs === 'wide' ? 'wide' : 'no ball'}`
-                  : `Every bounce is a ${rules.bouncer?.calledAs === 'noball' ? 'no ball' : 'wide'}`
+                (rules.bouncer?.fair ?? 1)
+                  ? `Umpire’s call (fair or wide) for ${rules.bouncer?.fair ?? 1}; the next is a ${rules.bouncer?.calledAs === 'wide' ? 'wide' : 'no ball'}`
+                  : `Every bounce is a ${rules.bouncer?.calledAs === 'wide' ? 'wide' : 'no ball'}`
               }
-              value={rules.bouncer?.fair ?? 0}
+              value={rules.bouncer?.fair ?? 1}
               min={0}
               max={3}
-              onChange={(fair) => setRules({ ...rules, bouncer: { calledAs: rules.bouncer?.calledAs ?? 'wide', fair } })}
+              onChange={(fair) => setRules({ ...rules, bouncer: { calledAs: rules.bouncer?.calledAs ?? 'noball', fair } })}
             />
             <View style={styles.bounceRow}>
-              <Text style={styles.question}>A called bounce is a</Text>
+              <Text style={styles.question}>After that, a bounce is a</Text>
               <View style={{ flex: 1 }}>
                 <Segmented
-                  value={rules.bouncer?.calledAs ?? 'wide'}
-                  onChange={(calledAs) => setRules({ ...rules, bouncer: { fair: rules.bouncer?.fair ?? 0, calledAs } })}
+                  value={rules.bouncer?.calledAs ?? 'noball'}
+                  onChange={(calledAs) => setRules({ ...rules, bouncer: { fair: rules.bouncer?.fair ?? 1, calledAs } })}
                   options={[
                     { value: 'wide', label: 'Wide' },
                     { value: 'noball', label: 'No ball' },

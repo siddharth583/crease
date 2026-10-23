@@ -8,12 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, IconButton, Screen, SectionLabel, tap } from '../../components/ui.tsx';
 import { cloudConfigured, createClub, findClub, formatCode, normalizeCode } from '../../store/cloud.ts';
 import { useMatches, type SyncStatus } from '../../store/matches.tsx';
-import { colors, gradients, radius, space, type, font } from '../../theme.ts';
+import { colors, gradients, radius, space, type, font, hero } from '../../theme.ts';
 
 const STATUS: Record<SyncStatus, { label: string; color: string; icon: 'cloud-done' | 'cloud-upload' | 'cloud-offline' | 'warning' | 'cloud' }> = {
   off: { label: 'Not syncing', color: colors.faint, icon: 'cloud' },
   syncing: { label: 'Syncing…', color: colors.cyan, icon: 'cloud-upload' },
-  synced: { label: 'Up to date', color: colors.accent, icon: 'cloud-done' },
+  synced: { label: 'Up to date', color: colors.accentInk, icon: 'cloud-done' },
   offline: { label: 'Offline · will sync when you’re back online', color: colors.gold, icon: 'cloud-offline' },
   error: { label: 'Sync problem', color: colors.danger, icon: 'warning' },
 };
@@ -113,7 +113,7 @@ export default function ClubScreen() {
                 <Text style={styles.code} selectable>
                   {formatCode(club.code)}
                 </Text>
-                <IconButton icon={copied ? 'checkmark' : 'copy-outline'} label="Copy invite" tint={copied ? colors.accent : colors.text} onPress={copy} />
+                <IconButton icon={copied ? 'checkmark' : 'copy-outline'} label="Copy invite" tint={copied ? colors.accent : hero.text} onPress={copy} />
               </View>
               <Button label="Invite players" icon="share-social" onPress={share} style={{ marginTop: space.md }} />
             </LinearGradient>
@@ -225,10 +225,10 @@ const styles = StyleSheet.create({
   cardTitle: { color: colors.text, fontSize: 17, fontFamily: font.bold },
   body: { color: colors.muted, fontSize: 14, fontFamily: font.regular, lineHeight: 20 },
   intro: { color: colors.muted, fontSize: 15, fontFamily: font.regular, lineHeight: 22, paddingHorizontal: space.xs },
-  hero: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden', borderWidth: 1, borderColor: colors.borderHi, gap: space.sm },
+  hero: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden', borderWidth: 1, borderColor: hero.line, gap: space.sm },
   heroGlow: { position: 'absolute', right: -70, top: -80, width: 220, height: 220, borderRadius: 110, backgroundColor: colors.accentDim },
-  eyebrow: { ...type.label, color: colors.accent },
-  clubName: { fontFamily: font.posterBlack, fontSize: 48, lineHeight: 48, color: colors.text, textTransform: 'uppercase' },
+  eyebrow: { ...type.label, color: hero.accent },
+  clubName: { fontFamily: font.posterBlack, fontSize: 48, lineHeight: 48, color: hero.text, textTransform: 'uppercase' },
   codeBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     marginTop: space.sm,
   },
-  code: { color: colors.accent, fontSize: 38, fontFamily: font.posterBlack, letterSpacing: 3, ...type.num },
+  code: { color: hero.accent, fontSize: 38, fontFamily: font.posterBlack, letterSpacing: 3, ...type.num },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   statusText: { fontSize: 15, fontFamily: font.bold },
   small: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 2 },

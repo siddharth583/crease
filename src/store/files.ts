@@ -80,3 +80,27 @@ export async function savePdf(name: string, html: string): Promise<SaveResult> {
   await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: 'Share scorecard' });
   return 'shared';
 }
+
+/** Shares a picture (a PNG file on phones, a data: URI on the web), or downloads it where sharing isn't possible. */
+export async function shareImage(uri: string, name: string): Promise<SaveResult> {
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(uri)).blob();
+    const file = new globalThis.File([blob], name, { type: 'image/png' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+        return 'shared';
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled';
+      }
+    }
+    const a = document.createElement('a');
+    a.href = uri;
+    a.download = name;
+    a.click();
+    return 'downloaded';
+  }
+  if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing isn’t available on this phone.');
+  await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share the result' });
+  return 'shared';
+}

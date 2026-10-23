@@ -15,6 +15,8 @@ const NIGHT = {
   faint: '#5F5F59',
   /** Volt: the one accent. Primary actions, sixes, the live state. */
   accent: '#D7FF3A',
+  /** The accent as text or an icon on the page (on night it's the volt itself). */
+  accentInk: '#D7FF3A',
   accentDim: 'rgba(215,255,58,0.12)',
   onAccent: '#0A0A0A',
   /** Fours. */
@@ -31,50 +33,71 @@ const NIGHT = {
   violetDim: 'rgba(185,166,255,0.14)',
   /** "r,g,b" of the ink, for faint stripes, ghost words and chart tracks: rgba(${ink}, a). */
   ink: '255,255,255',
+  /** Mown-grass stripes. */
+  stripe: '255,255,255',
   /** A recessed panel inside a card. */
   inset: 'rgba(0,0,0,0.45)',
   scrim: 'rgba(0,0,0,0.75)',
 };
 
-// "Day match": for bright sun. Paper white, near-black ink, and the accent deepened to a grass green so it
-// still reads as text on white.
+// "Day match": the clubhouse in daylight. A soft grey-green ground, white cards that float on a gentle shadow with
+// no outlines, the volt kept as a bright fill with black type (deep green when it has to be text), and the
+// scoreboards black, like a TV scorebug.
 const DAY: typeof NIGHT = {
-  bg: '#F3F4EE',
+  bg: '#F1F2EE',
   surface: '#FFFFFF',
-  surfaceHi: '#ECEEE5',
-  border: 'rgba(0,0,0,0.09)',
-  borderHi: 'rgba(0,0,0,0.2)',
-  text: '#0B0D0A',
-  muted: '#4E544A',
-  faint: '#82887D',
-  accent: '#3B7A00',
-  accentDim: 'rgba(59,122,0,0.1)',
-  onAccent: '#FFFFFF',
-  cyan: '#006E8C',
-  cyanDim: 'rgba(0,110,140,0.1)',
-  gold: '#9A6A00',
-  goldDim: 'rgba(154,106,0,0.12)',
-  danger: '#D2241B',
-  dangerDim: 'rgba(210,36,27,0.1)',
-  violet: '#5A3FCB',
-  violetDim: 'rgba(90,63,203,0.1)',
-  ink: '0,0,0',
-  inset: 'rgba(0,0,0,0.05)',
-  scrim: 'rgba(0,0,0,0.45)',
+  surfaceHi: '#F5F6F2',
+  border: 'rgba(17,20,14,0.06)',
+  borderHi: 'rgba(17,20,14,0.13)',
+  text: '#0F110D',
+  muted: '#5F635A',
+  faint: '#9A9E94',
+  accent: '#D4FF3A',
+  accentInk: '#3D7400',
+  accentDim: 'rgba(150,200,0,0.14)',
+  onAccent: '#0A0A0A',
+  cyan: '#00728F',
+  cyanDim: 'rgba(0,114,143,0.08)',
+  gold: '#A26E00',
+  goldDim: 'rgba(196,140,0,0.12)',
+  danger: '#E0301E',
+  dangerDim: 'rgba(224,48,30,0.08)',
+  violet: '#5B3FCB',
+  violetDim: 'rgba(91,63,203,0.08)',
+  ink: '17,20,14',
+  stripe: '17,20,14',
+  inset: 'rgba(17,20,14,0.04)',
+  scrim: 'rgba(15,17,13,0.4)',
 };
 
 export const isDay = startupPrefs.theme === 'day';
 export const colors = isDay ? DAY : NIGHT;
+
+/** The black broadcast panels (scoreboards, posters): dark in both themes. */
+export const hero = {
+  text: NIGHT.text,
+  muted: NIGHT.muted,
+  faint: NIGHT.faint,
+  accent: NIGHT.accent,
+  line: NIGHT.borderHi,
+  ink: (alpha: number) => `rgba(255,255,255,${alpha})`,
+};
+
+/** How day cards sit on the page: no outline, a soft lift. Nothing at night. */
+export const edge = isDay
+  ? { borderColor: 'rgba(17,20,14,0.05)', boxShadow: '0px 1px 2px rgba(17,20,14,0.04), 0px 8px 24px rgba(17,20,14,0.06)' }
+  : {};
 
 /** The ink at a given strength: faint stripes, tracks, ghost words. */
 export const ink = (alpha: number) => `rgba(${colors.ink},${alpha})`;
 
 export const gradients = isDay
   ? {
-      hero: ['#FFFFFF', '#F7F8F2', '#EEF1E6'] as const,
-      accent: ['#4C9400', '#3B7A00'] as const,
+      hero: ['#181818', '#0F0F0F', '#0A0A0A'] as const,
+      accent: ['#DBFF4A', '#C2EC10'] as const,
       danger: ['#E2342A', '#C61D14'] as const,
-      glow: ['rgba(59,122,0,0.1)', 'rgba(59,122,0,0)'] as const,
+      /** Sunlight falling from the top. */
+      glow: ['rgba(212,255,58,0.30)', 'rgba(241,242,238,0)'] as const,
     }
   : {
       hero: ['#151515', '#0B0B0B', '#060606'] as const,

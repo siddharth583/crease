@@ -8,7 +8,7 @@ import { battingAverage, bestFigures, bowlingOvers, careerStats, economy, strike
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
-import { colors, font, radius, space, type } from '../../theme.ts';
+import { colors, font, radius, space, type, edge } from '../../theme.ts';
 
 type Board = 'batting' | 'bowling';
 
@@ -55,7 +55,7 @@ function Podium({ top, board }: { top: Career[]; board: Board }) {
         </GhostWord>
         <View style={styles.leaderTop}>
           <View style={styles.crown}>
-            <MaterialCommunityIcons name="crown" size={16} color={colors.accent} />
+            <MaterialCommunityIcons name="crown" size={16} color={colors.accentInk} />
             <Text style={styles.crownText}>NO. 1</Text>
           </View>
           <Text style={styles.leaderTeam} numberOfLines={1}>
@@ -150,7 +150,10 @@ export default function Players() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.title}>PLAYERS</Text>
+          <View style={{ flexDirection: 'row', gap: space.sm }}>
+            <IconButton icon="trophy-outline" label="Record book" onPress={() => router.push('/records')} />
           <IconButton icon="download-outline" label="Export matches" disabled={!matches.length} onPress={() => setExporting(matches)} />
+          </View>
         </View>
         <View style={{ gap: space.md }}>
           <Segmented
@@ -233,10 +236,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: space.md,
     height: 46,
+    ...edge,
   },
   searchInput: { flex: 1, color: colors.text, fontSize: 15, fontFamily: font.regular, height: '100%' },
 
-  leader: { backgroundColor: colors.accent, borderRadius: radius.xl, padding: space.xl, overflow: 'hidden' },
+  leader: { backgroundColor: colors.accent, borderRadius: radius.xl, padding: space.xl, overflow: 'hidden', ...edge },
   leaderTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   crown: {
     flexDirection: 'row',
@@ -247,7 +251,7 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: radius.sm,
   },
-  crownText: { ...type.label, color: colors.accent },
+  crownText: { ...type.label, color: colors.accentInk },
   leaderTeam: { color: colors.onAccent, fontFamily: font.bold, fontSize: 13, opacity: 0.65, flexShrink: 1, marginLeft: space.md },
   leaderName: { fontFamily: font.posterBlack, fontSize: 56, lineHeight: 54, color: colors.onAccent, textTransform: 'uppercase', marginTop: space.lg, letterSpacing: -1 },
   leaderFoot: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: space.sm },
@@ -261,6 +265,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderHi,
     padding: space.lg,
+    ...edge,
   },
   runnerRank: { fontFamily: font.posterBlack, fontSize: 40, lineHeight: 40 },
   runnerName: { fontFamily: font.poster, fontSize: 24, lineHeight: 24, color: colors.text, textTransform: 'uppercase', marginTop: space.sm, minHeight: 48 },
@@ -278,6 +283,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
+    ...edge,
   },
   rank: { width: 30, color: colors.faint, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
   name: { color: colors.text, fontSize: 16, fontFamily: font.bold },

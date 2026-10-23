@@ -17,7 +17,7 @@ import {
   type MatchLine,
 } from '../../engine/stats.ts';
 import { useMatches } from '../../store/matches.tsx';
-import { colors, gradients, radius, space, type, font, ink } from '../../theme.ts';
+import { colors, gradients, radius, space, type, font, ink, hero } from '../../theme.ts';
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
 
@@ -26,7 +26,7 @@ function Tiles({ items }: { items: [string, string | number, boolean?][] }) {
     <View style={styles.tiles}>
       {items.map(([label, value, hero]) => (
         <View key={label} style={[styles.tile, hero && styles.tileHero]}>
-          <Text style={[styles.tileValue, hero && { color: colors.accent }]}>{value}</Text>
+          <Text style={[styles.tileValue, hero && { color: colors.accentInk }]}>{value}</Text>
           <Text style={styles.tileLabel}>{label}</Text>
         </View>
       ))}
@@ -59,7 +59,7 @@ function MatchRow({ line, first }: { line: MatchLine; first: boolean }) {
         <Text
           style={[
             styles.resultText,
-            line.won === true && { color: colors.accent },
+            line.won === true && { color: colors.accentInk },
             line.won === false && { color: colors.danger },
           ]}
         >
@@ -108,8 +108,8 @@ export default function PlayerProfile() {
       {back}
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
         <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
-          <PitchStripes />
-          <GhostWord size={260} style={{ right: -20, top: -60 }}>
+          <PitchStripes tint="255,255,255" />
+          <GhostWord size={260} style={{ right: -20, top: -60, color: hero.ink(0.05) }}>
             {c.name.slice(0, 1)}
           </GhostWord>
           <View style={styles.teamTag}>
@@ -141,7 +141,7 @@ export default function PlayerProfile() {
                 const hot = h.bat!.runs >= 30;
                 return (
                   <View key={h.matchId} style={styles.formCol}>
-                    <Text style={[styles.formText, hot && { color: colors.accent }]}>
+                    <Text style={[styles.formText, hot && { color: colors.accentInk }]}>
                       {h.bat!.runs}
                       {h.bat!.notOut ? '*' : ''}
                     </Text>
@@ -231,9 +231,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.borderHi,
+    borderColor: hero.line,
   },
-  name: { fontFamily: font.posterBlack, fontSize: 60, lineHeight: 58, color: colors.text, textTransform: 'uppercase', letterSpacing: -1.5, marginTop: space.lg, alignSelf: 'stretch' },
+  name: { fontFamily: font.posterBlack, fontSize: 60, lineHeight: 58, color: hero.text, textTransform: 'uppercase', letterSpacing: -1.5, marginTop: space.lg, alignSelf: 'stretch' },
   teamTag: { alignSelf: 'flex-start', backgroundColor: colors.accent, paddingHorizontal: 10, height: 24, borderRadius: radius.sm, justifyContent: 'center', transform: [{ skewX: '-8deg' }] },
   teamTagText: { ...type.label, color: colors.onAccent },
   heroStats: {
@@ -245,8 +245,8 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
   },
   heroStat: { flex: 1, alignItems: 'center' },
-  heroValue: { color: colors.text, fontSize: 34, lineHeight: 36, fontFamily: font.posterBlack, ...type.num },
-  heroLabel: { ...type.label, fontSize: 9, color: colors.faint, marginTop: 2 },
+  heroValue: { color: hero.text, fontSize: 34, lineHeight: 36, fontFamily: font.posterBlack, ...type.num },
+  heroLabel: { ...type.label, fontSize: 9, color: hero.faint, marginTop: 2 },
   form: { flexDirection: 'row', gap: space.sm },
   formChip: {
     minWidth: 52,

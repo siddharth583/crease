@@ -5,8 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PressableScale, type IconName } from '../../components/ui.tsx';
-import { t } from '../../i18n.ts';
-import { colors, font, radius, space } from '../../theme.ts';
+import { colors, font, radius, space, edge } from '../../theme.ts';
 
 const TABS: Record<string, { label: string; icon: IconName; iconOn: IconName }> = {
   index: { label: 'Matches', icon: 'albums-outline', iconOn: 'albums' },
@@ -36,7 +35,7 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
               style={[styles.tab, on && styles.tabOn]}
             >
               <Ionicons name={on ? tab.iconOn : tab.icon} size={19} color={on ? colors.onAccent : colors.muted} />
-              {on && <Text style={styles.tabLabel}>{t(tab.label)}</Text>}
+              {on && <Text style={styles.tabLabel}>{tab.label}</Text>}
             </PressableScale>
           );
         })}
@@ -93,6 +92,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderHi,
+    ...edge,
   },
   tab: {
     height: 48,
@@ -114,5 +114,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     transform: [{ rotate: '0deg' }],
+    ...edge,
   },
 });

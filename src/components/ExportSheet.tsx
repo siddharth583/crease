@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { matchState } from '../engine/engine.ts';
 import type { Match } from '../engine/types.ts';
-import { colors, font, radius, space, type } from '../theme.ts';
+import { colors, font, radius, space, type, edge } from '../theme.ts';
 import { Button, PressableScale, Sheet, type IconName } from './ui.tsx';
 
 type Format = 'pdf' | 'file';
@@ -73,7 +73,7 @@ export function ExportSheet({
         <>
           <View style={styles.listHead}>
             <Text style={styles.listTitle}>
-              MATCHES <Text style={{ color: colors.accent }}>{n}</Text>/{matches.length}
+              MATCHES <Text style={{ color: colors.accentInk }}>{n}</Text>/{matches.length}
             </Text>
             <PressableScale onPress={() => setChosen(new Set(all ? [] : matches.map((m) => m.id)))} style={styles.allButton}>
               <Text style={styles.allText}>{all ? 'Select none' : 'Select all'}</Text>
@@ -137,6 +137,7 @@ const styles = StyleSheet.create({
     padding: space.md,
     gap: 4,
     minHeight: 118,
+    ...edge,
   },
   formatOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   formatTitle: { fontFamily: font.poster, fontSize: 22, color: colors.text, textTransform: 'uppercase', marginTop: space.sm },
@@ -155,6 +156,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: space.md,
+    ...edge,
   },
   rowOn: { borderColor: colors.accent },
   check: {

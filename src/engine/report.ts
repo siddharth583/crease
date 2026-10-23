@@ -95,8 +95,8 @@ function matchHtml(match: Match, all: Match[]) {
       : '',
     r.bouncer
       ? r.bouncer.fair
-        ? `${r.bouncer.fair} fair bouncer${r.bouncer.fair === 1 ? '' : 's'} an over, then ${r.bouncer.calledAs === 'wide' ? 'wide' : 'no ball'}`
-        : `bouncers are ${r.bouncer.calledAs === 'wide' ? 'wides' : 'no balls'}`
+        ? `${r.bouncer.fair} bounce${r.bouncer.fair === 1 ? '' : 's'} an over (fair or wide), then ${r.bouncer.calledAs === 'wide' ? 'wide' : 'no ball'}`
+        : `every bounce a ${r.bouncer.calledAs === 'wide' ? 'wide' : 'no ball'}`
       : '',
     r.lastManStands ? 'last man stands' : '',
   ].filter(Boolean);

@@ -10,7 +10,7 @@ import { careerStats, playerOfTheMatch, seriesState, type SeriesState } from '..
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
-import { colors, font, radius, space, type } from '../../theme.ts';
+import { colors, font, radius, space, type, hero, edge } from '../../theme.ts';
 
 /** A dot per match of the series: who won it, or still to play. */
 export function SeriesPips({ series, size = 14 }: { series: SeriesState; size?: number }) {
@@ -59,7 +59,7 @@ function Leaders({ matches }: { matches: Match[] }) {
           onPress={() => router.push({ pathname: '/player/[key]', params: { key: c.key } })}
           style={styles.leaderRow}
         >
-          <Text style={[styles.leaderRank, i === 0 && { color: colors.accent }]}>{i + 1}</Text>
+          <Text style={[styles.leaderRank, i === 0 && { color: colors.accentInk }]}>{i + 1}</Text>
           <Text style={styles.leaderName} numberOfLines={1}>
             {short(c.name)}
           </Text>
@@ -113,22 +113,22 @@ export default function SeriesScreen() {
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
         <FadeIn>
           <View style={styles.hero}>
-            <PitchStripes />
-            <GhostWord size={200} style={{ right: -20, bottom: -50 }}>
+            <PitchStripes tint="255,255,255" />
+            <GhostWord size={200} style={{ right: -20, bottom: -50, color: hero.ink(0.05) }}>
               SERIES
             </GhostWord>
             <Text style={styles.eyebrow}>SERIES · BEST OF {s.of}</Text>
             <Text style={styles.name}>{s.name}</Text>
             <View style={styles.scoreline}>
               <View style={styles.side}>
-                <Text style={[styles.sideScore, s.wins[0] >= s.wins[1] && s.played > 0 && { color: colors.accent }]}>{s.wins[0]}</Text>
+                <Text style={[styles.sideScore, s.wins[0] >= s.wins[1] && s.played > 0 && { color: hero.accent }]}>{s.wins[0]}</Text>
                 <Text style={styles.sideName} numberOfLines={1}>
                   {s.teams[0]}
                 </Text>
               </View>
               <Text style={styles.dash}>–</Text>
               <View style={[styles.side, { alignItems: 'flex-end' }]}>
-                <Text style={[styles.sideScore, s.wins[1] >= s.wins[0] && s.played > 0 && { color: colors.text }]}>{s.wins[1]}</Text>
+                <Text style={[styles.sideScore, s.wins[1] >= s.wins[0] && s.played > 0 && { color: hero.text }]}>{s.wins[1]}</Text>
                 <Text style={styles.sideName} numberOfLines={1}>
                   {s.teams[1]}
                 </Text>
@@ -258,22 +258,22 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
   missing: { color: colors.muted, textAlign: 'center', marginTop: space.xxl, fontFamily: font.medium },
   hero: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#101010',
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.borderHi,
+    borderColor: hero.line,
     padding: space.xl,
     overflow: 'hidden',
     gap: space.md,
   },
-  eyebrow: { ...type.label, color: colors.accent },
-  name: { fontFamily: font.posterBlack, fontSize: 44, lineHeight: 44, color: colors.text, textTransform: 'uppercase', marginTop: -space.sm },
+  eyebrow: { ...type.label, color: hero.accent },
+  name: { fontFamily: font.posterBlack, fontSize: 44, lineHeight: 44, color: hero.text, textTransform: 'uppercase', marginTop: -space.sm },
   scoreline: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md },
   side: { flex: 1 },
-  sideScore: { fontFamily: font.posterBlack, fontSize: 96, lineHeight: 92, color: colors.muted, ...type.num },
-  sideName: { fontFamily: font.poster, fontSize: 20, color: colors.muted, textTransform: 'uppercase' },
-  dash: { fontFamily: font.posterBlack, fontSize: 56, color: colors.faint, paddingBottom: 34 },
-  status: { fontFamily: font.poster, fontSize: 22, color: colors.text, textTransform: 'uppercase' },
+  sideScore: { fontFamily: font.posterBlack, fontSize: 96, lineHeight: 92, color: hero.muted, ...type.num },
+  sideName: { fontFamily: font.poster, fontSize: 20, color: hero.muted, textTransform: 'uppercase' },
+  dash: { fontFamily: font.posterBlack, fontSize: 56, color: hero.faint, paddingBottom: 34 },
+  status: { fontFamily: font.poster, fontSize: 22, color: hero.text, textTransform: 'uppercase' },
   mos: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -282,6 +282,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: space.lg,
     marginTop: space.md,
+    ...edge,
   },
   mosLabel: { ...type.label, fontSize: 10, color: colors.onAccent, opacity: 0.65 },
   mosName: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 32, color: colors.onAccent, textTransform: 'uppercase' },
@@ -295,6 +296,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: space.md,
     gap: 6,
+    ...edge,
   },
   leaderTitle: { ...type.label, fontSize: 10, color: colors.muted, marginBottom: 2 },
   leaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -311,6 +313,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: space.md,
+    ...edge,
   },
   matchEmpty: { backgroundColor: 'transparent', borderStyle: 'dashed' },
   matchNo: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.surfaceHi, alignItems: 'center', justifyContent: 'center' },
@@ -319,7 +322,7 @@ const styles = StyleSheet.create({
   matchTeam: { flex: 1, color: colors.muted, fontSize: 14, fontFamily: font.bold },
   matchScore: { color: colors.muted, fontSize: 20, fontFamily: font.posterBlack, ...type.num },
   matchOvers: { fontSize: 13, fontFamily: font.poster, color: colors.faint },
-  matchResult: { color: colors.accent, fontSize: 12, fontFamily: font.bold, marginTop: 2 },
+  matchResult: { color: colors.accentInk, fontSize: 12, fontFamily: font.bold, marginTop: 2 },
   matchMom: { color: colors.muted, fontSize: 12, fontFamily: font.semibold },
   matchTbd: { color: colors.faint, fontSize: 14, fontFamily: font.bold },
 });

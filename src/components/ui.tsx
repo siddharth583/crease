@@ -18,8 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BallView } from '../engine/engine.ts';
-import { t } from '../i18n.ts';
-import { ballColors, colors, font, gradients, radius, space, type, ink } from '../theme.ts';
+import { ballColors, colors, font, gradients, radius, space, type, ink, edge, isDay } from '../theme.ts';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -56,11 +55,12 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
 }
 
 /** Mown-grass stripes, as seen on a ground from the stands. Fills its parent. */
-export function PitchStripes({ count = 9, opacity = 0.035 }: { count?: number; opacity?: number }) {
+/** `tint` is an "r,g,b" for the stripes; the theme's grass by default. */
+export function PitchStripes({ count = 9, opacity = 0.035, tint }: { count?: number; opacity?: number; tint?: string }) {
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { flexDirection: 'row' }]}>
       {Array.from({ length: count }, (_, i) => (
-        <View key={i} style={{ flex: 1, backgroundColor: i % 2 ? ink(opacity) : 'transparent' }} />
+        <View key={i} style={{ flex: 1, backgroundColor: i % 2 ? `rgba(${tint ?? colors.stripe},${opacity})` : 'transparent' }} />
       ))}
     </View>
   );
@@ -222,7 +222,7 @@ export function MomentFlash({ moment }: { moment: Moment | null }) {
           { color: m.fg, fontSize: 176 * m.size, lineHeight: 176 * m.size, transform: [{ translateX }, { scale }, { skewX: skew }] },
         ]}
       >
-        {t(m.word)}
+        {m.word}
       </Animated.Text>
       {shown.caption ? <Text style={[styles.momentCaption, { color: m.fg }]}>{shown.caption}</Text> : null}
     </Animated.View>
@@ -267,7 +267,7 @@ export function Button({
       }}
       style={[styles.buttonWrap, { opacity: disabled ? 0.35 : 1 }, style]}
     >
-      {variant === 'primary' && <View style={styles.buttonShadow} />}
+      {variant === 'primary' && !isDay && <View style={styles.buttonShadow} />}
       <Animated.View style={[styles.buttonFill, fill, { transform: [{ translateX: shift }, { translateY: shift }] }]}>
         {icon && <Ionicons name={icon} size={18} color={fg} />}
         <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
@@ -322,7 +322,7 @@ export function Chip({
 }) {
   const on = {
     accent: [colors.accent, colors.onAccent],
-    violet: [colors.violet, colors.onAccent],
+    violet: [colors.violet, isDay ? '#FFFFFF' : colors.onAccent],
     danger: [colors.danger, '#FFFFFF'],
   }[tone];
   return (
@@ -537,6 +537,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: space.lg,
+    ...edge,
   },
   ghost: {
     position: 'absolute',
@@ -554,7 +555,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   sectionLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  sectionTick: { width: 14, height: 3, backgroundColor: colors.accent, transform: [{ skewX: '-20deg' }] },
+  sectionTick: { width: 14, height: 3, backgroundColor: isDay ? colors.accentInk : colors.accent, transform: [{ skewX: '-20deg' }] },
   sectionLabel: { ...type.label, color: colors.muted },
   buttonWrap: { height: 56, marginRight: 4, marginBottom: 4 },
   buttonShadow: {
@@ -575,9 +576,9 @@ export const styles = StyleSheet.create({
     gap: space.sm,
     borderRadius: radius.md,
   },
-  primaryFill: { backgroundColor: colors.accent },
+  primaryFill: { backgroundColor: colors.accent, ...edge },
   dangerFill: { backgroundColor: colors.danger },
-  ghostFill: { backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.borderHi },
+  ghostFill: { backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: isDay ? colors.border : colors.borderHi },
   buttonText: { fontSize: 21, fontFamily: font.poster, textTransform: 'uppercase', letterSpacing: 0.3 },
   iconButton: {
     width: 42,
@@ -588,6 +589,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceHi,
     borderWidth: 1,
     borderColor: colors.border,
+    ...edge,
   },
   chip: {
     flexDirection: 'row',
@@ -609,6 +611,7 @@ export const styles = StyleSheet.create({
     gap: 4,
     borderWidth: 1,
     borderColor: colors.border,
+    ...edge,
   },
   segment: { height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, paddingHorizontal: 8 },
   segmentOn: { backgroundColor: colors.accent },
@@ -617,7 +620,7 @@ export const styles = StyleSheet.create({
   rowTitle: { color: colors.text, fontSize: 15, fontFamily: font.bold },
   rowHint: { color: colors.muted, fontSize: 13, fontFamily: font.regular, marginTop: 2 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  stepperValue: { color: colors.accent, fontSize: 30, fontFamily: font.posterBlack, minWidth: 34, textAlign: 'center', ...type.num },
+  stepperValue: { color: colors.accentInk, fontSize: 30, fontFamily: font.posterBlack, minWidth: 34, textAlign: 'center', ...type.num },
   ball: { borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   ballEmpty: { borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed' },
   ballText: { fontFamily: font.posterBlack, ...type.num },
