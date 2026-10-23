@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stars } from '../../components/Stars.tsx';
 import { Button, Card, FadeIn, GhostWord, IconButton, PitchStripes, PopText, PressableScale, Screen, SectionLabel, tap, useToast } from '../../components/ui.tsx';
 import { auctionState, money, nextBid, passPlayer, rosterPlayer, sell, undoAuction, type Auction, type AuctionState } from '../../engine/auction.ts';
-import { overall, ROLE_LABEL } from '../../engine/squad.ts';
+import { CATEGORY_LABEL, categoryOf, overall, ROLE_LABEL } from '../../engine/squad.ts';
 import { careerStats, playerKey } from '../../engine/stats.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
@@ -147,7 +147,10 @@ export default function AuctionScreen() {
                 {String(lot)}
               </GhostWord>
               <View style={styles.lotTop}>
-                <Text style={styles.lotRole}>{ROLE_LABEL[p.role]}{p.keeper ? ' · keeps' : ''}</Text>
+                <Text style={styles.lotRole}>
+                  {CATEGORY_LABEL[categoryOf(p)]} · {ROLE_LABEL[p.role]}
+                  {p.keeper ? ' · keeps' : ''}
+                </Text>
                 {s.lastCall ? (
                   <View style={styles.lastCall}>
                     <Text style={styles.lastCallText}>LAST CALL</Text>
@@ -173,8 +176,8 @@ export default function AuctionScreen() {
                   : 'No matches on record yet'}
               </Text>
               <View style={styles.bidBox}>
-                <Text style={styles.bidLabel}>{bid ? `${s.sides[bid.side].name} bids` : `Opening bid`}</Text>
-                <PopText value={money(bid ? bid.amount : a.settings.base)} style={[styles.bidValue, bid && { color: SIDE_TINT[bid.side] }]} />
+                <Text style={styles.bidLabel}>{bid ? `${s.sides[bid.side].name} bids` : `Base price · ${CATEGORY_LABEL[categoryOf(p)]}`}</Text>
+                <PopText value={money(bid ? bid.amount : s.opening)} style={[styles.bidValue, bid && { color: SIDE_TINT[bid.side] }]} />
               </View>
             </View>
 
@@ -209,7 +212,7 @@ export default function AuctionScreen() {
             {!s.lastCall ? (
               <Button variant="ghost" label="Unsold" icon="arrow-redo-outline" disabled={Boolean(bid)} onPress={pass} style={{ marginTop: space.sm }} />
             ) : (
-              <Text style={styles.help}>Nobody took {p.name} the first time. One of the captains has to now, at {money(a.settings.base)} or more.</Text>
+              <Text style={styles.help}>Nobody took {p.name} the first time. One of the captains has to now, at {money(s.opening)} or more.</Text>
             )}
 
             {s.queue.length > 1 && (

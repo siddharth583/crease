@@ -6,6 +6,9 @@ import type { Role, Team } from './types.ts';
 
 export type Rating = 1 | 2 | 3 | 4 | 5;
 
+/** The auction's price bands: each has its own base price. */
+export type Category = 'ar' | 'bat' | 'bowl' | 'other';
+
 export type SquadPlayer = {
   id: string;
   name: string;
@@ -15,9 +18,22 @@ export type SquadPlayer = {
   field: Rating;
   /** Keeps wicket for whichever side picks them. */
   keeper?: boolean;
+  /** Price band in the auction; worked out from the role when not set. */
+  category?: Category;
 };
 
 export const ROLE_LABEL: Record<Role, string> = { bat: 'Batter', bowl: 'Bowler', ar: 'All-rounder', wk: 'Keeper' };
+
+export const CATEGORIES: Category[] = ['ar', 'bat', 'bowl', 'other'];
+export const CATEGORY_LABEL: Record<Category, string> = { ar: 'AR', bat: 'BAT', bowl: 'BOW', other: 'Other' };
+export const CATEGORY_NAME: Record<Category, string> = { ar: 'All-rounders', bat: 'Batters', bowl: 'Bowlers', other: 'Others' };
+
+/** A player's price band: as set, or from their role (a keeper who also bowls is an all-rounder). */
+export function categoryOf(p: Pick<SquadPlayer, 'role' | 'bowl' | 'category'>): Category {
+  if (p.category) return p.category;
+  if (p.role === 'wk') return p.bowl >= 3 ? 'ar' : 'bat';
+  return p.role;
+}
 
 const r = (n: number) => Math.min(5, Math.max(1, Math.round(n))) as Rating;
 
@@ -29,16 +45,16 @@ export const DEFAULT_SQUAD: SquadPlayer[] = (
     { name: 'Rishav Bhattacharjee', role: 'ar', bat: 3, bowl: 3, field: 3 },
     { name: 'Nitin Parmar', role: 'bat', bat: 3, bowl: 1, field: 4, keeper: true },
     { name: 'Harleen Singh', role: 'ar', bat: 2, bowl: 4, field: 4 },
-    { name: 'Satnoor Singh', role: 'bat', bat: 2, bowl: 1, field: 2 },
-    { name: 'Moses Wiliams', role: 'bat', bat: 2, bowl: 1, field: 2 },
-    { name: 'Supreet Guleria', role: 'bat', bat: 2, bowl: 1, field: 2 },
+    { name: 'Satnoor Singh', role: 'bat', bat: 2, bowl: 1, field: 2, category: 'other' },
+    { name: 'Moses Wiliams', role: 'bat', bat: 2, bowl: 1, field: 2, category: 'other' },
+    { name: 'Supreet Guleria', role: 'bat', bat: 2, bowl: 1, field: 2, category: 'other' },
     { name: 'Nihal Walia', role: 'wk', bat: 5, bowl: 5, field: 5, keeper: true },
     { name: 'Ashwani Singh', role: 'ar', bat: 4, bowl: 4, field: 4 },
     { name: 'Karandeep Singh', role: 'bowl', bat: 1, bowl: 4, field: 3 },
     { name: 'Navjot Singh', role: 'bat', bat: 3, bowl: 1, field: 3, keeper: true },
     { name: 'Chirag', role: 'ar', bat: 3, bowl: 3, field: 3 },
-    { name: 'Charanjeet', role: 'ar', bat: 2, bowl: 2, field: 2 },
-    { name: 'Rajeev', role: 'bat', bat: 2, bowl: 1, field: 2 },
+    { name: 'Charanjeet', role: 'ar', bat: 2, bowl: 2, field: 2, category: 'other' },
+    { name: 'Rajeev', role: 'bat', bat: 2, bowl: 1, field: 2, category: 'other' },
     { name: 'Rohit', role: 'bowl', bat: 1, bowl: 3, field: 2 },
   ] as (Omit<SquadPlayer, 'id' | 'bat' | 'bowl' | 'field'> & { bat: number; bowl: number; field: number })[]
 ).map((p, i) => ({

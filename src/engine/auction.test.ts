@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { auctionState, canBid, money, moneyShort, newAuction, nextBid, passPlayer, sell, undoAuction, type Auction } from './auction.ts';
+import { auctionState, basePrice, canBid, money, moneyShort, newAuction, nextBid, passPlayer, reserveFor, sell, undoAuction, type Auction } from './auction.ts';
 import { DEFAULT_SQUAD } from './squad.ts';
 
 const noShuffle = () => 0.999;
@@ -90,4 +90,58 @@ test('rupees are written the Indian way', () => {
   assert.equal(moneyShort(100_000), '₹1L');
   assert.equal(moneyShort(250_000), '₹2.5L');
   assert.equal(moneyShort(5_000), '₹5K');
+});
+
+test('each category opens at its own base price', () => {
+  const roster = DEFAULT_SQUAD;
+  const a = newAuction('a3', roster, [
+    { name: 'A', captain: roster[0].id },
+    { name: 'B', captain: roster[8].id },
+  ], { purse: 100_000, base: 5_000, step: 1_000, bases: { ar: 10_000, bat: 7_000, bowl: 6_000, other: 3_000 } }, noShuffle);
+  const s = auctionState(a);
+  const p = roster.find((x) => x.id === s.current)!;
+  assert.equal(s.opening, basePrice(a.settings, p));
+  assert.equal(nextBid(a, null), s.opening);
+  assert.equal(basePrice(a.settings, roster.find((x) => x.name === 'Moses Wiliams')!), 3_000);
+  assert.equal(basePrice(a.settings, roster.find((x) => x.name === 'Nihal Walia')!), 10_000);
+  assert.equal(basePrice(a.settings, roster.find((x) => x.name === 'Rohit')!), 6_000);
+});
+
+test('a captain keeps back the cheapest base prices still to come', () => {
+  const roster = DEFAULT_SQUAD;
+  const settings = { purse: 100_000, base: 5_000, step: 1_000, bases: { ar: 10_000, bat: 7_000, bowl: 7_000, other: 3_000 } };
+  const a = newAuction('a4', roster, [
+    { name: 'A', captain: roster[0].id },
+    { name: 'B', captain: roster[8].id },
+  ], settings, noShuffle);
+  const s = auctionState(a);
+  const later = s.queue.slice(1).map((id) => roster.find((x) => x.id === id)!);
+  // Seven places, so keep the six cheapest of those still to come: five others at 3,000 and one at 7,000.
+  assert.equal(reserveFor(settings, later, 6), 5 * 3_000 + 7_000);
+  assert.equal(s.sides[0].maxBid, 100_000 - (5 * 3_000 + 7_000));
+});
+
+test('captains keep money back for a dear category still to come', () => {
+  // Six players, two places a side; all-rounders cost 10,000 and each purse is 12,000.
+  const roster = DEFAULT_SQUAD.slice(0, 6); // Rishav (AR), Nitin, Harleen (AR), Satnoor come up in that order
+  let a = newAuction('a5', roster, [
+    { name: 'A', captain: roster[0].id },
+    { name: 'B', captain: roster[1].id },
+  ], { purse: 12_000, base: 3_000, step: 1_000, bases: { ar: 10_000, bat: 3_000, bowl: 3_000, other: 3_000 } }, noShuffle);
+  a = passPlayer(a); // Rishav
+  a = sell(a, 0, 9_000); // Nitin: A keeps 3,000 for Satnoor, the cheapest still to come
+  a = passPlayer(a); // Harleen
+  // Satnoor: only all-rounders are left after him, so B has to keep 10,000 back.
+  assert.equal(auctionState(a).sides[1].maxBid, 2_000);
+  assert.throws(() => sell(a, 1, 3_000));
+  a = sell(a, 1, 2_000);
+  let s = auctionState(a);
+  assert.equal(roster.find((x) => x.id === s.current)!.name, 'Rishav Bhattacharjee');
+  assert.equal(s.lastCall, true);
+  assert.equal(s.opening, 10_000);
+  a = sell(a, 1, 10_000);
+  s = auctionState(a);
+  assert.equal(s.done, true);
+  // Harleen joins A, who has only 3,000 left: all of it.
+  assert.deepEqual(s.sides[0].bought.at(-1), { player: roster[4].id, price: 3_000, auto: true });
 });

@@ -1,10 +1,11 @@
-import type { SquadPlayer } from './squad.ts';
+import { categoryOf, type Category, type SquadPlayer } from './squad.ts';
 
 // An IPL-style auction that splits the day's players into two sides. Each captain starts with the same wallet
-// (₹1 lakh by default); players come up one at a time and go to the highest bid. A captain can never bid so much that they
-// couldn't still buy the rest of their side at the base price. A player nobody wants goes to the back of the
-// queue once; the second time round someone has to take them. When one side is full, everyone left joins the
-// other side at the base price.
+// (₹1 lakh by default); players come up one at a time and go to the highest bid, opening at the base price of their
+// category (all-rounders, batters, bowlers, others). A captain can never bid so much that they couldn't still buy
+// the rest of their side at the cheapest base prices left. A player nobody wants goes to the back of the queue once;
+// the second time round someone has to take them. When one side is full, everyone left joins the other side at
+// their base price.
 //
 // Like the scoring, an auction is a list of events: the state is worked out from them, and undo drops the last.
 
@@ -13,6 +14,8 @@ export type AuctionSettings = {
   purse: number;
   /** The opening bid, and what a player costs when nobody else bids. */
   base: number;
+  /** A base price for each category; `base` covers any category not set (and auctions from before categories). */
+  bases?: Partial<Record<Category, number>>;
   /** How much each bid raises the last one. */
   step: number;
 };
@@ -47,7 +50,7 @@ export type SideState = {
   left: number;
   /** Places still to fill. */
   slots: number;
-  /** The most this side may bid now, keeping the base price for each place after this one. */
+  /** The most this side may bid now, keeping the cheapest base prices left for each place after this one. */
   maxBid: number;
 };
 
@@ -58,13 +61,33 @@ export type AuctionState = {
   current: string | null;
   /** The current player has already gone unsold once: someone has to take them. */
   lastCall: boolean;
+  /** Where the bidding on the current player starts: their category's base price. */
+  opening: number;
   unsold: string[];
   /** Places on each side: half the players, rounded up. */
   sideSize: number;
   done: boolean;
 };
 
-export const DEFAULT_SETTINGS: AuctionSettings = { purse: 100_000, base: 5_000, step: 1_000 };
+export const DEFAULT_BASES: Record<Category, number> = { ar: 10_000, bat: 7_000, bowl: 7_000, other: 3_000 };
+
+export const DEFAULT_SETTINGS: AuctionSettings = { purse: 100_000, base: 5_000, step: 1_000, bases: DEFAULT_BASES };
+
+/** What a player costs when nobody bids more: their category's base price. */
+export function basePrice(settings: AuctionSettings, p: SquadPlayer): number {
+  return settings.bases?.[categoryOf(p)] ?? settings.base;
+}
+
+/**
+ * The least a side needs to fill `places` from `players`: the cheapest base prices among them (players they won't
+ * get still count, as the cheapest are what's left to buy). Fewer players than places means the cheapest price again.
+ */
+export function reserveFor(settings: AuctionSettings, players: SquadPlayer[], places: number): number {
+  if (places <= 0) return 0;
+  const prices = players.map((p) => basePrice(settings, p)).sort((x, y) => x - y);
+  const floor = prices[0] ?? settings.base;
+  return Array.from({ length: places }, (_, i) => prices[i] ?? floor).reduce((n, x) => n + x, 0);
+}
 
 /** Rupees the Indian way: ₹1,00,000. */
 export function money(n: number): string {
@@ -120,13 +143,15 @@ export function auctionState(a: Auction): AuctionState {
     const other = (1 - i) as 0 | 1;
     if (slots(i) <= 0 && queue.length) {
       for (const player of queue) {
-        const price = Math.max(0, Math.min(a.settings.base, a.settings.purse - spent(other)));
+        const price = Math.max(0, Math.min(basePrice(a.settings, rosterPlayer(a, player)), a.settings.purse - spent(other)));
         bought[other].push({ player, price, auto: true });
       }
       queue = [];
     }
   }
 
+  // Everyone still to come after the current player: what each side has to keep money back for.
+  const later = queue.slice(1).map((id) => rosterPlayer(a, id));
   const sides = a.sides.map((s, i) => {
     const side = i as 0 | 1;
     const left = a.settings.purse - spent(side);
@@ -139,24 +164,30 @@ export function auctionState(a: Auction): AuctionState {
       spent: spent(side),
       left,
       slots: Math.max(0, free),
-      maxBid: free > 0 ? Math.max(0, left - a.settings.base * (free - 1)) : 0,
+      maxBid: free > 0 ? Math.max(0, left - reserveFor(a.settings, later, free - 1)) : 0,
     };
   }) as [SideState, SideState];
 
   const current = queue[0] ?? null;
+  const lastCall = current ? (passes.get(current) ?? 0) >= 1 : false;
+  const base = current ? basePrice(a.settings, rosterPlayer(a, current)) : 0;
+  // On a last call someone has to take the player: if neither side can reach the base price, bidding starts at
+  // the most either can pay.
+  const reach = Math.max(0, ...sides.filter((x) => x.slots > 0).map((x) => x.maxBid));
   return {
     sides,
     queue,
     current,
-    lastCall: current ? (passes.get(current) ?? 0) >= 1 : false,
+    lastCall,
+    opening: lastCall ? Math.min(base, reach) : base,
     unsold: [...passes.keys()].filter((id) => queue.includes(id)),
     sideSize,
     done: !current,
   };
 }
 
-/** The bid that comes after `current` (none yet: the base price). */
-export const nextBid = (a: Auction, current: number | null) => (current === null ? a.settings.base : current + a.settings.step);
+/** The bid that comes after `current` (none yet: the current player's base price). */
+export const nextBid = (a: Auction, current: number | null) => (current === null ? auctionState(a).opening : current + a.settings.step);
 
 export function canBid(a: Auction, side: 0 | 1, amount: number): boolean {
   const s = auctionState(a);

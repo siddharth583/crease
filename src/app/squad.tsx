@@ -5,7 +5,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stars } from '../components/Stars.tsx';
 import { Button, Card, FadeIn, IconButton, PressableScale, Screen, SectionLabel, Segmented, ToggleRow, useToast } from '../components/ui.tsx';
-import { overall, ROLE_LABEL, type SquadPlayer } from '../engine/squad.ts';
+import { CATEGORIES, CATEGORY_LABEL, categoryOf, overall, ROLE_LABEL, type Category, type SquadPlayer } from '../engine/squad.ts';
 import type { Role } from '../engine/types.ts';
 import { newId } from '../store/matches.tsx';
 import { useSquad } from '../store/squad.ts';
@@ -31,7 +31,9 @@ function PlayerRow({ p, open, onToggle, onChange, onRemove }: { p: SquadPlayer; 
             {p.keeper ? <Text style={styles.wk}>{'\u00A0\u00A0'}WK</Text> : null}
           </Text>
           <View style={styles.mini}>
-            <Text style={styles.role}>{ROLE_LABEL[p.role]}</Text>
+            <View style={styles.cat}>
+              <Text style={styles.catText}>{CATEGORY_LABEL[categoryOf(p)]}</Text>
+            </View>
             <Text style={styles.miniText}>Bat {p.bat}</Text>
             <Text style={styles.miniText}>Bowl {p.bowl}</Text>
             <Text style={styles.miniText}>Field {p.field}</Text>
@@ -51,6 +53,15 @@ function PlayerRow({ p, open, onToggle, onChange, onRemove }: { p: SquadPlayer; 
             autoCapitalize="words"
           />
           <Segmented value={p.role} onChange={(role) => onChange({ ...p, role, keeper: role === 'wk' ? true : p.keeper })} options={ROLES} />
+          <View style={{ gap: space.sm }}>
+            <Text style={styles.rateLabel}>Auction category</Text>
+            <Segmented<Category>
+              value={categoryOf(p)}
+              onChange={(category) => onChange({ ...p, category })}
+              options={CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABEL[c] }))}
+            />
+            <Text style={styles.catHint}>Sets their base price in the auction.</Text>
+          </View>
           {(['bat', 'bowl', 'field'] as const).map((k) => (
             <View key={k} style={styles.rateRow}>
               <Text style={styles.rateLabel}>{k === 'bat' ? 'Batting' : k === 'bowl' ? 'Bowling' : 'Fielding'}</Text>
@@ -164,8 +175,10 @@ const styles = StyleSheet.create({
   badgeText: { fontFamily: font.posterBlack, fontSize: 20, color: colors.accentInk, ...type.num },
   name: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   wk: { color: colors.cyan, fontSize: 11, fontFamily: font.heavy },
-  mini: { flexDirection: 'row', gap: space.sm, marginTop: 2, flexWrap: 'wrap' },
-  role: { color: colors.accentInk, fontSize: 12, fontFamily: font.bold },
+  mini: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 3, flexWrap: 'wrap' },
+  cat: { backgroundColor: colors.surfaceHi, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  catText: { color: colors.text, fontSize: 10, fontFamily: font.heavy, letterSpacing: 0.5 },
+  catHint: { color: colors.faint, fontSize: 12, fontFamily: font.regular },
   miniText: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
   editor: { gap: space.md, padding: space.md, paddingTop: 0 },
   rateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

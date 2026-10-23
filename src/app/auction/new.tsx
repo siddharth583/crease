@@ -4,14 +4,31 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, tap } from '../../components/ui.tsx';
-import { auctionState, money, moneyShort, newAuction, type AuctionSettings } from '../../engine/auction.ts';
-import { overall, type SquadPlayer } from '../../engine/squad.ts';
+import { auctionState, DEFAULT_BASES, money, moneyShort, newAuction, reserveFor, type AuctionSettings } from '../../engine/auction.ts';
+import { CATEGORIES, CATEGORY_LABEL, CATEGORY_NAME, categoryOf, overall, type Category, type SquadPlayer } from '../../engine/squad.ts';
 import { newId } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { colors, edge, font, radius, space, type } from '../../theme.ts';
 
 const first = (name: string) => name.trim().split(/\s+/)[0];
 const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+/** One category's base price, a thousand at a time. */
+function BaseRow({ category, count, value, max, onChange }: { category: Category; count: number; value: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <View style={styles.baseRow}>
+      <View style={styles.catTag}>
+        <Text style={styles.catTagText}>{CATEGORY_LABEL[category]}</Text>
+      </View>
+      <Text style={styles.baseCount} numberOfLines={1} accessibilityLabel={`${count} ${count === 1 ? 'player' : 'players'}`}>
+        ×{count}
+      </Text>
+      <IconButton icon="remove" label={`Lower the ${CATEGORY_NAME[category]} base price`} disabled={value <= 1_000} onPress={() => onChange(value - 1_000)} />
+      <Text style={styles.baseValue}>{money(value)}</Text>
+      <IconButton icon="add" label={`Raise the ${CATEGORY_NAME[category]} base price`} disabled={value + 1_000 > max} onPress={() => onChange(value + 1_000)} />
+    </View>
+  );
+}
 
 /** Pick one of the day's players as a captain. */
 function CaptainPicker({ label, players, value, other, onChange }: { label: string; players: SquadPlayer[]; value: string | null; other: string | null; onChange: (id: string) => void }) {
@@ -39,7 +56,7 @@ export default function NewAuction() {
   const [captains, setCaptains] = useState<[string | null, string | null]>([best[0]?.id ?? null, best[1]?.id ?? null]);
   const [names, setNames] = useState<[string, string]>(['', '']);
   const [purse, setPurse] = useState<'50000' | '100000' | '200000'>('100000');
-  const [base, setBase] = useState<'1000' | '2000' | '5000' | '10000'>('5000');
+  const [bases, setBases] = useState<Record<Category, number>>(DEFAULT_BASES);
   const [step, setStep] = useState<'500' | '1000' | '2000' | '5000'>('1000');
 
   const everyone = [...squad, ...guests];
@@ -47,9 +64,12 @@ export default function NewAuction() {
   const capOf = (i: 0 | 1) => everyone.find((p) => p.id === captains[i]) ?? null;
   const teamName = (i: 0 | 1) => names[i].trim() || (capOf(i) ? `Team ${first(capOf(i)!.name)}` : i ? 'Team B' : 'Team A');
   const perSide = Math.ceil(today.length / 2);
-  const settings: AuctionSettings = { purse: Number(purse), base: Number(base), step: Number(step) };
-  // Every captain has to be able to fill their side at the base price.
-  const affordable = settings.base * (perSide - 1) <= settings.purse;
+  const settings: AuctionSettings = { purse: Number(purse), base: Math.min(...Object.values(bases)), step: Number(step), bases };
+  const auctioned = today.filter((p) => p.id !== captains[0] && p.id !== captains[1]);
+  const inCategory = (c: Category) => auctioned.filter((p) => categoryOf(p) === c).length;
+  // Every captain has to be able to fill their side at the cheapest base prices.
+  const needed = reserveFor(settings, auctioned, perSide - 1);
+  const affordable = needed <= settings.purse;
   const ready = today.length >= 4 && captains[0] && captains[1] && playing.has(captains[0]) && playing.has(captains[1]) && affordable;
 
   const toggle = (id: string) => {
@@ -62,7 +82,7 @@ export default function NewAuction() {
   const addGuest = () => {
     const n = guest.trim();
     if (!n) return;
-    const p: SquadPlayer = { id: newId(), name: n, role: 'ar', bat: 2, bowl: 2, field: 2 };
+    const p: SquadPlayer = { id: newId(), name: n, role: 'ar', bat: 2, bowl: 2, field: 2, category: 'other' };
     setGuests([...guests, p]);
     setPlaying(new Set([...playing, p.id]));
     setGuest('');
@@ -171,14 +191,19 @@ export default function NewAuction() {
                 { value: '200000', label: '₹2 lakh' },
               ]}
             />
-            <Text style={styles.question}>Base price</Text>
-            <Segmented value={base} onChange={setBase} options={(['1000', '2000', '5000', '10000'] as const).map((v) => ({ value: v, label: moneyShort(Number(v)) }))} />
+            <Text style={styles.question}>Base price by category</Text>
+            <View style={styles.bases}>
+              {CATEGORIES.map((c) => (
+                <BaseRow key={c} category={c} count={inCategory(c)} value={bases[c]} max={settings.purse} onChange={(v) => setBases({ ...bases, [c]: v })} />
+              ))}
+            </View>
+            <Text style={styles.help}>A player’s category is set on the squad screen. Bidding on them opens at its base price.</Text>
             <Text style={styles.question}>Each bid adds</Text>
             <Segmented value={step} onChange={setStep} options={(['500', '1000', '2000', '5000'] as const).map((v) => ({ value: v, label: `+${moneyShort(Number(v))}` }))} />
             <Text style={[styles.help, !affordable && { color: colors.danger }]}>
               {affordable
-                ? `Each side buys ${perSide - 1} players. A captain always keeps ${money(settings.base)} a place for the rest of their side.`
-                : `A wallet of ${money(settings.purse)} can’t buy ${perSide - 1} players at ${money(settings.base)} each. Raise the wallet or lower the base price.`}
+                ? `Each side buys ${perSide - 1} players. A captain always keeps enough back to fill the rest of their side at the cheapest base prices left.`
+                : `Filling a side costs at least ${money(needed)}, more than the ${money(settings.purse)} wallet. Raise the wallet or lower some base prices.`}
             </Text>
           </Card>
         </ScrollView>
@@ -214,6 +239,12 @@ const styles = StyleSheet.create({
     height: 44,
   },
   question: { color: colors.muted, fontSize: 13, fontFamily: font.bold },
+  bases: { borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  baseRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, paddingHorizontal: space.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  catTag: { width: 52, height: 30, borderRadius: radius.sm, backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center' },
+  catTagText: { color: colors.accentInk, fontSize: 12, fontFamily: font.heavy, letterSpacing: 0.5 },
+  baseCount: { flex: 1, color: colors.muted, fontSize: 13, fontFamily: font.semibold },
+  baseValue: { minWidth: 72, textAlign: 'center', color: colors.text, fontSize: 18, fontFamily: font.posterBlack, ...type.num },
   help: { color: colors.faint, fontSize: 12, fontFamily: font.regular, lineHeight: 17 },
   past: {
     flexDirection: 'row',

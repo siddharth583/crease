@@ -24,7 +24,9 @@ function read(): Saved {
           ? fileFor().textSync()
           : null;
     const saved = raw ? (JSON.parse(raw) as Partial<Saved>) : {};
-    return { squad: saved.squad ?? DEFAULT_SQUAD, auctions: saved.auctions ?? [] };
+    // Squads saved before players had an auction category take the usual one for each regular.
+    const squad = (saved.squad ?? DEFAULT_SQUAD).map((p) => (p.category ? p : { ...p, category: DEFAULT_SQUAD.find((d) => d.id === p.id)?.category }));
+    return { squad, auctions: saved.auctions ?? [] };
   } catch {
     return { squad: DEFAULT_SQUAD, auctions: [] };
   }
