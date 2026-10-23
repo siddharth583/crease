@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DEFAULT_TEAMS } from '../engine/squad.ts';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { mergeMatches } from '../engine/backup.ts';
@@ -81,7 +82,8 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
       load<Dirty>(DIRTY_KEY, { matches: {}, teams: {} }),
     ]).then(([m, t, c, d]) => {
       setMatches(m);
-      setSavedTeams(t);
+      // A phone with no saved teams (a new phone, or a new web address) starts with the club's two usual sides.
+      setSavedTeams(t.length ? t : DEFAULT_TEAMS);
       setClub(c);
       setDirty(d);
       setReady(true);

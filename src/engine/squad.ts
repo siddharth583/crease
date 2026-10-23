@@ -1,4 +1,4 @@
-import type { Role } from './types.ts';
+import type { Role, Team } from './types.ts';
 
 // The squad: the regulars who turn up every week, whichever side they end up on. Each has a role and a rating
 // (1 to 5) for batting, bowling and fielding, used to set them up for an auction. A regular's stats follow
@@ -54,3 +54,9 @@ export function overall(p: Pick<SquadPlayer, 'bat' | 'bowl' | 'field'>): number 
   const [best, second] = [p.bat, p.bowl].sort((a, b) => b - a);
   return Math.round((best * 0.6 + second * 0.25 + p.field * 0.15) * 10) / 10;
 }
+
+/** The club's two usual sides, for a phone that has none saved yet: the first eight regulars and the last eight. */
+export const DEFAULT_TEAMS: Team[] = [
+  { id: 'copan-a', name: 'Copan A', players: DEFAULT_SQUAD.slice(0, 8).map((p, i) => ({ id: `copan-a-p${i + 1}`, name: p.name, role: p.role })) },
+  { id: 'copan-b', name: 'Copan B', players: DEFAULT_SQUAD.slice(8).map((p, i) => ({ id: `copan-b-p${i + 1}`, name: p.name, role: p.role })) },
+];
