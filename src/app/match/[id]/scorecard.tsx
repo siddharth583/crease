@@ -5,9 +5,9 @@ import { Pressable, ScrollView, Share, StyleSheet, Text, View, type StyleProp, t
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
-import { Card, IconButton, Screen, SectionLabel, Segmented, useToast } from '../../../components/ui.tsx';
+import { Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../../../components/ui.tsx';
 import { dismissal, matchState, oversText, playerName, type InningsState, type MatchState } from '../../../engine/engine.ts';
-import { isPlaceholder, playerKey } from '../../../engine/stats.ts';
+import { isPlaceholder, keyFor, playerOfTheMatch } from '../../../engine/stats.ts';
 import type { Match, Team } from '../../../engine/types.ts';
 import { useMatch } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
@@ -28,6 +28,8 @@ function shareText(match: Match, state: MatchState) {
     lines.push('');
   });
   lines.push(state.result ?? 'Match in progress');
+  const mom = state.result ? playerOfTheMatch(match) : null;
+  if (mom) lines.push(`⭐ Man of the Match: ${mom.name} (${mom.summary})`);
   return lines.join('\n');
 }
 
@@ -41,7 +43,7 @@ function PlayerLink({ match, team, id, style }: { match: Match; team: Team; id: 
     <Pressable
       hitSlop={6}
       style={{ flexShrink: 1, minWidth: 0 }}
-      onPress={() => router.push({ pathname: '/player/[key]', params: { key: playerKey(team, name) } })}
+      onPress={() => router.push({ pathname: '/player/[key]', params: { key: keyFor(team, team.players.find((p) => p.id === id) ?? { name }) } })}
     >
       {({ pressed }) => (
         <Text numberOfLines={1} style={[style, pressed && { opacity: 0.6 }]}>
@@ -178,6 +180,7 @@ export default function Scorecard() {
 
   if (!match) return <Screen>{null}</Screen>;
   const state = matchState(match);
+  const mom = state.result ? playerOfTheMatch(match) : null;
   const shown = tab ?? (String(state.current));
   const s = state.innings[Number(shown)];
   const started = match.innings[Number(shown)].events.length > 0;
@@ -201,6 +204,29 @@ export default function Scorecard() {
           />
           <Text style={[styles.bannerText, state.result ? { color: colors.onAccent } : null]}>{state.result ?? 'Live · match in progress'}</Text>
         </View>
+        {mom && (
+          <PressableScale
+            scaleTo={0.98}
+            disabled={isPlaceholder(mom.name)}
+            dimWhenDisabled={false}
+            onPress={() => router.push({ pathname: '/player/[key]', params: { key: mom.key } })}
+            style={styles.mom}
+          >
+            <View style={styles.momIcon}>
+              <Ionicons name="star" size={18} color={colors.gold} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.momLabel}>Man of the Match</Text>
+              <Text style={styles.momName} numberOfLines={1}>
+                {mom.name}
+              </Text>
+              <Text style={styles.momLine} numberOfLines={1}>
+                {mom.team} · {mom.summary}
+              </Text>
+            </View>
+            {!isPlaceholder(mom.name) && <Ionicons name="chevron-forward" size={18} color={colors.faint} />}
+          </PressableScale>
+        )}
         <Segmented
           value={shown}
           onChange={setTab}
@@ -247,6 +273,22 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   bannerDone: { backgroundColor: colors.accent, borderColor: colors.accent, ...edge },
+  mom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: space.md,
+    marginBottom: space.md,
+    ...edge,
+  },
+  momIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldDim },
+  momLabel: { ...type.label, fontSize: 9, color: colors.muted },
+  momName: { fontFamily: font.poster, fontSize: 24, color: colors.text, textTransform: 'uppercase' },
+  momLine: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
   bannerText: { color: colors.text, fontSize: 20, fontFamily: font.poster, textTransform: 'uppercase', flex: 1 },
   totalRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: space.xl, paddingHorizontal: space.xs },
   totalTeam: { color: colors.text, fontSize: 30, fontFamily: font.poster, textTransform: 'uppercase', flex: 1 },

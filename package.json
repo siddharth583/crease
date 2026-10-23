@@ -45,8 +45,9 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "node --no-warnings --test \"src/**/*.test.ts\"",
-    "build:web": "expo export -p web && npx --yes workbox-cli@7 generateSW workbox-config.cjs",
-    "tunnel": "expo start --tunnel ngrok --port 8092"
+    "build:web": "expo export -p web && node scripts/base-path.mjs && npx --yes workbox-cli@7 generateSW workbox-config.cjs",
+    "tunnel": "expo start --tunnel ngrok --port 8092",
+    "build:pages": "EXPO_BASE_URL=/crease npm run build:web"
   },
   "private": true
 }

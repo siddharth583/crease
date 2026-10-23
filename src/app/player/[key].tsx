@@ -17,6 +17,7 @@ import {
   type MatchLine,
 } from '../../engine/stats.ts';
 import { useMatches } from '../../store/matches.tsx';
+import { useSquad } from '../../store/squad.ts';
 import { colors, gradients, radius, space, type, font, ink, hero } from '../../theme.ts';
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
@@ -82,7 +83,8 @@ export default function PlayerProfile() {
   const { key } = useLocalSearchParams<{ key: string }>();
   const { matches, ready } = useMatches();
   const insets = useSafeAreaInsets();
-  const c = useMemo(() => careerStats(matches).find((x) => x.key === key), [matches, key]);
+  const { squad } = useSquad();
+  const c = useMemo(() => careerStats(matches).find((x) => x.key === key), [matches, key, squad]);
 
   const back = (
     <View style={styles.header}>

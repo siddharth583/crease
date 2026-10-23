@@ -2,7 +2,8 @@ import { matchState, oversText } from './engine.ts';
 import type { Match, Team } from './types.ts';
 
 // Career numbers across every saved match. A player is the same person when the team name and player name
-// match (ignoring case and spaces), which also works for matches scored before squads were saved.
+// match (ignoring case and spaces), which also works for matches scored before squads were saved. A regular
+// (someone in the squad) is the same person by name alone, whichever team they played for.
 
 export type MatchLine = {
   matchId: string;
@@ -40,7 +41,15 @@ const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 /** Names the setup screen fills in for blanks: these could be anyone, so they get no career. */
 export const isPlaceholder = (name: string) => /^player \d+$/.test(norm(name));
 
-export const playerKey = (team: Team, name: string) => `${norm(team.name)}|${norm(name)}`;
+let regulars = new Set<string>();
+
+/** The squad's names: their stats follow them across teams (auction sides change every week). */
+export function setRegulars(names: string[]) {
+  regulars = new Set(names.map(norm).filter(Boolean));
+}
+
+export const playerKey = (team: Team, name: string) =>
+  regulars.has(norm(name)) ? `regular|${norm(name)}` : `${norm(team.name)}|${norm(name)}`;
 
 /** A common player (plays for both sides) is one person, whichever side they turned out for. */
 export const COMMON_TEAM = 'Both teams';

@@ -7,6 +7,7 @@ import { FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, Se
 import { battingAverage, bestFigures, bowlingOvers, careerStats, economy, strikeRate, type Career } from '../../engine/stats.ts';
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
+import { useSquad } from '../../store/squad.ts';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
 import { colors, font, radius, space, type, edge } from '../../theme.ts';
 
@@ -131,7 +132,9 @@ export default function Players() {
   const { matches } = useMatches();
   const [board, setBoard] = useState<Board>('batting');
   const [query, setQuery] = useState('');
-  const careers = useMemo(() => careerStats(matches), [matches]);
+  const { squad } = useSquad();
+  // The squad decides who counts as one person across teams.
+  const careers = useMemo(() => careerStats(matches), [matches, squad]);
   const toast = useToast();
   const { exportMatches, exportPdf } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
@@ -151,6 +154,7 @@ export default function Players() {
         <View style={styles.header}>
           <Text style={styles.title}>PLAYERS</Text>
           <View style={{ flexDirection: 'row', gap: space.sm }}>
+            <IconButton icon="people-outline" label="The squad" onPress={() => router.push('/squad')} />
             <IconButton icon="trophy-outline" label="Record book" onPress={() => router.push('/records')} />
           <IconButton icon="download-outline" label="Export matches" disabled={!matches.length} onPress={() => setExporting(matches)} />
           </View>

@@ -4,10 +4,12 @@ import { useRef, useState } from 'react';
 import { Animated, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, ToggleRow } from '../components/ui.tsx';
+import { auctionState, rosterPlayer, type Auction } from '../engine/auction.ts';
 import { newMatch } from '../engine/engine.ts';
 import { seriesState } from '../engine/stats.ts';
 import type { Match, Rules, SeriesInfo, Team } from '../engine/types.ts';
 import { newId, useMatches } from '../store/matches.tsx';
+import { useSquad } from '../store/squad.ts';
 import { colors, radius, space, font } from '../theme.ts';
 
 /** `captain` and `keeper` are indexes into `players`. */
@@ -38,6 +40,15 @@ function draftFrom(team: Team, match?: Match): Draft {
     captain: at(match?.captains?.[team.id]),
     keeper: at(match?.keepers?.[team.id]),
   };
+}
+
+/** The two sides an auction made: captain first, the keeper marked. */
+function draftsFromAuction(a: Auction): [Draft, Draft] {
+  return auctionState(a).sides.map((side) => {
+    const players = side.players.map((id) => rosterPlayer(a, id));
+    const keeper = players.findIndex((p) => p.keeper);
+    return { name: side.name, players: players.map((p) => p.name), captain: 0, keeper: keeper >= 0 ? keeper : undefined };
+  }) as [Draft, Draft];
 }
 
 /** A coin that really spins, then says who won the toss. */
@@ -198,13 +209,25 @@ function TeamEditor({
 
 export default function NewMatch() {
   const insets = useSafeAreaInsets();
-  const { rematch, series: continueSeries } = useLocalSearchParams<{ rematch?: string; series?: string }>();
+  const { rematch, series: continueSeries, auction } = useLocalSearchParams<{ rematch?: string; series?: string; auction?: string }>();
   const { savedTeams, rememberTeams, saveMatch, matches } = useMatches();
+  const { auctions, saveAuction } = useSquad();
+  const fromAuction = auction ? auctions.find((a) => a.id === auction) : undefined;
+  const [auctionDrafts] = useState(() => (fromAuction ? draftsFromAuction(fromAuction) : null));
   const source: Match | undefined = rematch ? matches.find((m) => m.id === rematch) : undefined;
   const last: Match | undefined = matches[0];
-  const [size, setSize] = useState(() => source?.rules.playersPerSide ?? last?.rules.playersPerSide ?? 8);
+  const [size, setSize] = useState(
+    () =>
+      (auctionDrafts && Math.max(auctionDrafts[0].players.length, auctionDrafts[1].players.length)) ||
+      (source?.rules.playersPerSide ?? last?.rules.playersPerSide ?? 8),
+  );
   const [teams, setTeams] = useState<[Draft, Draft]>(() =>
-    source
+    auctionDrafts
+      ? [
+          { ...auctionDrafts[0], players: resize(auctionDrafts[0].players, size) },
+          { ...auctionDrafts[1], players: resize(auctionDrafts[1].players, size) },
+        ]
+      : source
       ? [draftFrom(source.teams[0], source), draftFrom(source.teams[1], source)]
       : [
           { name: '', players: resize([], size) },
@@ -282,6 +305,7 @@ export default function NewMatch() {
     match.keepers = pick('keeper');
     rememberTeams(built.filter((t, i) => teams[i].name.trim()));
     saveMatch(match);
+    if (fromAuction) saveAuction({ ...fromAuction, matchId: match.id });
     tap('success');
     router.replace({ pathname: '/match/[id]', params: { id: match.id } });
   };
@@ -312,7 +336,11 @@ export default function NewMatch() {
                 <Text style={{ color: colors.accentInk }}>MATCH</Text>
               </Text>
               <Text style={styles.subtitle}>
-                {source ? 'Same teams, same rules. Just do the toss.' : 'Two teams, your rules, then the toss.'}
+                {fromAuction
+                  ? 'The teams from the auction, captains and keepers set. Your rules, then the toss.'
+                  : source
+                    ? 'Same teams, same rules. Just do the toss.'
+                    : 'Two teams, your rules, then the toss.'}
               </Text>
               <View style={{ marginTop: space.lg, gap: space.md }}>
                 <Segmented
@@ -353,6 +381,13 @@ export default function NewMatch() {
             </>
           )}
           <SectionLabel>Teams</SectionLabel>
+          {!fromAuction && !source && (
+            <PressableScale scaleTo={0.98} onPress={() => router.push('/auction/new')} style={styles.auctionLink}>
+              <Ionicons name="hammer-outline" size={18} color={colors.accentInk} />
+              <Text style={styles.auctionText}>Pick the teams by auction</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+            </PressableScale>
+          )}
           <View style={{ gap: space.md }}>
             <TeamEditor label="Team A" draft={teams[0]} saved={savedTeams} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} />
             <View style={styles.vs} pointerEvents="none">
@@ -605,6 +640,17 @@ const styles = StyleSheet.create({
   },
   vsText: { color: colors.onAccent, fontFamily: font.posterBlack, fontSize: 22 },
   divider: { height: 1, backgroundColor: colors.border },
+  auctionLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    backgroundColor: colors.accentDim,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    height: 46,
+    marginBottom: space.md,
+  },
+  auctionText: { flex: 1, color: colors.text, fontSize: 14, fontFamily: font.bold },
   question: { color: colors.muted, fontSize: 13, fontFamily: font.bold },
   footer: {
     position: 'absolute',

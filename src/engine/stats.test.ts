@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addEvent, matchState, newMatch } from './engine.ts';
-import { battingAverage, bestFigures, careerStats, economy, playerKey, seriesState } from './stats.ts';
+import { battingAverage, bestFigures, careerStats, economy, playerKey, seriesState, setRegulars } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Team } from './types.ts';
 
 let seq = 0;
@@ -145,4 +145,17 @@ test('a common player plays for both sides and is counted once', () => {
   assert.equal(joker.matches, 1);
   assert.equal(joker.team, 'Both teams');
   assert.equal(joker.batting.runs, 4);
+});
+
+test('a regular is one person whichever team they play for', () => {
+  setRegulars(['Sam']);
+  try {
+    assert.equal(playerKey({ id: '', name: 'Royals', players: [] }, ' sam '), 'regular|sam');
+    assert.equal(playerKey({ id: '', name: 'Team Sid', players: [] }, 'Sam'), 'regular|sam');
+    assert.equal(playerKey({ id: '', name: 'Royals', players: [] }, 'Ben'), 'royals|ben');
+    const sam = careerStats(twoGames()).find((c) => c.name === 'Sam')!;
+    assert.equal(sam.key, 'regular|sam');
+  } finally {
+    setRegulars([]);
+  }
 });

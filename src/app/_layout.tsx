@@ -18,6 +18,7 @@ import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MatchesProvider } from '../store/matches.tsx';
 import { PrefsProvider } from '../store/prefs.ts';
+import { SquadProvider } from '../store/squad.ts';
 import { colors, isDay } from '../theme.ts';
 
 export default function RootLayout() {
@@ -39,6 +40,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <PrefsProvider>
+      <SquadProvider>
       <MatchesProvider>
         <StatusBar style={isDay ? 'dark' : 'light'} />
         <Stack
@@ -49,6 +51,7 @@ export default function RootLayout() {
           }}
         />
       </MatchesProvider>
+      </SquadProvider>
       </PrefsProvider>
     </SafeAreaProvider>
   );

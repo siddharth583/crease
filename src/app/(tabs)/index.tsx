@@ -6,7 +6,7 @@ import { ExportSheet } from '../../components/ExportSheet.tsx';
 import { Button, FadeIn, GhostWord, PitchStripes, PressableScale, Screen, SectionLabel, useToast } from '../../components/ui.tsx';
 import { sampleSeason } from '../../demo/sampleSeason.ts';
 import { matchState, oversText } from '../../engine/engine.ts';
-import { allSeries, careerStats, type SeriesState } from '../../engine/stats.ts';
+import { allSeries, careerStats, playerOfTheMatch, type SeriesState } from '../../engine/stats.ts';
 import { SeriesPips } from '../series/[id].tsx';
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
@@ -155,6 +155,7 @@ function SeriesCard({ s }: { s: SeriesState }) {
 
 function ResultRow({ match, onDelete }: { match: Match; onDelete: () => void }) {
   const state = matchState(match);
+  const mom = state.result ? playerOfTheMatch(match) : null;
   const d = new Date(match.createdAt);
   return (
     <PressableScale
@@ -186,6 +187,14 @@ function ResultRow({ match, onDelete }: { match: Match; onDelete: () => void }) 
         <Text numberOfLines={1} style={styles.resultText}>
           {state.result}
         </Text>
+        {mom && (
+          <View style={styles.resultMom}>
+            <Ionicons name="star" size={11} color={colors.gold} />
+            <Text numberOfLines={1} style={styles.resultMomText}>
+              <Text style={styles.resultMomName}>{mom.name}</Text> · Man of the Match
+            </Text>
+          </View>
+        )}
       </View>
     </PressableScale>
   );
@@ -212,6 +221,9 @@ export default function Home() {
           </View>
           <Text style={styles.brand}>CREASE</Text>
           <View style={{ flex: 1 }} />
+          <PressableScale accessibilityLabel="Auction: pick the teams" onPress={() => router.push('/auction/new')} style={styles.gear}>
+            <Ionicons name="hammer-outline" size={18} color={colors.text} />
+          </PressableScale>
           <PressableScale accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={styles.gear}>
             <Ionicons name="settings-outline" size={18} color={colors.text} />
           </PressableScale>
@@ -534,4 +546,7 @@ const styles = StyleSheet.create({
   resultScore: { color: colors.muted, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
   resultOvers: { fontSize: 14, fontFamily: font.poster, color: colors.faint },
   resultText: { color: colors.accentInk, fontSize: 12, fontFamily: font.bold, marginTop: 2, marginLeft: 11 },
+  resultMom: { flexDirection: 'row', alignItems: 'center', gap: 5, marginLeft: 11 },
+  resultMomText: { flex: 1, color: colors.muted, fontSize: 12, fontFamily: font.medium },
+  resultMomName: { color: colors.text, fontFamily: font.bold },
 });

@@ -1,26 +1,118 @@
-import { dismissal, matchState, oversText, playerName, type InningsState } from './engine.ts';
+import { dismissal, matchState, oversText, playerName, type InningsState, type MatchState } from './engine.ts';
 import { playerOfTheMatch, seriesState } from './stats.ts';
 import type { Match } from './types.ts';
 
-// A printable scorecard, one page per match: paper-white so it prints cheaply, with the app's black
-// poster headings and volt accents. Turned into a PDF on the phone, or printed from the browser.
+// A printable match report, like a matchday programme: a black scoreboard cover with both totals, the
+// highlights on cards, the run race, then each innings as a clean scorecard on white. Turned into a PDF on
+// the phone, or printed (Save as PDF) from the browser.
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 const sr = (r: number, b: number) => (b ? ((r * 100) / b).toFixed(1) : '–');
 const econ = (r: number, b: number) => (b ? ((r * 6) / b).toFixed(2) : '–');
+const rate = (r: number, b: number) => (b ? ((r * 6) / b).toFixed(2) : '0.00');
 
-function inningsHtml(match: Match, s: InningsState, label: string) {
+const INNINGS_TINT = ['#B5E000', '#7B61FF'];
+
+/** The innings that were actually played, with their label. */
+function playedInnings(match: Match, state: MatchState) {
+  return state.innings
+    .map((s, i) => ({ s, i, label: i >= 2 ? 'Super over' : i === 0 ? '1st innings' : '2nd innings' }))
+    .filter(({ i }) => match.innings[i]?.events.length > 0);
+}
+
+function highlights(match: Match, state: MatchState) {
+  const main = state.innings.slice(0, 2);
+  const bat = main
+    .flatMap((s) => s.batters.map((b) => ({ ...b, team: s.battingTeam.name })))
+    .sort((a, b) => b.runs - a.runs || a.balls - b.balls)[0];
+  const bowl = main
+    .flatMap((s) => s.bowlers.map((b) => ({ ...b, team: s.bowlingTeam.name })))
+    .filter((b) => b.balls)
+    .sort((a, b) => b.wickets - a.wickets || a.runs - b.runs)[0];
+  const fours = main.reduce((n, s) => n + s.batters.reduce((m, b) => m + b.fours, 0), 0);
+  const sixes = main.reduce((n, s) => n + s.batters.reduce((m, b) => m + b.sixes, 0), 0);
+  const bigOver = main
+    .flatMap((s) => s.overTotals.map((o, i) => ({ runs: o.runs, over: i + 1, team: s.battingTeam.name })))
+    .sort((a, b) => b.runs - a.runs)[0];
+  const potm = playerOfTheMatch(match);
+  const tiles: string[] = [];
+  if (potm)
+    tiles.push(`<div class="tile mom"><div class="tile-k">Man of the match</div><div class="tile-v">${esc(potm.name)}</div><div class="tile-s">${esc(potm.summary)}</div></div>`);
+  if (bat && bat.balls)
+    tiles.push(
+      `<div class="tile"><div class="tile-k">Top score</div><div class="tile-n">${bat.runs}<small>${bat.out || bat.retired ? '' : '*'} (${bat.balls})</small></div><div class="tile-s">${esc(playerName(match, bat.id))} · ${esc(bat.team)}</div></div>`,
+    );
+  if (bowl)
+    tiles.push(
+      `<div class="tile"><div class="tile-k">Best bowling</div><div class="tile-n">${bowl.wickets}/${bowl.runs}</div><div class="tile-s">${esc(playerName(match, bowl.id))} · ${oversText(bowl.balls)} ov</div></div>`,
+    );
+  tiles.push(
+    `<div class="tile"><div class="tile-k">Boundaries</div><div class="tile-n">${fours}<small> fours</small> ${sixes}<small> sixes</small></div><div class="tile-s">${bigOver && bigOver.runs ? `Biggest over: ${bigOver.runs} (${esc(bigOver.team)}, over ${bigOver.over})` : '&nbsp;'}</div></div>`,
+  );
+  return `<section class="tiles">${tiles.join('')}</section>`;
+}
+
+/** Both innings' running totals over by over, wickets marked: who was ahead, and when. */
+function runRace(state: MatchState) {
+  const lines = state.innings.slice(0, 2).filter((s) => s.legalBalls > 0);
+  if (!lines.length) return '';
+  const W = 720;
+  const H = 132;
+  const L = 34;
+  const B = 24;
+  const overs = Math.max(...lines.map((s) => s.maxBalls / 6));
+  const peak = Math.max(10, ...lines.map((s) => s.runs), state.innings[1].target ?? 0);
+  const step = peak > 120 ? 40 : peak > 60 ? 20 : 10;
+  const top = Math.ceil(peak / step) * step;
+  const x = (o: number) => L + (o / overs) * (W - L - 10);
+  const y = (r: number) => H - B - (r / top) * (H - B - 10);
+  const grid = Array.from({ length: top / step + 1 }, (_, i) => i * step)
+    .map((v) => `<line x1="${L}" x2="${W - 10}" y1="${y(v)}" y2="${y(v)}" class="${v ? 'g' : 'g0'}"/><text x="${L - 8}" y="${y(v) + 3}" class="ax" text-anchor="end">${v}</text>`)
+    .join('');
+  const ticks = Array.from({ length: overs + 1 }, (_, o) => o)
+    .filter((o) => overs <= 12 || o % 2 === 0)
+    .map((o) => `<text x="${x(o)}" y="${H - 6}" class="ax" text-anchor="middle">${o}</text>`)
+    .join('');
+  const paths = lines
+    .map((s, i) => {
+      let total = 0;
+      const pts: [number, number][] = [[x(0), y(0)]];
+      const dots: string[] = [];
+      const done = Math.ceil(s.legalBalls / 6);
+      s.overTotals.slice(0, done).forEach((o, k) => {
+        total += o.runs;
+        const ox = k + 1 === done && s.legalBalls % 6 ? k + (s.legalBalls % 6) / 6 : k + 1;
+        pts.push([x(ox), y(total)]);
+        for (let w = 0; w < o.wickets; w++) dots.push(`<circle cx="${x(ox)}" cy="${y(total) - w * 7}" r="3.6" class="wk"/>`);
+      });
+      const d = pts.map((p, k) => `${k ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+      const area = `${d} L${pts[pts.length - 1][0].toFixed(1)},${y(0)} L${x(0)},${y(0)} Z`;
+      return `<path d="${area}" fill="${INNINGS_TINT[i]}" opacity="0.10"/><path d="${d}" fill="none" stroke="${INNINGS_TINT[i]}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${dots.join('')}`;
+    })
+    .join('');
+  const legend = lines
+    .map((s, i) => `<span class="lg"><i style="background:${INNINGS_TINT[i]}"></i>${esc(s.battingTeam.name)} ${s.runs}/${s.wickets}</span>`)
+    .join('');
+  return `<section class="card race">
+    <div class="card-head"><div class="label">Run race</div><div class="legend">${legend}<span class="lg"><i class="dot"></i>Wicket</span></div></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">${grid}${ticks}${paths}</svg>
+  </section>`;
+}
+
+function inningsHtml(match: Match, s: InningsState, label: string, tint: string, newPage: boolean) {
   const extras = s.extras.wide + s.extras.noball + s.extras.bye + s.extras.legbye + s.extras.penalty;
   const atCrease = [s.striker, s.nonStriker];
   const yetToBat = s.battingTeam.players.filter((p) => !s.batters.some((b) => b.id === p.id));
+  const topRuns = Math.max(1, ...s.batters.map((b) => b.runs));
 
   const batting = s.batters
     .map((b) => {
       const notOut = !b.out && !b.retired && atCrease.includes(b.id);
-      return `<tr>
-        <td class="name">${esc(playerName(match, b.id))}${notOut ? '*' : ''}${match.captains?.[s.battingTeam.id] === b.id ? ' (c)' : ''}${match.keepers?.[s.battingTeam.id] === b.id ? ' †' : ''}<div class="how">${esc(dismissal(match, b))}</div></td>
-        <td class="strong">${b.runs}</td><td>${b.balls}</td><td>${b.fours}</td><td>${b.sixes}</td><td>${sr(b.runs, b.balls)}</td>
+      const marks = `${match.captains?.[s.battingTeam.id] === b.id ? '<span class="mark">c</span>' : ''}${match.keepers?.[s.battingTeam.id] === b.id ? '<span class="mark">wk</span>' : ''}`;
+      return `<tr${b.runs === topRuns && b.runs > 0 ? ' class="top"' : ''}>
+        <td class="name"><div class="who">${esc(playerName(match, b.id))}${notOut ? '<span class="no">*</span>' : ''}${marks}</div><div class="how${notOut ? ' live' : ''}">${esc(dismissal(match, b))}</div></td>
+        <td class="runs"><b>${b.runs}</b><div class="share"><span style="width:${(b.runs / topRuns) * 100}%;background:${tint}"></span></div></td><td>${b.balls}</td><td>${b.fours}</td><td>${b.sixes}</td><td class="dim">${sr(b.runs, b.balls)}</td>
       </tr>`;
     })
     .join('');
@@ -29,8 +121,8 @@ function inningsHtml(match: Match, s: InningsState, label: string) {
     .filter((b) => b.balls || b.runs)
     .map(
       (b) => `<tr>
-        <td class="name">${esc(playerName(match, b.id))}${b.wides || b.noballs ? `<div class="how">${b.wides} wd · ${b.noballs} nb</div>` : ''}</td>
-        <td>${oversText(b.balls)}</td><td>${b.maidens}</td><td>${b.runs}</td><td class="strong">${b.wickets}</td><td>${econ(b.runs, b.balls)}</td>
+        <td class="name"><div class="who">${esc(playerName(match, b.id))}</div>${b.wides || b.noballs ? `<div class="how">${b.wides} wd · ${b.noballs} nb</div>` : ''}</td>
+        <td>${oversText(b.balls)}</td><td>${b.maidens}</td><td>${b.runs}</td><td><span class="wkts${b.wickets >= 2 ? ' hot' : b.wickets ? '' : ' zero'}">${b.wickets}</span></td><td class="dim">${econ(b.runs, b.balls)}</td>
       </tr>`,
     )
     .join('');
@@ -38,133 +130,216 @@ function inningsHtml(match: Match, s: InningsState, label: string) {
   const peak = Math.max(8, ...s.overTotals.map((o) => o.runs));
   const overs = s.overTotals
     .map(
-      (o, i) => `<div class="bar-col">
-        <div class="bar-val">${o.runs}</div>
-        <div class="bar${o.runs >= 10 ? ' hot' : ''}" style="height:${Math.max(2, (o.runs / peak) * 46)}px"></div>
-        <div class="bar-w">${'●'.repeat(Math.min(o.wickets, 3))}</div>
-        <div class="bar-n">${i + 1}</div>
+      (o, i) => `<div class="ov">
+        <div class="ov-v">${o.runs}</div>
+        <div class="ov-bar${o.runs >= 10 ? ' hot' : ''}" style="height:${Math.max(3, (o.runs / peak) * 52)}px${o.runs >= 10 ? `;background:${tint}` : ''}"></div>
+        <div class="ov-w">${'<i></i>'.repeat(Math.min(o.wickets, 3))}</div>
+        <div class="ov-n">${i + 1}</div>
       </div>`,
     )
     .join('');
 
-  return `<section class="innings">
-    <div class="inn-head">
+  const fow = s.fallOfWickets
+    .map((f) => `<span class="fw"><b>${f.runs}-${f.wicket}</b> ${esc(playerName(match, f.player))} <em>${f.over}</em></span>`)
+    .join('');
+
+  return `<section class="innings${newPage ? ' new-page' : ''}">
+    <div class="inn-head" style="--tint:${tint}">
       <div><div class="eyebrow">${label}</div><div class="team">${esc(s.battingTeam.name)}</div></div>
-      <div class="total">${s.runs}/${s.wickets}<span> ${oversText(s.legalBalls)} ov</span></div>
+      <div class="inn-total"><div class="total">${s.runs}<span>/${s.wickets}</span></div><div class="inn-meta">${oversText(s.legalBalls)} overs · RR ${rate(s.runs, s.legalBalls)}${s.target ? ` · target ${s.target}` : ''}</div></div>
     </div>
-    <table>
-      <thead><tr><th class="name">Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead>
-      <tbody>${batting}
-        <tr class="extras"><td class="name">Extras <span class="how">wd ${s.extras.wide}, nb ${s.extras.noball}, b ${s.extras.bye}, lb ${s.extras.legbye}${s.extras.penalty ? `, pen ${s.extras.penalty}` : ''}</span></td><td class="strong">${extras}</td><td colspan="4"></td></tr>
-      </tbody>
-    </table>
-    ${yetToBat.length ? `<p class="note"><b>Yet to bat</b> ${yetToBat.map((p) => esc(p.name)).join(', ')}</p>` : ''}
-    ${
-      s.fallOfWickets.length
-        ? `<p class="note"><b>Fall of wickets</b> ${s.fallOfWickets
-            .map((f) => `${f.runs}-${f.wicket} (${esc(playerName(match, f.player))}, ${f.over})`)
-            .join(' &nbsp;·&nbsp; ')}</p>`
-        : ''
-    }
-    <table>
-      <thead><tr><th class="name">Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>Econ</th></tr></thead>
-      <tbody>${bowling || '<tr><td class="name how" colspan="6">No overs bowled</td></tr>'}</tbody>
-    </table>
-    ${s.overTotals.some((o) => o.runs || o.wickets) ? `<div class="chart-title">Runs per over</div><div class="chart">${overs}</div>` : ''}
+    <div class="card flush">
+      <table>
+        <thead><tr><th class="name">Batter</th><th class="runs">R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead>
+        <tbody>${batting}
+          <tr class="foot"><td class="name">Extras <span class="how">wd ${s.extras.wide} · nb ${s.extras.noball} · b ${s.extras.bye} · lb ${s.extras.legbye}${s.extras.penalty ? ` · pen ${s.extras.penalty}` : ''}</span></td><td class="runs"><b>${extras}</b></td><td colspan="4"></td></tr>
+          <tr class="foot sum"><td class="name">Total</td><td class="runs"><b>${s.runs}/${s.wickets}</b></td><td colspan="4" class="dim">${oversText(s.legalBalls)} overs</td></tr>
+        </tbody>
+      </table>
+      ${yetToBat.length ? `<div class="yet"><span class="label">Yet to bat</span> ${yetToBat.map((p) => esc(p.name)).join(' · ')}</div>` : ''}
+    </div>
+    ${fow ? `<div class="fow"><span class="label">Fall of wickets</span><div class="fws">${fow}</div></div>` : ''}
+    <div class="split">
+      <div class="card flush">
+        <table>
+          <thead><tr><th class="name">Bowler · ${esc(s.bowlingTeam.name)}</th><th>O</th><th>M</th><th>R</th><th>W</th><th>Econ</th></tr></thead>
+          <tbody>${bowling || '<tr><td class="name how" colspan="6">No overs bowled</td></tr>'}</tbody>
+        </table>
+      </div>
+      ${
+        s.overTotals.some((o) => o.runs || o.wickets)
+          ? `<div class="card overs"><div class="label">Runs per over</div><div class="ov-row">${overs}</div></div>`
+          : ''
+      }
+    </div>
   </section>`;
 }
 
 function matchHtml(match: Match, all: Match[]) {
   const state = matchState(match);
   const series = match.series ? seriesState(all.filter((m) => m.series?.id === match.series!.id)) : null;
-  const potm = playerOfTheMatch(match);
-  const [a, b] = match.teams;
-  const date = new Date(match.createdAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
+  const date = new Date(match.createdAt).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const toss = match.teams.find((t) => t.id === match.toss.winner)?.name ?? '';
-  const r = match.rules;
-  const rules = [
-    `${r.overs} over${r.overs === 1 ? '' : 's'}`,
-    `${r.playersPerSide} a side`,
-    r.extraRun ? 'run for wides & no-balls' : 'no run for wides & no-balls',
-    r.reball ? 're-bowled' : 'not re-bowled',
-    r.freeHit ? 'free hits' : '',
-    r.maxOversPerBowler
-      ? r.extraOverBowlers
-        ? `${r.extraOverBowlers} bowlers ${r.maxOversPerBowler + 1} overs, the rest ${r.maxOversPerBowler}`
-        : `${r.maxOversPerBowler} overs a bowler`
-      : '',
-    r.bouncer
-      ? r.bouncer.fair
-        ? `${r.bouncer.fair} bounce${r.bouncer.fair === 1 ? '' : 's'} an over (fair or wide), then ${r.bouncer.calledAs === 'wide' ? 'wide' : 'no ball'}`
-        : `every bounce a ${r.bouncer.calledAs === 'wide' ? 'wide' : 'no ball'}`
-      : '',
-    r.lastManStands ? 'last man stands' : '',
-  ].filter(Boolean);
 
-  const played = state.innings.filter((_, i) => match.innings[i]?.events.length > 0);
+  const played = playedInnings(match, state);
+  // The cover's scoreboard: each side's main innings, the winner lit.
+  const sides = match.teams.map((t) => {
+    const s = state.innings.slice(0, 2).find((x) => x.battingTeam.id === t.id && x.legalBalls + x.runs > 0);
+    return { t, s, won: state.winner === t.id };
+  });
+  const scoreboard = sides
+    .map(
+      ({ t, s, won }, i) => `<div class="side${won ? ' won' : ''}${state.winner && !won ? ' lost' : ''}${i ? ' right' : ''}">
+        <div class="side-name">${esc(t.name)}${won ? '<span class="win">Won</span>' : ''}</div>
+        <div class="side-score">${s ? `${s.runs}<span>/${s.wickets}</span>` : '–'}</div>
+        <div class="side-ov">${s ? `${oversText(s.legalBalls)} overs` : 'Yet to bat'}</div>
+      </div>`,
+    )
+    .join('<div class="vs">vs</div>');
+
   return `<article class="match">
-    <header>
-      <div class="brand"><span class="logo">C</span> CREASE <span class="date">${esc(date)}</span></div>
-      ${series ? `<div class="series">${esc(series.name)} · match ${match.series!.number} of ${series.of} · ${esc(series.status)}</div>` : ''}
-      <h1>${esc(a.name)} <span class="vs">vs</span> ${esc(b.name)}</h1>
+    <section class="cover">
+      <div class="cover-top">
+        <div class="brand"><span class="logo">C</span>Crease</div>
+        <div class="cover-date">${esc(date)}</div>
+      </div>
+      ${series ? `<div class="series">${esc(series.name)} · Match ${match.series!.number} of ${series.of} · ${esc(series.status)}</div>` : '<div class="series">Match report</div>'}
+      <div class="board">${scoreboard}</div>
       <div class="result${state.result ? '' : ' live'}">${esc(state.result ?? 'Match in progress')}</div>
-      <div class="meta">${esc(toss)} won the toss and chose to ${match.toss.choice} &nbsp;·&nbsp; ${esc(rules.join(' · '))}</div>
-      ${potm ? `<div class="potm"><span>Man of the match</span> <b>${esc(potm.name)}</b> ${esc(potm.summary)}</div>` : ''}
-    </header>
-    ${played.map((s, i) => inningsHtml(match, s, i >= 2 ? 'Super over' : i === 0 ? '1st innings' : '2nd innings')).join('')}
-    <footer>Scored ball by ball with Crease</footer>
+      <div class="toss">${esc(toss)} won the toss and chose to ${match.toss.choice} · ${match.rules.overs} overs · ${match.rules.playersPerSide} a side</div>
+      <div class="ghost">${esc(sides.find((x) => x.won)?.t.name ?? 'Crease')}</div>
+    </section>
+    ${highlights(match, state)}
+    ${played.map(({ s, i, label }) => inningsHtml(match, s, label, INNINGS_TINT[i % 2], i === 1)).join('')}
+    ${runRace(state)}
+    <footer><span class="logo sm">C</span> Scored ball by ball with Crease</footer>
   </article>`;
 }
 
-/** One HTML document, a page per match, ready for printing or turning into a PDF. */
+/** One HTML document, a match after another, ready for printing or turning into a PDF. */
 export function matchReportHtml(matches: Match[], all: Match[] = matches): string {
   const title = matches.length === 1 ? `${matches[0].teams[0].name} vs ${matches[0].teams[1].name}` : `${matches.length} matches`;
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>${esc(title)} · Crease</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,800;1,900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,700;1,800;1,900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  @page { size: A4; margin: 14mm; }
+  @page { size: A4; margin: 12mm 12mm 14mm; }
+  :root { --ink: #101210; --muted: #6B6F66; --faint: #A3A79D; --soft: #F4F5F1; --line: #E9EBE5; --volt: #D7FF3A; --volt-ink: #3D7400; --red: #E0301E; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { margin: 0; font-family: Inter, -apple-system, Helvetica, Arial, sans-serif; color: #111; font-size: 11px; }
-  @media screen { body { padding: 24px; max-width: 820px; margin: 0 auto; } }
-  .match { page-break-after: always; break-after: page; }
-  .match:last-child { page-break-after: auto; break-after: auto; }
-  .poster, h1, .team, .total, .result, .logo, .brand { font-family: 'Barlow Condensed', 'Arial Narrow', Impact, sans-serif; font-style: italic; font-weight: 900; text-transform: uppercase; }
-  header { border-bottom: 4px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
-  .brand { display: flex; align-items: center; gap: 6px; font-size: 16px; letter-spacing: .5px; }
-  .logo { display: inline-block; background: #D7FF3A; color: #0A0A0A; width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 4px; }
-  .date { margin-left: auto; font-family: Inter, sans-serif; font-style: normal; font-weight: 600; font-size: 11px; color: #666; text-transform: none; }
-  h1 { font-size: 40px; line-height: 1; margin: 10px 0 8px; letter-spacing: -.5px; }
-  .vs { color: #8a8a8a; font-size: 26px; }
-  .result { display: inline-block; background: #D7FF3A; color: #0A0A0A; padding: 3px 10px; font-size: 20px; border-radius: 4px; }
-  .result.live { background: #FF4B2B; color: #fff; }
-  .meta { color: #555; margin-top: 8px; }
-  .series { margin-top: 10px; font-weight: 700; font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: #555; }
-  .potm { margin-top: 8px; padding: 6px 10px; background: #0A0A0A; color: #fff; border-radius: 4px; display: inline-block; }
-  .potm span { color: #D7FF3A; font-weight: 700; text-transform: uppercase; font-size: 9px; letter-spacing: 1px; margin-right: 6px; }
-  .innings { margin-bottom: 16px; break-inside: avoid; }
-  .inn-head { display: flex; justify-content: space-between; align-items: flex-end; border-left: 5px solid #D7FF3A; padding-left: 8px; margin-bottom: 6px; }
-  .eyebrow { font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #777; }
-  .team { font-size: 24px; line-height: 1; }
-  .total { font-size: 32px; line-height: 1; }
-  .total span { font-size: 16px; color: #777; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
-  th { text-align: right; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: #777; padding: 4px 6px; border-bottom: 1.5px solid #111; }
-  td { text-align: right; padding: 4px 6px; border-bottom: 1px solid #e6e6e6; font-variant-numeric: tabular-nums; }
-  th.name, td.name { text-align: left; width: 46%; }
-  td.strong { font-weight: 700; }
-  .how { color: #777; font-size: 9.5px; font-weight: 400; }
-  .extras td { border-bottom: 1.5px solid #111; }
-  .note { margin: 4px 0 8px; color: #333; }
-  .chart-title { font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #777; margin: 8px 0 4px; }
-  .chart { display: flex; align-items: flex-end; gap: 4px; height: 86px; }
-  .bar-col { flex: 1; max-width: 26px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
-  .bar { width: 100%; background: #cfcfcf; border-radius: 2px; }
-  .bar.hot { background: #B8E000; }
-  .bar-val, .bar-n { font-size: 8.5px; color: #555; }
-  .bar-w { color: #FF4B2B; font-size: 7px; height: 9px; line-height: 9px; }
-  footer { margin-top: 10px; color: #999; font-size: 9px; text-align: right; }
+  body { margin: 0; font-family: Inter, -apple-system, Helvetica, Arial, sans-serif; color: var(--ink); font-size: 10.5px; line-height: 1.35; background: #fff; }
+  @media screen { body { padding: 28px; max-width: 840px; margin: 0 auto; } }
+  .match { break-after: page; }
+  .match:last-child { break-after: auto; }
+  .brand, .side-score, .side-name, .result, .team, .total, .tile-n, .tile-v, .ghost, .logo { font-family: 'Barlow Condensed', 'Arial Narrow', Impact, sans-serif; font-style: italic; text-transform: uppercase; }
+  .label, .eyebrow, th, .tile-k, .series { font-size: 8.5px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted); }
+
+  /* Cover: the black scoreboard */
+  .cover { position: relative; overflow: hidden; background: #0C0D0B; color: #F4F4EE; border-radius: 18px; padding: 16px 22px 14px;
+    background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.028) 0 44px, transparent 44px 88px), radial-gradient(120% 90% at 50% -20%, rgba(215,255,58,.20), transparent 60%); }
+  .cover-top { display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 7px; font-weight: 900; font-size: 18px; letter-spacing: .4px; }
+  .logo { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: var(--volt); color: #0A0A0A; font-weight: 900; font-size: 15px; }
+  .logo.sm { width: 14px; height: 14px; font-size: 10px; border-radius: 4px; margin-right: 5px; }
+  .cover-date { font-size: 10px; color: #9C9C94; font-weight: 500; }
+  .cover .series { color: var(--volt); margin-top: 12px; }
+  .board { display: flex; align-items: flex-end; gap: 16px; margin-top: 6px; position: relative; z-index: 1; }
+  .side { flex: 1; }
+  .side.right { text-align: right; }
+  .side-name { font-weight: 800; font-size: 20px; color: #C9C9C1; display: flex; align-items: center; gap: 8px; }
+  .side.right .side-name { justify-content: flex-end; }
+  .win { font-family: Inter, sans-serif; font-style: normal; font-size: 8px; font-weight: 800; letter-spacing: 1.2px; background: var(--volt); color: #0A0A0A; border-radius: 99px; padding: 2px 7px; }
+  .side-score { font-weight: 900; font-size: 56px; line-height: .95; letter-spacing: -1px; color: #F4F4EE; }
+  .side-score span { color: #6F6F68; font-size: 32px; }
+  .side.won .side-score { color: var(--volt); }
+  .side.lost .side-score { color: #D9D9D1; }
+  .side-ov { font-size: 10px; color: #9C9C94; margin-top: 2px; }
+  .vs { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 18px; color: #5F5F59; padding-bottom: 30px; text-transform: uppercase; }
+  .result { display: inline-block; margin-top: 10px; background: var(--volt); color: #0A0A0A; font-weight: 900; font-size: 19px; padding: 4px 12px 3px; border-radius: 8px; position: relative; z-index: 1; }
+  .result.live { background: var(--red); color: #fff; }
+  .toss { margin-top: 8px; font-size: 10px; color: #9C9C94; position: relative; z-index: 1; }
+  .ghost { position: absolute; right: -6px; bottom: -22px; font-weight: 900; font-size: 120px; line-height: 1; color: rgba(255,255,255,.04); white-space: nowrap; }
+
+  /* Highlight tiles */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; break-inside: avoid; }
+  .tile { background: var(--soft); border-radius: 14px; padding: 9px 12px; }
+  .tile.mom { background: var(--volt); }
+  .tile.mom .tile-k { color: #3B4A00; }
+  .tile-v { font-weight: 900; font-size: 20px; line-height: 1.02; margin-top: 5px; }
+  .tile-n { font-weight: 900; font-size: 26px; line-height: 1; margin-top: 5px; }
+  .tile-n small { font-size: 13px; color: var(--muted); font-weight: 800; }
+  .tile-s { font-size: 9.5px; color: var(--muted); margin-top: 4px; }
+  .tile.mom .tile-s { color: #33400A; }
+
+  /* Cards */
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .card.flush { padding: 2px 0 0; overflow: hidden; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .race { margin-top: 14px; break-inside: avoid; }
+  .race svg { display: block; }
+  .race .g { stroke: #EEF0EA; stroke-width: 1; }
+  .race .g0 { stroke: #CFD2CA; stroke-width: 1; }
+  .race .ax { font-size: 9px; fill: var(--faint); font-family: Inter, sans-serif; }
+  .race .wk { fill: var(--red); stroke: #fff; stroke-width: 1.5; }
+  .legend { display: flex; gap: 12px; }
+  .lg { display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 600; color: #3A3D36; }
+  .lg i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+  .lg i.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+
+  /* Innings */
+  .innings { margin-top: 14px; }
+  .innings.new-page { break-before: page; margin-top: 0; }
+  .inn-head { display: flex; justify-content: space-between; align-items: flex-end; margin: 0 2px 8px; break-after: avoid; }
+  .inn-head .eyebrow { display: inline-flex; align-items: center; gap: 6px; }
+  .inn-head .eyebrow::before { content: ''; width: 14px; height: 4px; border-radius: 2px; background: var(--tint); }
+  .team { font-weight: 900; font-size: 30px; line-height: 1; margin-top: 3px; }
+  .inn-total { text-align: right; }
+  .total { font-weight: 900; font-size: 36px; line-height: .95; }
+  .total span { color: var(--faint); font-size: 24px; }
+  .inn-meta { font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+  th { text-align: right; padding: 7px 12px 6px; font-size: 8px; border-bottom: 1px solid var(--line); }
+  td { text-align: right; padding: 4px 12px; border-bottom: 1px solid #F1F2EE; font-variant-numeric: tabular-nums; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  th.name, td.name { text-align: left; width: 44%; }
+  th.runs, td.runs { width: 15%; }
+  .who { font-weight: 600; font-size: 11px; display: flex; align-items: center; gap: 5px; }
+  .no { color: var(--volt-ink); font-weight: 800; margin-left: -3px; }
+  .mark { font-size: 7.5px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); background: var(--soft); border-radius: 4px; padding: 1px 4px; }
+  .how { color: var(--muted); font-size: 9px; margin-top: 1px; font-weight: 400; }
+  .how.live { color: var(--volt-ink); font-weight: 600; }
+  td.runs b { font-size: 13px; font-weight: 800; }
+  .share { height: 3px; border-radius: 2px; background: #EEF0EA; margin: 3px 0 0 auto; width: 42px; overflow: hidden; display: flex; justify-content: flex-end; }
+  .share span { display: block; height: 100%; border-radius: 2px; }
+  tr.top td { background: #FAFBF7; }
+  .dim { color: var(--muted); }
+  tr.foot td { background: var(--soft); border-bottom: 0; padding-top: 6px; padding-bottom: 6px; }
+  tr.sum td { border-top: 1px solid var(--line); font-weight: 700; }
+  tr.sum td.runs b { font-size: 14px; }
+  .yet { padding: 8px 12px 9px; border-top: 1px solid var(--line); font-size: 10px; color: #3A3D36; }
+  .yet .label { margin-right: 6px; }
+  .fow { margin: 10px 2px 0; break-inside: avoid; }
+  .fws { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+  .fw { background: var(--soft); border-radius: 99px; padding: 3px 9px; font-size: 9.5px; color: #3A3D36; }
+  .fw b { color: var(--ink); }
+  .fw em { font-style: normal; color: var(--faint); margin-left: 2px; }
+  .split { display: grid; grid-template-columns: 1.55fr 1fr; gap: 8px; margin-top: 10px; break-inside: avoid; }
+  .wkts { display: inline-block; min-width: 18px; text-align: center; font-weight: 800; border-radius: 5px; padding: 1px 4px; }
+  .wkts.hot { background: var(--volt); color: #0A0A0A; }
+  .wkts.zero { color: var(--faint); font-weight: 600; }
+  .overs { display: flex; flex-direction: column; }
+  .ov-row { flex: 1; display: flex; align-items: flex-end; gap: 3px; margin-top: 6px; min-height: 84px; }
+  .ov { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+  .ov-v { font-size: 8.5px; font-weight: 700; color: #3A3D36; margin-bottom: 2px; }
+  .ov-bar { width: 100%; max-width: 18px; border-radius: 4px 4px 2px 2px; background: #DFE2DA; }
+  .ov-w { height: 8px; display: flex; gap: 1.5px; align-items: center; margin-top: 2px; }
+  .ov-w i { width: 4px; height: 4px; border-radius: 50%; background: var(--red); display: block; }
+  .ov-n { font-size: 8px; color: var(--faint); }
+
+  /* Footer */
+  footer { break-before: avoid; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--faint); font-size: 8.5px; display: flex; align-items: center; justify-content: center; }
 </style></head>
 <body>${matches.map((m) => matchHtml(m, all)).join('')}</body></html>`;
 }
