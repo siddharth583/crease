@@ -3,10 +3,12 @@ import { router } from 'expo-router';
 import { useMemo, useState, type ComponentProps } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BallChip, Card, Chip, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Segmented } from '../components/ui.tsx';
+import { BallChip, Card, Chip, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../components/ui.tsx';
+import { recordBookHtml } from '../engine/recordBook.ts';
 import { FaceOff } from '../components/FaceOff.tsx';
 import { headToHead, matchups, records, teamNames, verdict } from '../engine/records.ts';
 import { useMatches } from '../store/matches.tsx';
+import { savePdf } from '../store/files.ts';
 import { useSquad } from '../store/squad.ts';
 import { colors, edge, font, hero, radius, space, type } from '../theme.ts';
 
@@ -124,11 +126,30 @@ export default function Records() {
   const [lean, setLean] = useState<'all' | 'batter' | 'bowler' | 'even'>('all');
   const [shown, setShown] = useState(8);
   const leaning = duels.filter((d) => lean === 'all' || verdict(d).side === lean);
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  const exportBook = async () => {
+    if (!matches.length || saving) return;
+    setSaving(true);
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      const result = await savePdf(`crease-record-book-${stamp}.pdf`, recordBookHtml(matches));
+      toast.show(result === 'downloaded' ? 'Choose “Save as PDF” in the print window' : 'Record book PDF ready to send', 'success');
+    } catch {
+      toast.show('Couldn’t make the PDF. Try again.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Screen>
       <View style={styles.header}>
         <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/players'))} />
+        <PressableScale accessibilityLabel="Export the record book as a PDF" disabled={!matches.length || saving} onPress={exportBook} style={styles.export}>
+          <Ionicons name="document-text-outline" size={17} color={colors.onAccent} />
+          <Text style={styles.exportText}>{saving ? 'Making PDF…' : 'Export PDF'}</Text>
+        </PressableScale>
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }} stickyHeaderIndices={[2]}>
         <Text style={styles.pageTitle}>
@@ -341,12 +362,15 @@ export default function Records() {
           </>
         )}
       </ScrollView>
+      {toast.element}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', paddingHorizontal: space.lg, paddingVertical: space.sm },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
+  export: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: space.md, height: 38, ...edge },
+  exportText: { color: colors.onAccent, fontSize: 13, fontFamily: font.heavy },
   pageTitle: { fontFamily: font.posterBlack, fontSize: 52, lineHeight: 52, color: colors.text, letterSpacing: -1 },
   season: { backgroundColor: HERO_BG, borderRadius: radius.xl, padding: space.lg, marginTop: space.md, overflow: 'hidden' },
   seasonLabel: { ...type.label, color: hero.accent },

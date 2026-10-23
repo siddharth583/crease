@@ -1,10 +1,9 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, IconButton, Screen, SectionLabel, Segmented, useToast } from '../components/ui.tsx';
 import { useMatches } from '../store/matches.tsx';
-import { restartApp, startupPrefs, usePrefs, type Prefs } from '../store/prefs.ts';
+import { applyTheme, usePrefs } from '../store/prefs.ts';
 import { useMatchFiles } from '../store/useMatchFiles.ts';
 import { colors, font, space, type } from '../theme.ts';
 
@@ -14,13 +13,6 @@ export default function SettingsScreen() {
   const { matches } = useMatches();
   const toast = useToast();
   const { exportMatches } = useMatchFiles(toast.show);
-  // The theme applies on the next start, so remember what the person picked here.
-  const [needsRestart, setNeedsRestart] = useState(false);
-  const pick = (patch: Partial<Prefs>) => {
-    setPrefs(patch);
-    const next = { ...prefs, ...patch };
-    setNeedsRestart(next.theme !== startupPrefs.theme);
-  };
 
   const backedUp = prefs.lastBackup
     ? `Last backup ${new Date(prefs.lastBackup).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
@@ -38,25 +30,17 @@ export default function SettingsScreen() {
         <Card style={{ gap: space.md }}>
           <Segmented
             value={prefs.theme}
-            onChange={(theme) => pick({ theme })}
+            onChange={(theme) => {
+              if (theme !== prefs.theme) applyTheme(theme);
+            }}
             options={[
               { value: 'night', label: 'Night (dark)' },
               { value: 'day', label: 'Day (bright sun)' },
             ]}
           />
-          <Text style={styles.note}>Day mode is easier to read outdoors in strong sunlight.</Text>
+          <Text style={styles.note}>Day mode is easier to read outdoors in strong sunlight. The app reloads for a moment to switch.</Text>
         </Card>
 
-        {needsRestart && (
-          <Button
-            label="Restart to apply"
-            icon="refresh"
-            onPress={() => {
-              if (!restartApp()) toast.show('Close Crease and open it again to see the change', 'info');
-            }}
-            style={{ marginTop: space.lg }}
-          />
-        )}
 
         <SectionLabel>Backup</SectionLabel>
         <Card style={{ gap: space.md }}>

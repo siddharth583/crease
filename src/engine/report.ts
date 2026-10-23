@@ -216,12 +216,8 @@ function matchHtml(match: Match, all: Match[]) {
   </article>`;
 }
 
-/** One HTML document, a match after another, ready for printing or turning into a PDF. */
-export function matchReportHtml(matches: Match[], all: Match[] = matches): string {
-  const title = matches.length === 1 ? `${matches[0].teams[0].name} vs ${matches[0].teams[1].name}` : `${matches.length} matches`;
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><title>${esc(title)} · Crease</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
+/** Fonts and styles shared by every printed report (match reports and the record book). */
+export const REPORT_HEAD = `<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,700;1,800;1,900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   @page { size: A4; margin: 12mm 12mm 14mm; }
@@ -340,6 +336,13 @@ export function matchReportHtml(matches: Match[], all: Match[] = matches): strin
 
   /* Footer */
   footer { break-before: avoid; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--faint); font-size: 8.5px; display: flex; align-items: center; justify-content: center; }
-</style></head>
+</style>`;
+
+/** One HTML document, a match after another, ready for printing or turning into a PDF. */
+export function matchReportHtml(matches: Match[], all: Match[] = matches): string {
+  const title = matches.length === 1 ? `${matches[0].teams[0].name} vs ${matches[0].teams[1].name}` : `${matches.length} matches`;
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><title>${esc(title)} · Crease</title>
+${REPORT_HEAD}</head>
 <body>${matches.map((m) => matchHtml(m, all)).join('')}</body></html>`;
 }

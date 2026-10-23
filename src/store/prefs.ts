@@ -1,5 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 import { createContext, createElement, useCallback, useContext, useState, type ReactNode } from 'react';
+import { reloadAppAsync } from 'expo';
 import { DevSettings, Platform } from 'react-native';
 
 // Per-phone preferences. Read synchronously at start-up, because the colour theme has to be known before any
@@ -51,17 +52,19 @@ function write(p: Prefs) {
 /** As saved when the app started. The theme only ever comes from here. */
 export const startupPrefs: Prefs = read();
 
-/** Restart so a new theme applies everywhere. Returns false where the app can't restart itself. */
-export function restartApp(): boolean {
+/**
+ * Switch theme now. Every screen's colours are fixed when the app starts (that keeps scrolling and scoring fast),
+ * so the app saves the choice and reloads itself straight away: a blink, with every match still there.
+ */
+export function applyTheme(theme: Prefs['theme']) {
+  write({ ...read(), theme });
   if (Platform.OS === 'web') {
     window.location.reload();
-    return true;
+    return;
   }
-  if (__DEV__) {
-    DevSettings.reload();
-    return true;
-  }
-  return false;
+  reloadAppAsync('Theme changed').catch(() => {
+    if (__DEV__) DevSettings.reload();
+  });
 }
 
 type PrefsStore = { prefs: Prefs; setPrefs: (patch: Partial<Prefs>) => void };
