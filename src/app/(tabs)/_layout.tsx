@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PressableScale, type IconName } from '../../components/ui.tsx';
+import { t } from '../../i18n.ts';
 import { colors, font, radius, space } from '../../theme.ts';
 
 const TABS: Record<string, { label: string; icon: IconName; iconOn: IconName }> = {
@@ -18,7 +19,7 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, space.md) }]}>
-      <LinearGradient pointerEvents="none" colors={['rgba(6,6,6,0)', 'rgba(6,6,6,0.92)', colors.bg]} style={styles.fade} />
+      <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, `${colors.bg}EB`, colors.bg]} style={styles.fade} />
       <View style={styles.capsule}>
         {state.routes.map((route, i) => {
           const tab = TABS[route.name];
@@ -35,7 +36,7 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
               style={[styles.tab, on && styles.tabOn]}
             >
               <Ionicons name={on ? tab.iconOn : tab.icon} size={19} color={on ? colors.onAccent : colors.muted} />
-              {on && <Text style={styles.tabLabel}>{tab.label}</Text>}
+              {on && <Text style={styles.tabLabel}>{t(tab.label)}</Text>}
             </PressableScale>
           );
         })}

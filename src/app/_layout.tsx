@@ -17,7 +17,8 @@ import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MatchesProvider } from '../store/matches.tsx';
-import { colors } from '../theme.ts';
+import { PrefsProvider } from '../store/prefs.ts';
+import { colors, isDay } from '../theme.ts';
 
 export default function RootLayout() {
   const [loaded, failed] = useFonts({
@@ -37,8 +38,9 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      <PrefsProvider>
       <MatchesProvider>
-        <StatusBar style="light" />
+        <StatusBar style={isDay ? 'dark' : 'light'} />
         <Stack
           screenOptions={{
             headerShown: false,
@@ -47,6 +49,7 @@ export default function RootLayout() {
           }}
         />
       </MatchesProvider>
+      </PrefsProvider>
     </SafeAreaProvider>
   );
 }

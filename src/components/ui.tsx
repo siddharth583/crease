@@ -18,7 +18,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BallView } from '../engine/engine.ts';
-import { ballColors, colors, font, gradients, radius, space, type } from '../theme.ts';
+import { t } from '../i18n.ts';
+import { ballColors, colors, font, gradients, radius, space, type, ink } from '../theme.ts';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -59,7 +60,7 @@ export function PitchStripes({ count = 9, opacity = 0.035 }: { count?: number; o
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { flexDirection: 'row' }]}>
       {Array.from({ length: count }, (_, i) => (
-        <View key={i} style={{ flex: 1, backgroundColor: i % 2 ? `rgba(255,255,255,${opacity})` : 'transparent' }} />
+        <View key={i} style={{ flex: 1, backgroundColor: i % 2 ? ink(opacity) : 'transparent' }} />
       ))}
     </View>
   );
@@ -221,7 +222,7 @@ export function MomentFlash({ moment }: { moment: Moment | null }) {
           { color: m.fg, fontSize: 176 * m.size, lineHeight: 176 * m.size, transform: [{ translateX }, { scale }, { skewX: skew }] },
         ]}
       >
-        {m.word}
+        {t(m.word)}
       </Animated.Text>
       {shown.caption ? <Text style={[styles.momentCaption, { color: m.fg }]}>{shown.caption}</Text> : null}
     </Animated.View>
@@ -540,7 +541,7 @@ export const styles = StyleSheet.create({
   ghost: {
     position: 'absolute',
     fontFamily: font.posterBlack,
-    color: 'rgba(255,255,255,0.045)',
+    color: ink(0.045),
     textTransform: 'uppercase',
     letterSpacing: -4,
   },
@@ -636,7 +637,7 @@ export const styles = StyleSheet.create({
     maxWidth: 420,
   },
   toastText: { color: colors.text, fontSize: 14, fontFamily: font.semibold, flexShrink: 1 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)' },
+  backdrop: { flex: 1, backgroundColor: colors.scrim },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,

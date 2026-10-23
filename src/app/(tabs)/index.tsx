@@ -11,6 +11,8 @@ import { SeriesPips } from '../series/[id].tsx';
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
+import { language, t } from '../../i18n.ts';
+import { usePrefs } from '../../store/prefs.ts';
 import { colors, font, radius, space, type } from '../../theme.ts';
 
 function confirmDelete(onYes: () => void) {
@@ -72,13 +74,17 @@ function PosterHero() {
       <GhostWord size={190} style={{ left: -12, bottom: -50 }}>
         CRICKET
       </GhostWord>
-      <Text style={styles.posterEyebrow}>MATCHDAY</Text>
-      <Text style={styles.posterTitle}>
-        GAME{'\n'}
-        <Text style={{ color: colors.accent }}>ON.</Text>
-      </Text>
-      <Text style={styles.posterBody}>Score every ball. Every player’s numbers add up, match after match.</Text>
-      <Button label="Start a match" icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
+      <Text style={styles.posterEyebrow}>{t('MATCHDAY')}</Text>
+      {language === 'hi' ? (
+        <Text style={[styles.posterTitle, { fontSize: 64, lineHeight: 80 }]}>{t('GAME ON.')}</Text>
+      ) : (
+        <Text style={styles.posterTitle}>
+          GAME{'\n'}
+          <Text style={{ color: colors.accent }}>ON.</Text>
+        </Text>
+      )}
+      <Text style={styles.posterBody}>{t('Score every ball. Every player’s numbers add up, match after match.')}</Text>
+      <Button label={t('Start a match')} icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
     </View>
   );
 }
@@ -194,6 +200,9 @@ export default function Home() {
   const { matches, deleteMatch, ready, club, sync, importMatches } = useMatches();
   const toast = useToast();
   const { importFile, exportMatches, exportPdf } = useMatchFiles(toast.show);
+  const { prefs, setPrefs } = usePrefs();
+  // Remind once a week that a lost phone shouldn't mean lost matches.
+  const backupDue = matches.length >= 2 && (!prefs.lastBackup || Date.now() - prefs.lastBackup > 7 * 86_400_000);
   const [exporting, setExporting] = useState<Match[] | null>(null);
   const live = matches.filter((m) => !matchState(m).result);
   const done = matches.filter((m) => matchState(m).result);
@@ -208,6 +217,9 @@ export default function Home() {
           </View>
           <Text style={styles.brand}>CREASE</Text>
           <View style={{ flex: 1 }} />
+          <PressableScale accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={styles.gear}>
+            <Ionicons name="settings-outline" size={18} color={colors.text} />
+          </PressableScale>
           <PressableScale onPress={() => router.navigate('/club')} style={styles.clubPill}>
             <Ionicons
               name={club ? (sync.status === 'offline' ? 'cloud-offline' : 'cloud-done') : 'people'}
@@ -227,9 +239,32 @@ export default function Home() {
           </FadeIn>
         ))}
 
+        {backupDue && (
+          <FadeIn delay={60}>
+            <View style={styles.backup}>
+              <Ionicons name="cloud-upload-outline" size={20} color={colors.gold} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.backupTitle}>{t('Back up your matches')}</Text>
+                <Text style={styles.backupBody}>
+                  {prefs.lastBackup ? 'It’s been over a week.' : 'Not backed up yet.'} Save one file to Drive or WhatsApp.
+                </Text>
+              </View>
+              <PressableScale
+                onPress={async () => {
+                  await exportMatches(matches);
+                  setPrefs({ lastBackup: Date.now() });
+                }}
+                style={styles.backupButton}
+              >
+                <Text style={styles.backupButtonText}>{t('Back up now')}</Text>
+              </PressableScale>
+            </View>
+          </FadeIn>
+        )}
+
         {series.length > 0 && (
           <FadeIn delay={90}>
-            <SectionLabel>Series</SectionLabel>
+            <SectionLabel>{t('Series')}</SectionLabel>
             <View style={{ gap: space.sm }}>
               {series.map((s) => (
                 <SeriesCard key={s.id} s={s} />
@@ -240,26 +275,26 @@ export default function Home() {
 
         {ready && matches.length > 0 && (
           <FadeIn delay={120}>
-            <SectionLabel>This season</SectionLabel>
+            <SectionLabel>{t('This season')}</SectionLabel>
             <Season matches={matches} />
           </FadeIn>
         )}
 
         <FadeIn delay={180}>
-          <SectionLabel>Match files</SectionLabel>
+          <SectionLabel>{t('Match files')}</SectionLabel>
           <View style={styles.files}>
             <View style={{ flex: 1 }}>
               <PressableScale onPress={importFile} style={styles.fileButton}>
                 <Ionicons name="push-outline" size={20} color={colors.accent} />
-                <Text style={styles.fileTitle}>IMPORT</Text>
-                <Text style={styles.fileBody}>A match someone sent you</Text>
+                <Text style={styles.fileTitle}>{t('IMPORT')}</Text>
+                <Text style={styles.fileBody}>{t('A match someone sent you')}</Text>
               </PressableScale>
             </View>
             <View style={{ flex: 1 }}>
               <PressableScale disabled={!matches.length} onPress={() => setExporting(matches)} style={styles.fileButton}>
                 <Ionicons name="download-outline" size={20} color={colors.accent} />
-                <Text style={styles.fileTitle}>EXPORT</Text>
-                <Text style={styles.fileBody}>PDF or match file, any matches</Text>
+                <Text style={styles.fileTitle}>{t('EXPORT')}</Text>
+                <Text style={styles.fileBody}>{t('PDF or match file, any matches')}</Text>
               </PressableScale>
             </View>
           </View>
@@ -282,7 +317,7 @@ export default function Home() {
 
         {done.length > 0 && (
           <FadeIn delay={240}>
-            <SectionLabel right={<Text style={styles.hint}>Hold to delete</Text>}>Results</SectionLabel>
+            <SectionLabel right={<Text style={styles.hint}>{t('Hold to delete')}</Text>}>{t('Results')}</SectionLabel>
             <View style={{ gap: space.sm }}>
               {done.map((m) => (
                 <ResultRow key={m.id} match={m} onDelete={() => deleteMatch(m.id)} />
@@ -331,6 +366,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderHi,
   },
+  gear: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderHi,
+  },
+  backup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: colors.goldDim,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    padding: space.md,
+    marginTop: space.md,
+  },
+  backupTitle: { color: colors.text, fontSize: 14, fontFamily: font.bold },
+  backupBody: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 1 },
+  backupButton: { backgroundColor: colors.gold, borderRadius: radius.sm, paddingHorizontal: space.md, height: 34, justifyContent: 'center' },
+  backupButtonText: { color: colors.onAccent, fontSize: 13, fontFamily: font.heavy },
   clubText: { color: colors.text, fontSize: 13, fontFamily: font.bold, flexShrink: 1 },
 
   poster: {

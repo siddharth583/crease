@@ -1,9 +1,10 @@
 import type { BallTone } from './engine/engine.ts';
+import { startupPrefs } from './store/prefs.ts';
 
 // "Floodlight": a night match under the lights, cut like a broadcast graphic. Jet black, one volt accent,
-// cricket-ball red for wickets, and huge slanted condensed type.
+// cricket-ball red for wickets, and huge slanted condensed type. "Day match" is the same design for bright sun.
 
-export const colors = {
+const NIGHT = {
   bg: '#060606',
   surface: '#111111',
   surfaceHi: '#1B1B1B',
@@ -18,31 +19,78 @@ export const colors = {
   onAccent: '#0A0A0A',
   /** Fours. */
   cyan: '#7FE6FF',
+  cyanDim: 'rgba(127,230,255,0.12)',
   /** Trophies and medals. */
   gold: '#FFC93C',
+  goldDim: 'rgba(255,201,74,0.12)',
   /** Cricket-ball red: wickets, live dot, destructive. */
   danger: '#FF4B2B',
   dangerDim: 'rgba(255,75,43,0.14)',
   /** Extras. */
   violet: '#B9A6FF',
   violetDim: 'rgba(185,166,255,0.14)',
+  /** "r,g,b" of the ink, for faint stripes, ghost words and chart tracks: rgba(${ink}, a). */
+  ink: '255,255,255',
+  /** A recessed panel inside a card. */
+  inset: 'rgba(0,0,0,0.45)',
+  scrim: 'rgba(0,0,0,0.75)',
 };
 
-export const gradients = {
-  hero: ['#151515', '#0B0B0B', '#060606'] as const,
-  accent: ['#E6FF6B', '#C8F51E'] as const,
-  danger: ['#FF6A4D', '#FF3B1C'] as const,
-  /** Floodlight glow from the top of the screen. */
-  glow: ['rgba(215,255,58,0.16)', 'rgba(215,255,58,0)'] as const,
+// "Day match": for bright sun. Paper white, near-black ink, and the accent deepened to a grass green so it
+// still reads as text on white.
+const DAY: typeof NIGHT = {
+  bg: '#F3F4EE',
+  surface: '#FFFFFF',
+  surfaceHi: '#ECEEE5',
+  border: 'rgba(0,0,0,0.09)',
+  borderHi: 'rgba(0,0,0,0.2)',
+  text: '#0B0D0A',
+  muted: '#4E544A',
+  faint: '#82887D',
+  accent: '#3B7A00',
+  accentDim: 'rgba(59,122,0,0.1)',
+  onAccent: '#FFFFFF',
+  cyan: '#006E8C',
+  cyanDim: 'rgba(0,110,140,0.1)',
+  gold: '#9A6A00',
+  goldDim: 'rgba(154,106,0,0.12)',
+  danger: '#D2241B',
+  dangerDim: 'rgba(210,36,27,0.1)',
+  violet: '#5A3FCB',
+  violetDim: 'rgba(90,63,203,0.1)',
+  ink: '0,0,0',
+  inset: 'rgba(0,0,0,0.05)',
+  scrim: 'rgba(0,0,0,0.45)',
 };
+
+export const isDay = startupPrefs.theme === 'day';
+export const colors = isDay ? DAY : NIGHT;
+
+/** The ink at a given strength: faint stripes, tracks, ghost words. */
+export const ink = (alpha: number) => `rgba(${colors.ink},${alpha})`;
+
+export const gradients = isDay
+  ? {
+      hero: ['#FFFFFF', '#F7F8F2', '#EEF1E6'] as const,
+      accent: ['#4C9400', '#3B7A00'] as const,
+      danger: ['#E2342A', '#C61D14'] as const,
+      glow: ['rgba(59,122,0,0.1)', 'rgba(59,122,0,0)'] as const,
+    }
+  : {
+      hero: ['#151515', '#0B0B0B', '#060606'] as const,
+      accent: ['#E6FF6B', '#C8F51E'] as const,
+      danger: ['#FF6A4D', '#FF3B1C'] as const,
+      /** Floodlight glow from the top of the screen. */
+      glow: ['rgba(215,255,58,0.16)', 'rgba(215,255,58,0)'] as const,
+    };
 
 export const radius = { sm: 6, md: 10, lg: 14, xl: 20, pill: 999 };
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
 export const ballColors: Record<BallTone, { bg: string; fg: string }> = {
   dot: { bg: colors.surfaceHi, fg: colors.faint },
-  run: { bg: 'rgba(255,255,255,0.1)', fg: colors.text },
-  four: { bg: 'rgba(127,230,255,0.16)', fg: colors.cyan },
+  run: { bg: ink(0.1), fg: colors.text },
+  four: { bg: colors.cyanDim, fg: colors.cyan },
   six: { bg: colors.accent, fg: colors.onAccent },
   wicket: { bg: colors.danger, fg: '#FFFFFF' },
   extra: { bg: colors.violetDim, fg: colors.violet },

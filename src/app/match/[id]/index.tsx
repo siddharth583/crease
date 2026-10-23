@@ -60,9 +60,11 @@ import {
 } from '../../../engine/engine.ts';
 import { isPlaceholder, playerOfTheMatch, seriesState } from '../../../engine/stats.ts';
 import type { BallEvent, Extra, InningsEvent, Match, WicketKind } from '../../../engine/types.ts';
+import { t } from '../../../i18n.ts';
 import { newId, useMatch, useMatches } from '../../../store/matches.tsx';
+import { usePrefs } from '../../../store/prefs.ts';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
-import { colors, font, gradients, radius, space, type } from '../../../theme.ts';
+import { colors, font, gradients, radius, space, type, ink } from '../../../theme.ts';
 
 const rate = (runs: number, balls: number) => (balls ? ((runs * 6) / balls).toFixed(2) : '0.00');
 
@@ -589,12 +591,14 @@ function Key({
   onPress,
   disabled,
   variant = 'plain',
+  height = 66,
 }: {
   label: string;
   sub?: string;
   onPress: () => void;
   disabled?: boolean;
   variant?: 'plain' | 'four' | 'six' | 'out' | 'mode';
+  height?: number;
 }) {
   const v = {
     plain: [styles.key, colors.text],
@@ -611,7 +615,7 @@ function Key({
         haptic={null}
         scaleTo={0.9}
         onPress={onPress}
-        style={v[0]}
+        style={[v[0], { height }]}
       >
         <Text style={[styles.keyText, { color: v[1] }, label.length > 2 && { fontSize: 26 }]}>{label}</Text>
         {sub && <Text style={[styles.keySub, { color: v[1] }]}>{sub}</Text>}
@@ -642,6 +646,10 @@ function Pad({
   bounce: string;
 }) {
   const [mode, setMode] = useState<PadMode | null>(null);
+  const { prefs } = usePrefs();
+  const height = prefs.bigKeys ? 84 : 66;
+  // Left-handed scorers get the pad mirrored.
+  const row = <T,>(items: T[]) => (prefs.leftHanded ? [...items].reverse() : items);
   const score = (r: number) => {
     tap(r >= 4 ? 'heavy' : 'light');
     onBall(mode === 'bouncer' ? { type: 'ball', runs: r, bouncer: true } : { type: 'ball', runs: r, extra: mode ?? undefined });
@@ -654,7 +662,8 @@ function Pad({
       <Key
         key={r}
         label={String(r)}
-        sub={!mode ? (r === 0 ? 'DOT' : r === 4 ? 'FOUR' : r === 6 ? 'SIX' : undefined) : undefined}
+        sub={!mode ? (r === 0 ? t('DOT') : r === 4 ? t('FOUR') : r === 6 ? t('SIX') : undefined) : undefined}
+        height={height}
         variant={mode ? 'mode' : big ? (r === 4 ? 'four' : 'six') : 'plain'}
         disabled={byes && r === 0}
         onPress={() => score(r)}
@@ -665,7 +674,7 @@ function Pad({
   return (
     <View style={styles.pad}>
       <View style={styles.extrasRow}>
-        {EXTRAS.map((e) => {
+        {row(EXTRAS).map((e) => {
           const on = mode === e.value;
           return (
             <PressableScale
@@ -677,27 +686,34 @@ function Pad({
               style={[styles.extraKey, on && styles.extraKeyOn]}
             >
               <Text numberOfLines={1} style={[styles.extraText, on && { color: colors.onAccent }]}>
-                {e.label}
+                {t(e.label)}
               </Text>
             </PressableScale>
           );
         })}
       </View>
       <Text style={[styles.modeHint, mode && { color: colors.violet }]}>
-        {mode === 'bouncer' ? bounce : mode ? MODE_HINT[mode] : 'TAP THE RUNS OFF THIS BALL'}
+        {mode === 'bouncer' ? bounce : mode ? MODE_HINT[mode] : t('TAP THE RUNS OFF THIS BALL')}
       </Text>
-      <View style={styles.grid}>{[0, 1, 2, 3].map(runKey)}</View>
+      <View style={styles.grid}>{row([0, 1, 2, 3]).map(runKey)}</View>
       <View style={styles.grid}>
-        {[4, 6, 5].map(runKey)}
-        <Key
-          label="OUT"
-          variant="out"
-          onPress={() => {
-            tap('warning');
-            onWicket(mode === 'bouncer' ? null : mode);
-            setMode(null);
-          }}
-        />
+        {row<number | 'out'>([4, 6, 5, 'out']).map((k) =>
+          k === 'out' ? (
+            <Key
+              key="out"
+              label={t('OUT')}
+              variant="out"
+              height={height}
+              onPress={() => {
+                tap('warning');
+                onWicket(mode === 'bouncer' ? null : mode);
+                setMode(null);
+              }}
+            />
+          ) : (
+            runKey(k)
+          ),
+        )}
       </View>
     </View>
   );
@@ -951,7 +967,7 @@ export default function LiveMatch() {
             >
               <MaterialCommunityIcons name="star-four-points" size={18} color={colors.accent} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.potmLabel}>MAN OF THE MATCH</Text>
+                <Text style={styles.potmLabel}>{t('MAN OF THE MATCH')}</Text>
                 <Text style={styles.potmName} numberOfLines={1}>
                   {potm.name}
                 </Text>
@@ -986,10 +1002,10 @@ export default function LiveMatch() {
         </View>
         <View style={{ gap: space.md, marginTop: space.lg }}>
           {state.result === 'Match tied' && match.innings.length < 4 && (
-            <Button label="Play a super over" icon="flash" onPress={() => saveMatch(startSuperOver(match))} />
+            <Button label={t('Play a super over')} icon="flash" onPress={() => saveMatch(startSuperOver(match))} />
           )}
           <Button
-            label="Full scorecard"
+            label={t('Full scorecard')}
             icon="list"
             onPress={() => router.push({ pathname: '/match/[id]/scorecard', params: { id: match.id } })}
           />
@@ -1057,7 +1073,7 @@ export default function LiveMatch() {
         )}
         <PlayerPicker
           key={openers.length}
-          title={openers.length === 0 ? 'Who’s on strike?' : 'And at the other end?'}
+          title={openers.length === 0 ? t('Who’s on strike?') : t('And at the other end?')}
           subtitle={`${s.battingTeam.name} · opening pair`}
           match={match}
           ids={pool}
@@ -1094,7 +1110,7 @@ export default function LiveMatch() {
     const limitText = limit ? (extra ? ` · ${extra} can bowl ${limit + 1}, the rest ${limit}` : ` · ${limit} overs each`) : '';
     body = (
       <PlayerPicker
-        title={s.legalBalls === 0 ? 'Opening bowler' : `Over ${Math.floor(s.legalBalls / 6) + 1}`}
+        title={s.legalBalls === 0 ? t('Opening bowler') : `Over ${Math.floor(s.legalBalls / 6) + 1}`}
         subtitle={
           s.legalBalls === 0
             ? `${s.bowlingTeam.name} with the new ball${limitText}`
@@ -1145,9 +1161,9 @@ export default function LiveMatch() {
 
       {live && (
         <View style={[styles.padWrap, { paddingBottom: insets.bottom + space.sm }]}>
-          {s.freeHit && <Banner tone="volt" title="FREE HIT" body="Only a run out counts on this ball" />}
+          {s.freeHit && <Banner tone="volt" title={t('FREE HIT')} body={t('Only a run out counts on this ball')} />}
           {s.bowler && s.streaks[s.bowler] === 2 && (
-            <Banner tone="red" title="HAT-TRICK BALL" body={`${playerName(match, s.bowler)} has two in a row`} />
+            <Banner tone="red" title={t('HAT-TRICK BALL')} body={`${playerName(match, s.bowler)} has two in a row`} />
           )}
           <Pad onBall={push} onWicket={(mode) => setWicketFor(mode)} bounce={bounceHint(match, s)} />
         </View>
@@ -1260,7 +1276,7 @@ const styles = StyleSheet.create({
   statValue: { color: colors.text, fontSize: 26, fontFamily: font.posterBlack, lineHeight: 28, ...type.num },
   progress: {
     height: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: ink(0.08),
     borderRadius: 2,
     overflow: 'hidden',
     marginTop: space.md,
@@ -1326,7 +1342,7 @@ const styles = StyleSheet.create({
   chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 118 },
   barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   barValue: { color: colors.muted, fontSize: 13, fontFamily: font.poster, marginBottom: 3, ...type.num },
-  bar: { width: '100%', maxWidth: 22, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.22)' },
+  bar: { width: '100%', maxWidth: 22, borderRadius: 3, backgroundColor: ink(0.22) },
   barCurrent: { borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.accentDim },
   barWickets: { flexDirection: 'row', gap: 2, height: 8, marginTop: 3 },
   wicketDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger },
@@ -1383,9 +1399,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyFour: { backgroundColor: 'rgba(127,230,255,0.1)', borderColor: colors.cyan, borderWidth: 1.5 },
+  keyFour: { backgroundColor: colors.cyanDim, borderColor: colors.cyan, borderWidth: 1.5 },
   keySix: { backgroundColor: colors.accent, borderColor: colors.accent },
-  keyMode: { backgroundColor: colors.violetDim, borderColor: 'rgba(185,166,255,0.4)' },
+  keyMode: { backgroundColor: colors.violetDim, borderColor: colors.violet },
   keyOut: { backgroundColor: colors.danger, borderColor: colors.danger },
   keyText: { color: colors.text, fontSize: 36, lineHeight: 38, fontFamily: font.posterBlack, ...type.num },
   keySub: { fontSize: 9, fontFamily: font.heavy, letterSpacing: 1.2, marginTop: -2, opacity: 0.8 },

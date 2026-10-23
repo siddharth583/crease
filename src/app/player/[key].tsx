@@ -17,7 +17,7 @@ import {
   type MatchLine,
 } from '../../engine/stats.ts';
 import { useMatches } from '../../store/matches.tsx';
-import { colors, gradients, radius, space, type, font } from '../../theme.ts';
+import { colors, gradients, radius, space, type, font, ink } from '../../theme.ts';
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
 
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignSelf: 'stretch',
     marginTop: space.xl,
-    backgroundColor: 'rgba(7,11,20,0.45)',
+    backgroundColor: colors.inset,
     borderRadius: radius.md,
     paddingVertical: space.md,
   },
@@ -259,11 +259,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  formHot: { borderColor: 'rgba(255,201,74,0.4)', backgroundColor: 'rgba(255,201,74,0.1)' },
+  formHot: { borderColor: colors.gold, backgroundColor: colors.goldDim },
   formHint: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
   formCard: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 160, paddingBottom: space.md },
   formCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
-  formBar: { width: '100%', maxWidth: 24, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 4 },
+  formBar: { width: '100%', maxWidth: 24, borderRadius: 3, backgroundColor: ink(0.25), marginTop: 4 },
   formVs: { color: colors.faint, fontSize: 9, fontFamily: font.bold, marginTop: 4 },
   formText: { color: colors.text, fontSize: 16, fontFamily: font.posterBlack, ...type.num },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     paddingHorizontal: space.md,
   },
-  tileHero: { borderColor: 'rgba(59,227,139,0.35)', backgroundColor: 'rgba(59,227,139,0.07)' },
+  tileHero: { borderColor: colors.accent, backgroundColor: colors.accentDim },
   tileValue: { color: colors.text, fontSize: 34, lineHeight: 36, fontFamily: font.posterBlack, ...type.num },
   tileLabel: { color: colors.muted, fontSize: 12, fontFamily: font.semibold, marginTop: 2 },
   none: { color: colors.muted, fontSize: 14 , fontFamily: font.regular},
