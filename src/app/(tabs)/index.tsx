@@ -1,0 +1,475 @@
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ExportSheet } from '../../components/ExportSheet.tsx';
+import { Button, FadeIn, GhostWord, PitchStripes, PressableScale, Screen, SectionLabel, useToast } from '../../components/ui.tsx';
+import { sampleSeason } from '../../demo/sampleSeason.ts';
+import { matchState, oversText } from '../../engine/engine.ts';
+import { allSeries, careerStats, type SeriesState } from '../../engine/stats.ts';
+import { SeriesPips } from '../series/[id].tsx';
+import type { Match } from '../../engine/types.ts';
+import { useMatches } from '../../store/matches.tsx';
+import { useMatchFiles } from '../../store/useMatchFiles.ts';
+import { colors, font, radius, space, type } from '../../theme.ts';
+
+function confirmDelete(onYes: () => void) {
+  if (Platform.OS === 'web') {
+    if (window.confirm('Delete this match? This can’t be undone.')) onYes();
+    return;
+  }
+  Alert.alert('Delete match?', 'This can’t be undone.', [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Delete', style: 'destructive', onPress: onYes },
+  ]);
+}
+
+const openMatch = (m: Match, live: boolean) =>
+  router.push(live ? { pathname: '/match/[id]', params: { id: m.id } } : { pathname: '/match/[id]/scorecard', params: { id: m.id } });
+
+/** The match on right now takes over the top of the screen, like a broadcast's live scorebug. */
+function LiveHero({ match }: { match: Match }) {
+  const state = matchState(match);
+  const s = state.innings[state.current];
+  const batted = match.innings[state.current].events.length > 0;
+  const need = s.target !== null ? Math.max(s.target - s.runs, 0) : null;
+  return (
+    <PressableScale scaleTo={0.98} onPress={() => openMatch(match, true)} style={styles.liveHero}>
+      <PitchStripes opacity={0.06} />
+      <GhostWord size={170} style={{ right: -24, bottom: -40, color: 'rgba(0,0,0,0.07)' }}>
+        LIVE
+      </GhostWord>
+      <View style={styles.liveTop}>
+        <View style={styles.liveTag}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveTagText}>LIVE NOW</Text>
+        </View>
+        <Text style={styles.liveOvers}>
+          {oversText(s.legalBalls)} / {match.rules.overs} OV
+        </Text>
+      </View>
+      <Text style={styles.liveTeam} numberOfLines={1}>
+        {s.battingTeam.name}
+      </Text>
+      <Text style={styles.liveScore}>{batted ? `${s.runs}/${s.wickets}` : 'NEW'}</Text>
+      <View style={styles.liveFoot}>
+        <Text style={styles.liveFootText} numberOfLines={1}>
+          {need !== null && batted ? `Need ${need} off ${s.maxBalls - s.legalBalls}` : `vs ${s.bowlingTeam.name}`}
+        </Text>
+        <View style={styles.liveGo}>
+          <Text style={styles.liveGoText}>SCORE</Text>
+          <Ionicons name="arrow-forward" size={16} color={colors.accent} />
+        </View>
+      </View>
+    </PressableScale>
+  );
+}
+
+function PosterHero() {
+  return (
+    <View style={styles.poster}>
+      <PitchStripes />
+      <GhostWord size={190} style={{ left: -12, bottom: -50 }}>
+        CRICKET
+      </GhostWord>
+      <Text style={styles.posterEyebrow}>MATCHDAY</Text>
+      <Text style={styles.posterTitle}>
+        GAME{'\n'}
+        <Text style={{ color: colors.accent }}>ON.</Text>
+      </Text>
+      <Text style={styles.posterBody}>Score every ball. Every player’s numbers add up, match after match.</Text>
+      <Button label="Start a match" icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
+    </View>
+  );
+}
+
+function Season({ matches }: { matches: Match[] }) {
+  const { runs, wickets, top } = useMemo(() => {
+    let r = 0;
+    let w = 0;
+    for (const m of matches)
+      for (const inn of matchState(m).innings) {
+        r += inn.runs;
+        w += inn.wickets;
+      }
+    const best = [...careerStats(matches)].sort((a, b) => b.batting.runs - a.batting.runs)[0];
+    return { runs: r, wickets: w, top: best && best.batting.runs > 0 ? best : null };
+  }, [matches]);
+
+  return (
+    <View style={styles.season}>
+      {(
+        [
+          ['MATCHES', matches.length],
+          ['RUNS', runs],
+          ['WICKETS', wickets],
+        ] as const
+      ).map(([label, value], i) => (
+        <View key={label} style={[styles.seasonCell, i > 0 && styles.seasonBorder]}>
+          <Text style={styles.seasonValue}>{value}</Text>
+          <Text style={styles.seasonLabel}>{label}</Text>
+        </View>
+      ))}
+      {top && (
+        <View style={{ flexBasis: '100%' }}>
+          <PressableScale
+            scaleTo={0.98}
+            onPress={() => router.push({ pathname: '/player/[key]', params: { key: top.key } })}
+            style={styles.topScorer}
+          >
+            <MaterialCommunityIcons name="crown" size={18} color={colors.gold} />
+            <Text style={styles.topScorerText} numberOfLines={1}>
+              Top scorer <Text style={{ color: colors.text }}>{top.name}</Text> · {top.batting.runs} runs
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+          </PressableScale>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function SeriesCard({ s }: { s: SeriesState }) {
+  return (
+    <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/series/[id]', params: { id: s.id } })} style={styles.series}>
+      <View style={{ flex: 1, gap: 6 }}>
+        <Text style={styles.seriesEyebrow}>{s.over ? 'SERIES · FINAL' : `SERIES · BEST OF ${s.of}`}</Text>
+        <Text style={styles.seriesName} numberOfLines={1}>
+          {s.name}
+        </Text>
+        <SeriesPips series={s} size={12} />
+        <Text style={styles.seriesStatus} numberOfLines={1}>
+          {s.status}
+          {s.best ? `  ·  ★ ${s.best.name}` : ''}
+        </Text>
+      </View>
+      <Text style={styles.seriesScore}>
+        {s.wins[0]}
+        <Text style={{ color: colors.faint }}>–</Text>
+        {s.wins[1]}
+      </Text>
+    </PressableScale>
+  );
+}
+
+function ResultRow({ match, onDelete }: { match: Match; onDelete: () => void }) {
+  const state = matchState(match);
+  const d = new Date(match.createdAt);
+  return (
+    <PressableScale
+      scaleTo={0.98}
+      onPress={() => openMatch(match, false)}
+      onLongPress={() => confirmDelete(onDelete)}
+      style={styles.result}
+    >
+      <View style={styles.date}>
+        <Text style={styles.dateDay}>{d.getDate()}</Text>
+        <Text style={styles.dateMonth}>{d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}</Text>
+      </View>
+      <View style={{ flex: 1, gap: 4 }}>
+        {state.innings.map((inn) => {
+          const won = state.winner === inn.battingTeam.id;
+          return (
+            <View key={inn.battingTeam.id} style={styles.resultLine}>
+              <View style={[styles.winBar, won && { backgroundColor: colors.accent }]} />
+              <Text numberOfLines={1} style={[styles.resultTeam, won && { color: colors.text }]}>
+                {inn.battingTeam.name}
+              </Text>
+              <Text style={[styles.resultScore, won && { color: colors.text }]}>
+                {inn.runs}/{inn.wickets}
+                <Text style={styles.resultOvers}> {oversText(inn.legalBalls)}</Text>
+              </Text>
+            </View>
+          );
+        })}
+        <Text numberOfLines={1} style={styles.resultText}>
+          {state.result}
+        </Text>
+      </View>
+    </PressableScale>
+  );
+}
+
+export default function Home() {
+  const { matches, deleteMatch, ready, club, sync, importMatches } = useMatches();
+  const toast = useToast();
+  const { importFile, exportMatches, exportPdf } = useMatchFiles(toast.show);
+  const [exporting, setExporting] = useState<Match[] | null>(null);
+  const live = matches.filter((m) => !matchState(m).result);
+  const done = matches.filter((m) => matchState(m).result);
+  const series = useMemo(() => allSeries(matches), [matches]);
+
+  return (
+    <Screen>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.brandRow}>
+          <View style={styles.logo}>
+            <MaterialCommunityIcons name="cricket" size={20} color={colors.onAccent} />
+          </View>
+          <Text style={styles.brand}>CREASE</Text>
+          <View style={{ flex: 1 }} />
+          <PressableScale onPress={() => router.navigate('/club')} style={styles.clubPill}>
+            <Ionicons
+              name={club ? (sync.status === 'offline' ? 'cloud-offline' : 'cloud-done') : 'people'}
+              size={15}
+              color={club ? (sync.status === 'error' ? colors.danger : colors.accent) : colors.muted}
+            />
+            <Text numberOfLines={1} style={styles.clubText}>
+              {club ? club.name : 'Club'}
+            </Text>
+          </PressableScale>
+        </View>
+
+        <FadeIn>{live[0] ? <LiveHero match={live[0]} /> : <PosterHero />}</FadeIn>
+        {live.slice(1).map((m, i) => (
+          <FadeIn key={m.id} delay={80 + i * 40}>
+            <LiveHero match={m} />
+          </FadeIn>
+        ))}
+
+        {series.length > 0 && (
+          <FadeIn delay={90}>
+            <SectionLabel>Series</SectionLabel>
+            <View style={{ gap: space.sm }}>
+              {series.map((s) => (
+                <SeriesCard key={s.id} s={s} />
+              ))}
+            </View>
+          </FadeIn>
+        )}
+
+        {ready && matches.length > 0 && (
+          <FadeIn delay={120}>
+            <SectionLabel>This season</SectionLabel>
+            <Season matches={matches} />
+          </FadeIn>
+        )}
+
+        <FadeIn delay={180}>
+          <SectionLabel>Match files</SectionLabel>
+          <View style={styles.files}>
+            <View style={{ flex: 1 }}>
+              <PressableScale onPress={importFile} style={styles.fileButton}>
+                <Ionicons name="push-outline" size={20} color={colors.accent} />
+                <Text style={styles.fileTitle}>IMPORT</Text>
+                <Text style={styles.fileBody}>A match someone sent you</Text>
+              </PressableScale>
+            </View>
+            <View style={{ flex: 1 }}>
+              <PressableScale disabled={!matches.length} onPress={() => setExporting(matches)} style={styles.fileButton}>
+                <Ionicons name="download-outline" size={20} color={colors.accent} />
+                <Text style={styles.fileTitle}>EXPORT</Text>
+                <Text style={styles.fileBody}>PDF or match file, any matches</Text>
+              </PressableScale>
+            </View>
+          </View>
+        </FadeIn>
+
+        {__DEV__ && (
+          // Development builds only: a season of Copan A vs Copan B to try every screen with real-looking numbers.
+          <PressableScale
+            onPress={() => {
+              const demo = sampleSeason();
+              const { added } = importMatches(demo.matches, demo.teams);
+              toast.show(added ? `Loaded ${added} sample matches` : 'Sample season already loaded', 'info');
+            }}
+            style={styles.devButton}
+          >
+            <Ionicons name="flask-outline" size={16} color={colors.faint} />
+            <Text style={styles.devText}>Load sample season (development only)</Text>
+          </PressableScale>
+        )}
+
+        {done.length > 0 && (
+          <FadeIn delay={240}>
+            <SectionLabel right={<Text style={styles.hint}>Hold to delete</Text>}>Results</SectionLabel>
+            <View style={{ gap: space.sm }}>
+              {done.map((m) => (
+                <ResultRow key={m.id} match={m} onDelete={() => deleteMatch(m.id)} />
+              ))}
+            </View>
+          </FadeIn>
+        )}
+      </ScrollView>
+      <ExportSheet
+        visible={exporting !== null}
+        matches={exporting ?? []}
+        onClose={() => setExporting(null)}
+        onExport={(format, chosen) => {
+          setExporting(null);
+          if (format === 'pdf') exportPdf(chosen);
+          else exportMatches(chosen);
+        }}
+      />
+      {toast.element}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { padding: space.lg, paddingBottom: 130 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.lg },
+  logo: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ skewX: '-8deg' }],
+  },
+  brand: { fontFamily: font.posterBlack, fontSize: 28, color: colors.text, letterSpacing: 0.5 },
+  clubPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 150,
+    height: 36,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderHi,
+  },
+  clubText: { color: colors.text, fontSize: 13, fontFamily: font.bold, flexShrink: 1 },
+
+  poster: {
+    borderRadius: radius.xl,
+    padding: space.xl,
+    paddingTop: space.xxl,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderHi,
+  },
+  posterEyebrow: { ...type.label, color: colors.accent },
+  posterTitle: { fontFamily: font.posterBlack, fontSize: 116, lineHeight: 100, color: colors.text, letterSpacing: -3, marginTop: space.sm },
+  posterBody: { color: colors.muted, fontSize: 15, fontFamily: font.medium, lineHeight: 21, marginTop: space.md, maxWidth: 270 },
+
+  liveHero: {
+    borderRadius: radius.xl,
+    padding: space.xl,
+    overflow: 'hidden',
+    backgroundColor: colors.accent,
+    marginBottom: space.sm,
+  },
+  liveTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  liveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.onAccent,
+    paddingHorizontal: 10,
+    height: 24,
+    borderRadius: radius.sm,
+  },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.danger },
+  liveTagText: { ...type.label, fontSize: 11, color: colors.accent },
+  liveOvers: { fontFamily: font.poster, fontSize: 18, color: colors.onAccent, ...type.num },
+  liveTeam: { fontFamily: font.poster, fontSize: 26, color: colors.onAccent, textTransform: 'uppercase', marginTop: space.lg },
+  liveScore: { fontFamily: font.posterBlack, fontSize: 104, lineHeight: 104, color: colors.onAccent, letterSpacing: -3, ...type.num },
+  liveFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.sm },
+  liveFootText: { color: colors.onAccent, fontFamily: font.bold, fontSize: 14, flex: 1, opacity: 0.75 },
+  liveGo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.onAccent,
+    paddingHorizontal: space.md,
+    height: 36,
+    borderRadius: radius.md,
+  },
+  liveGoText: { fontFamily: font.poster, fontSize: 18, color: colors.accent },
+
+  season: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  seasonCell: { flex: 1, paddingVertical: space.lg, alignItems: 'center' },
+  seasonBorder: { borderLeftWidth: 1, borderLeftColor: colors.border },
+  seasonValue: { fontFamily: font.posterBlack, fontSize: 44, lineHeight: 46, color: colors.text, ...type.num },
+  seasonLabel: { ...type.label, fontSize: 10, color: colors.faint },
+  topScorer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  topScorerText: { flex: 1, color: colors.muted, fontSize: 13, fontFamily: font.semibold },
+
+  files: { flexDirection: 'row', gap: space.sm },
+  series: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    padding: space.lg,
+  },
+  seriesEyebrow: { ...type.label, fontSize: 10, color: colors.accent },
+  seriesName: { fontFamily: font.posterBlack, fontSize: 28, lineHeight: 30, color: colors.text, textTransform: 'uppercase' },
+  seriesStatus: { color: colors.muted, fontSize: 13, fontFamily: font.bold },
+  seriesScore: { fontFamily: font.posterBlack, fontSize: 54, lineHeight: 56, color: colors.text, ...type.num },
+  fileButton: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: space.lg,
+    gap: 4,
+  },
+  fileTitle: { fontFamily: font.poster, fontSize: 22, color: colors.text, marginTop: space.sm },
+  fileBody: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
+
+  hint: { color: colors.faint, fontSize: 12, fontFamily: font.regular },
+  devButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    marginTop: space.md,
+    height: 40,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.borderHi,
+  },
+  devText: { color: colors.faint, fontSize: 12, fontFamily: font.semibold },
+  result: {
+    flexDirection: 'row',
+    gap: space.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: space.md,
+    alignItems: 'center',
+  },
+  date: {
+    width: 54,
+    alignSelf: 'stretch',
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceHi,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: space.sm,
+  },
+  dateDay: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 30, color: colors.text },
+  dateMonth: { ...type.label, fontSize: 10, color: colors.accent },
+  resultLine: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  winBar: { width: 3, height: 16, borderRadius: 2, backgroundColor: 'transparent' },
+  resultTeam: { flex: 1, color: colors.muted, fontSize: 15, fontFamily: font.bold },
+  resultScore: { color: colors.muted, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
+  resultOvers: { fontSize: 14, fontFamily: font.poster, color: colors.faint },
+  resultText: { color: colors.accent, fontSize: 12, fontFamily: font.bold, marginTop: 2, marginLeft: 11 },
+});

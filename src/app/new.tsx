@@ -1,0 +1,551 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useRef, useState } from 'react';
+import { Animated, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, ToggleRow } from '../components/ui.tsx';
+import { newMatch } from '../engine/engine.ts';
+import { seriesState } from '../engine/stats.ts';
+import type { Match, Rules, SeriesInfo, Team } from '../engine/types.ts';
+import { newId, useMatches } from '../store/matches.tsx';
+import { colors, radius, space, font } from '../theme.ts';
+
+type Draft = { name: string; players: string[] };
+
+const resize = (players: string[], n: number) =>
+  players.length >= n ? players.slice(0, n) : [...players, ...Array(n - players.length).fill('')];
+
+/** "Rohit, Virat\nSurya" → three names. Numbers and bullets people paste from WhatsApp are dropped. */
+const parseNames = (text: string) =>
+  text
+    .split(/[,\n;]+/)
+    .map((n) => n.replace(/^[\s\d.)•*-]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, 11);
+
+const isPlaceholderName = (n: string) => /^player \d+$/i.test(n.trim());
+
+function draftFrom(team: Team): Draft {
+  return { name: team.name, players: team.players.map((p) => (isPlaceholderName(p.name) ? '' : p.name)) };
+}
+
+/** A coin that really spins, then says who won the toss. */
+function CoinToss({ names, onResult }: { names: [string, string]; onResult: (winner: '0' | '1') => void }) {
+  const spin = useRef(new Animated.Value(0)).current;
+  const [face, setFace] = useState<string | null>(null);
+  const [flipping, setFlipping] = useState(false);
+  const flip = () => {
+    if (flipping) return;
+    const winner = Math.random() < 0.5 ? '0' : '1';
+    setFlipping(true);
+    setFace(null);
+    spin.setValue(0);
+    tap('medium');
+    Animated.timing(spin, { toValue: 1, duration: 1100, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }).start(() => {
+      setFlipping(false);
+      setFace(winner === '0' ? 'HEADS' : 'TAILS');
+      tap('success');
+      onResult(winner);
+    });
+  };
+  const rotateY = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '1800deg'] });
+  const lift = spin.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -36, 0] });
+  return (
+    <View style={styles.toss}>
+      <PressableScale accessibilityLabel="Flip the coin" scaleTo={0.92} onPress={flip} haptic={null}>
+        <Animated.View style={[styles.coin, { transform: [{ perspective: 600 }, { translateY: lift }, { rotateY }] }]}>
+          <Text style={styles.coinText}>{face ? face[0] : '?'}</Text>
+        </Animated.View>
+      </PressableScale>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.tossTitle}>{flipping ? 'In the air…' : face ? `${face}!` : 'Flip for it'}</Text>
+        <Text style={styles.tossBody}>
+          {face ? 'Winner picked below. Now choose bat or bowl.' : `Tap the coin. Heads ${names[0]}, tails ${names[1]}.`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function TeamEditor({
+  label,
+  draft,
+  onChange,
+  onSquad,
+  saved,
+}: {
+  label: string;
+  draft: Draft;
+  onChange: (d: Draft) => void;
+  /** A whole squad arrived (saved team or pasted list): its size becomes the side size. */
+  onSquad: (d: Draft) => void;
+  saved: Team[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [paste, setPaste] = useState('');
+  const pasted = parseNames(paste);
+  const named = draft.players.filter((p) => p.trim()).length;
+
+  return (
+    <Card style={{ gap: space.md }}>
+      <TextInput
+        value={draft.name}
+        onChangeText={(name) => onChange({ ...draft, name })}
+        placeholder={label}
+        placeholderTextColor={colors.faint}
+        style={styles.teamInput}
+        maxLength={28}
+        autoCapitalize="words"
+      />
+      {saved.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+          {saved.map((t) => (
+            <Chip
+              key={t.id}
+              icon="people-outline"
+              label={t.name}
+              selected={t.name === draft.name}
+              onPress={() => onSquad(draftFrom(t))}
+            />
+          ))}
+        </ScrollView>
+      )}
+      <Pressable
+        onPress={() => {
+          tap();
+          setOpen(!open);
+        }}
+        style={styles.squadToggle}
+        accessibilityRole="button"
+      >
+        <Ionicons name="people" size={18} color={colors.muted} />
+        <Text style={styles.squadText}>
+          {named === 0 ? `${draft.players.length} players · add names` : `${named} of ${draft.players.length} named`}
+        </Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.muted} />
+      </Pressable>
+      {open && (
+        <View style={{ gap: space.sm }}>
+          {draft.players.map((p, i) => (
+            <View key={i} style={styles.playerRow}>
+              <Text style={styles.playerNum}>{i + 1}</Text>
+              <TextInput
+                value={p}
+                onChangeText={(v) => onChange({ ...draft, players: draft.players.map((x, j) => (j === i ? v : x)) })}
+                placeholder={`Player ${i + 1}`}
+                placeholderTextColor={colors.faint}
+                style={styles.playerInput}
+                maxLength={24}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+            </View>
+          ))}
+          <Text style={styles.help}>Blank names become Player 1, Player 2…</Text>
+          <View style={styles.pasteBox}>
+            <TextInput
+              value={paste}
+              onChangeText={setPaste}
+              placeholder="Or paste the whole squad: Rohit, Virat, Surya…"
+              placeholderTextColor={colors.faint}
+              style={styles.pasteInput}
+              multiline
+            />
+            {pasted.length >= 2 && (
+              <Button
+                variant="ghost"
+                icon="clipboard-outline"
+                label={`Use these ${pasted.length} names`}
+                onPress={() => {
+                  onSquad({ ...draft, players: pasted });
+                  setPaste('');
+                }}
+              />
+            )}
+          </View>
+        </View>
+      )}
+    </Card>
+  );
+}
+
+export default function NewMatch() {
+  const insets = useSafeAreaInsets();
+  const { rematch, series: continueSeries } = useLocalSearchParams<{ rematch?: string; series?: string }>();
+  const { savedTeams, rememberTeams, saveMatch, matches } = useMatches();
+  const source: Match | undefined = rematch ? matches.find((m) => m.id === rematch) : undefined;
+  const last: Match | undefined = matches[0];
+  const [size, setSize] = useState(() => source?.rules.playersPerSide ?? last?.rules.playersPerSide ?? 8);
+  const [teams, setTeams] = useState<[Draft, Draft]>(() =>
+    source
+      ? [draftFrom(source.teams[0]), draftFrom(source.teams[1])]
+      : [
+          { name: '', players: resize([], size) },
+          { name: '', players: resize([], size) },
+        ],
+  );
+  const [rules, setRules] = useState<Omit<Rules, 'playersPerSide'>>(() => {
+    const { playersPerSide: _, ...r } = (source ?? last)?.rules ?? {
+      playersPerSide: 8,
+      overs: 10,
+      extraRun: 1,
+      reball: true,
+      lastManStands: false,
+    };
+    return { maxOversPerBowler: 0, extraOverBowlers: 0, freeHit: false, bouncer: { fair: 0, calledAs: 'wide' as const }, ...r };
+  });
+  // The next match of a series carries the series on; otherwise a series can be started here.
+  const ongoing = continueSeries && source?.series ? seriesState(matches.filter((m) => m.series?.id === source.series!.id)) : null;
+  const [kind, setKind] = useState<'single' | 'series'>('single');
+  const [seriesOf, setSeriesOf] = useState<'3' | '5' | '7'>('3');
+  const [seriesName, setSeriesName] = useState('');
+  const [tossWinner, setTossWinner] = useState<'0' | '1'>('0');
+  const [choice, setChoice] = useState<'bat' | 'bowl'>('bat');
+
+  const names = teams.map((t, i) => t.name.trim() || (i === 0 ? 'Team A' : 'Team B'));
+  const setSizeAll = (n: number) => {
+    setSize(n);
+    setTeams(([a, b]) => [
+      { ...a, players: resize(a.players, n) },
+      { ...b, players: resize(b.players, n) },
+    ]);
+  };
+  const setSquad = (side: 0 | 1, d: Draft) => {
+    const n = Math.min(11, Math.max(2, d.players.length));
+    setSize(n);
+    setTeams((both) => {
+      const next = [...both] as [Draft, Draft];
+      next[side] = { ...d, players: resize(d.players, n) };
+      next[1 - side] = { ...both[1 - side], players: resize(both[1 - side].players, n) };
+      return next;
+    });
+  };
+
+  const start = () => {
+    const built = teams.map(
+      (t, i): Team => ({
+        id: newId(),
+        name: names[i],
+        players: t.players.map((p, j) => ({ id: newId(), name: p.trim() || `Player ${j + 1}` })),
+      }),
+    ) as [Team, Team];
+    const match = newMatch(newId(), built, { ...rules, playersPerSide: size }, {
+      winner: built[Number(tossWinner)].id,
+      choice,
+    });
+    const series: SeriesInfo | undefined = ongoing?.next
+      ? { ...source!.series!, number: ongoing.next }
+      : kind === 'series'
+        ? { id: newId(), name: seriesName.trim() || `${names[0]} vs ${names[1]}`, of: Number(seriesOf), number: 1 }
+        : undefined;
+    if (series) match.series = series;
+    rememberTeams(built.filter((t, i) => teams[i].name.trim()));
+    saveMatch(match);
+    tap('success');
+    router.replace({ pathname: '/match/[id]', params: { id: match.id } });
+  };
+
+  return (
+    <Screen>
+      <View style={styles.header}>
+        <IconButton icon="chevron-back" label="Back" onPress={() => router.back()} />
+      </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={{ padding: space.lg, paddingBottom: 140 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {ongoing?.next ? (
+            <>
+              <Text style={styles.title}>
+                MATCH <Text style={{ color: colors.accent }}>{ongoing.next}</Text>
+              </Text>
+              <Text style={styles.subtitle}>
+                {ongoing.name} · best of {ongoing.of} · {ongoing.status}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>
+                {source ? 'RE' : 'NEW '}
+                <Text style={{ color: colors.accent }}>MATCH</Text>
+              </Text>
+              <Text style={styles.subtitle}>
+                {source ? 'Same teams, same rules. Just do the toss.' : 'Two teams, your rules, then the toss.'}
+              </Text>
+              <View style={{ marginTop: space.lg, gap: space.md }}>
+                <Segmented
+                  value={kind}
+                  onChange={setKind}
+                  options={[
+                    { value: 'single', label: 'One match' },
+                    { value: 'series', label: 'Series' },
+                  ]}
+                />
+                {kind === 'series' && (
+                  <Card style={{ gap: space.md }}>
+                    <Text style={styles.question}>How long?</Text>
+                    <Segmented
+                      value={seriesOf}
+                      onChange={setSeriesOf}
+                      options={[
+                        { value: '3', label: 'Best of 3' },
+                        { value: '5', label: 'Best of 5' },
+                        { value: '7', label: 'Best of 7' },
+                      ]}
+                    />
+                    <TextInput
+                      value={seriesName}
+                      onChangeText={setSeriesName}
+                      placeholder={`Name it, e.g. ${names[0]} vs ${names[1]} Cup`}
+                      placeholderTextColor={colors.faint}
+                      style={styles.seriesInput}
+                      maxLength={40}
+                      autoCapitalize="words"
+                    />
+                    <Text style={styles.help}>
+                      First to {Math.floor(Number(seriesOf) / 2) + 1} wins. Man of the Series is picked across every match.
+                    </Text>
+                  </Card>
+                )}
+              </View>
+            </>
+          )}
+          <SectionLabel>Teams</SectionLabel>
+          <View style={{ gap: space.md }}>
+            <TeamEditor label="Team A" draft={teams[0]} saved={savedTeams} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} />
+            <View style={styles.vs} pointerEvents="none">
+              <View style={styles.vsBadge}>
+                <Text style={styles.vsText}>VS</Text>
+              </View>
+            </View>
+            <TeamEditor label="Team B" draft={teams[1]} saved={savedTeams} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} />
+          </View>
+
+          <SectionLabel>Format</SectionLabel>
+          <Card style={{ paddingVertical: space.sm }}>
+            <Stepper label="Overs" hint="Per innings" value={rules.overs} min={1} max={50} onChange={(overs) => setRules({ ...rules, overs })} />
+            <View style={styles.divider} />
+            <Stepper label="Players" hint="Per side" value={size} min={2} max={11} onChange={setSizeAll} />
+            <View style={styles.divider} />
+            <Stepper
+              label="Overs per bowler"
+              hint={rules.maxOversPerBowler ? `Nobody bowls more than ${rules.maxOversPerBowler}` : 'No limit'}
+              value={rules.maxOversPerBowler ?? 0}
+              min={0}
+              max={rules.overs}
+              onChange={(maxOversPerBowler) => setRules({ ...rules, maxOversPerBowler })}
+            />
+            {Boolean(rules.maxOversPerBowler) && (
+              <>
+                <View style={styles.divider} />
+                <Stepper
+                  label="Bowlers with an extra over"
+                  hint={
+                    rules.extraOverBowlers
+                      ? `${rules.extraOverBowlers} can bowl ${(rules.maxOversPerBowler ?? 0) + 1}, the rest ${rules.maxOversPerBowler}`
+                      : 'Nobody goes over the limit'
+                  }
+                  value={rules.extraOverBowlers ?? 0}
+                  min={0}
+                  max={size}
+                  onChange={(extraOverBowlers) => setRules({ ...rules, extraOverBowlers })}
+                />
+              </>
+            )}
+          </Card>
+
+          <SectionLabel>House rules</SectionLabel>
+          <Card style={{ paddingVertical: space.sm }}>
+            <ToggleRow
+              label="Run for wides & no-balls"
+              hint="Adds 1 extra run to the score"
+              value={rules.extraRun === 1}
+              onChange={(v) => setRules({ ...rules, extraRun: v ? 1 : 0 })}
+            />
+            <View style={styles.divider} />
+            <ToggleRow
+              label="Re-bowl wides & no-balls"
+              hint="Off: they count as a ball of the over"
+              value={rules.reball}
+              onChange={(reball) => setRules({ ...rules, reball })}
+            />
+            <View style={styles.divider} />
+            <ToggleRow
+              label="Free hit after a no-ball"
+              hint="Only a run out counts on the next ball"
+              value={Boolean(rules.freeHit)}
+              onChange={(freeHit) => setRules({ ...rules, freeHit })}
+            />
+            <View style={styles.divider} />
+            <Stepper
+              label="Fair bouncers an over"
+              hint={
+                (rules.bouncer?.fair ?? 0)
+                  ? `After ${rules.bouncer!.fair}, a bounce is a ${rules.bouncer!.calledAs === 'wide' ? 'wide' : 'no ball'}`
+                  : `Every bounce is a ${rules.bouncer?.calledAs === 'noball' ? 'no ball' : 'wide'}`
+              }
+              value={rules.bouncer?.fair ?? 0}
+              min={0}
+              max={3}
+              onChange={(fair) => setRules({ ...rules, bouncer: { calledAs: rules.bouncer?.calledAs ?? 'wide', fair } })}
+            />
+            <View style={styles.bounceRow}>
+              <Text style={styles.question}>A called bounce is a</Text>
+              <View style={{ flex: 1 }}>
+                <Segmented
+                  value={rules.bouncer?.calledAs ?? 'wide'}
+                  onChange={(calledAs) => setRules({ ...rules, bouncer: { fair: rules.bouncer?.fair ?? 0, calledAs } })}
+                  options={[
+                    { value: 'wide', label: 'Wide' },
+                    { value: 'noball', label: 'No ball' },
+                  ]}
+                />
+              </View>
+            </View>
+            <View style={styles.divider} />
+            <ToggleRow
+              label="Last man stands"
+              hint="The last batter can bat on alone"
+              value={rules.lastManStands}
+              onChange={(lastManStands) => setRules({ ...rules, lastManStands })}
+            />
+          </Card>
+
+          <SectionLabel>Toss</SectionLabel>
+          <Card style={{ gap: space.md }}>
+            <CoinToss names={[names[0], names[1]]} onResult={setTossWinner} />
+            <Text style={styles.question}>Who won the toss?</Text>
+            <Segmented
+              value={tossWinner}
+              onChange={setTossWinner}
+              options={[
+                { value: '0', label: names[0] },
+                { value: '1', label: names[1] },
+              ]}
+            />
+            <Text style={styles.question}>They chose to</Text>
+            <Segmented
+              value={choice}
+              onChange={setChoice}
+              options={[
+                { value: 'bat', label: 'Bat' },
+                { value: 'bowl', label: 'Bowl' },
+              ]}
+            />
+          </Card>
+        </ScrollView>
+      </KeyboardAvoidingView>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
+        <Button
+          label={ongoing?.next ? `Start match ${ongoing.next}` : kind === 'series' ? 'Start the series' : 'Start match'}
+          icon="play"
+          onPress={start}
+        />
+      </View>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  toss: { flexDirection: 'row', alignItems: 'center', gap: space.lg, paddingVertical: space.sm },
+  coin: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: colors.gold,
+    borderWidth: 4,
+    borderColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coinText: { fontFamily: font.posterBlack, fontSize: 38, color: colors.onAccent },
+  tossTitle: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 32, color: colors.text, textTransform: 'uppercase' },
+  tossBody: { color: colors.muted, fontSize: 13, fontFamily: font.medium, marginTop: 2 },
+  pasteBox: { gap: space.sm, marginTop: space.sm },
+  bounceRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingBottom: space.md },
+  seriesInput: {
+    color: colors.text,
+    fontSize: 15,
+    fontFamily: font.medium,
+    backgroundColor: colors.bg,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
+    height: 46,
+  },
+  pasteInput: {
+    color: colors.text,
+    fontSize: 14,
+    fontFamily: font.regular,
+    backgroundColor: colors.bg,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.borderHi,
+    padding: space.md,
+    minHeight: 64,
+    textAlignVertical: 'top',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+  },
+  title: { fontFamily: font.posterBlack, fontSize: 64, lineHeight: 62, color: colors.text, letterSpacing: -1.5 },
+  subtitle: { color: colors.muted, fontSize: 15, fontFamily: font.medium, marginTop: 4 },
+  teamInput: { color: colors.text, fontSize: 34, fontFamily: font.poster, textTransform: 'uppercase', paddingVertical: 2 },
+  squadToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    backgroundColor: colors.surfaceHi,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    height: 44,
+  },
+  squadText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold, flex: 1 },
+  playerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  playerNum: { color: colors.faint, width: 20, textAlign: 'right', fontFamily: font.bold },
+  playerInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15, fontFamily: font.regular,
+    backgroundColor: colors.bg,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
+    height: 42,
+  },
+  help: { color: colors.faint, fontSize: 12, fontFamily: font.regular, marginLeft: 32 },
+  vs: { alignItems: 'center', marginVertical: -26, zIndex: 2 },
+  vsBadge: {
+    width: 52,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ skewX: '-10deg' }],
+    borderWidth: 3,
+    borderColor: colors.bg,
+  },
+  vsText: { color: colors.onAccent, fontFamily: font.posterBlack, fontSize: 22 },
+  divider: { height: 1, backgroundColor: colors.border },
+  question: { color: colors.muted, fontSize: 13, fontFamily: font.bold },
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    backgroundColor: 'rgba(7,11,20,0.94)',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+});

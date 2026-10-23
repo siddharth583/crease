@@ -1,0 +1,15 @@
+{
+  "name": "Crease: cricket scoring",
+  "short_name": "Crease",
+  "description": "Ball-by-ball scoring and player stats for your local cricket matches.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#070B14",
+  "background_color": "#070B14",
+  "icons": [
+    { "src": "/logo192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/logo512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
