@@ -10,7 +10,8 @@ import type { Match, Rules, SeriesInfo, Team } from '../engine/types.ts';
 import { newId, useMatches } from '../store/matches.tsx';
 import { colors, radius, space, font } from '../theme.ts';
 
-type Draft = { name: string; players: string[] };
+/** `captain` and `keeper` are indexes into `players`. */
+type Draft = { name: string; players: string[]; captain?: number; keeper?: number };
 
 const resize = (players: string[], n: number) =>
   players.length >= n ? players.slice(0, n) : [...players, ...Array(n - players.length).fill('')];
@@ -25,8 +26,18 @@ const parseNames = (text: string) =>
 
 const isPlaceholderName = (n: string) => /^player \d+$/i.test(n.trim());
 
-function draftFrom(team: Team): Draft {
-  return { name: team.name, players: team.players.map((p) => (isPlaceholderName(p.name) ? '' : p.name)) };
+function draftFrom(team: Team, match?: Match): Draft {
+  const own = team.players.filter((p) => !p.common);
+  const at = (id?: string) => {
+    const i = own.findIndex((p) => p.id === id);
+    return i >= 0 ? i : undefined;
+  };
+  return {
+    name: team.name,
+    players: own.map((p) => (isPlaceholderName(p.name) ? '' : p.name)),
+    captain: at(match?.captains?.[team.id]),
+    keeper: at(match?.keepers?.[team.id]),
+  };
 }
 
 /** A coin that really spins, then says who won the toss. */
@@ -139,9 +150,25 @@ function TeamEditor({
                 autoCapitalize="words"
                 returnKeyType="next"
               />
+              <PressableScale
+                accessibilityLabel={`Make player ${i + 1} captain`}
+                accessibilityState={{ selected: draft.captain === i }}
+                onPress={() => onChange({ ...draft, captain: draft.captain === i ? undefined : i })}
+                style={[styles.mark, draft.captain === i && styles.markOn]}
+              >
+                <Text style={[styles.markText, draft.captain === i && styles.markTextOn]}>C</Text>
+              </PressableScale>
+              <PressableScale
+                accessibilityLabel={`Make player ${i + 1} wicketkeeper`}
+                accessibilityState={{ selected: draft.keeper === i }}
+                onPress={() => onChange({ ...draft, keeper: draft.keeper === i ? undefined : i })}
+                style={[styles.mark, draft.keeper === i && styles.markOn]}
+              >
+                <Text style={[styles.markText, draft.keeper === i && styles.markTextOn]}>WK</Text>
+              </PressableScale>
             </View>
           ))}
-          <Text style={styles.help}>Blank names become Player 1, Player 2…</Text>
+          <Text style={styles.help}>Blank names become Player 1, Player 2… Tap C for the captain, WK for the keeper.</Text>
           <View style={styles.pasteBox}>
             <TextInput
               value={paste}
@@ -178,7 +205,7 @@ export default function NewMatch() {
   const [size, setSize] = useState(() => source?.rules.playersPerSide ?? last?.rules.playersPerSide ?? 8);
   const [teams, setTeams] = useState<[Draft, Draft]>(() =>
     source
-      ? [draftFrom(source.teams[0]), draftFrom(source.teams[1])]
+      ? [draftFrom(source.teams[0], source), draftFrom(source.teams[1], source)]
       : [
           { name: '', players: resize([], size) },
           { name: '', players: resize([], size) },
@@ -199,6 +226,7 @@ export default function NewMatch() {
   const [kind, setKind] = useState<'single' | 'series'>('single');
   const [seriesOf, setSeriesOf] = useState<'3' | '5' | '7'>('3');
   const [seriesName, setSeriesName] = useState('');
+  const [common, setCommon] = useState(source ? source.teams[0].players.find((p) => p.common)?.name ?? '' : '');
   const [tossWinner, setTossWinner] = useState<'0' | '1'>('0');
   const [choice, setChoice] = useState<'bat' | 'bowl'>('bat');
 
@@ -226,7 +254,11 @@ export default function NewMatch() {
       (t, i): Team => ({
         id: newId(),
         name: names[i],
-        players: t.players.map((p, j) => ({ id: newId(), name: p.trim() || `Player ${j + 1}` })),
+        players: [
+          ...t.players.map((p, j) => ({ id: newId(), name: p.trim() || `Player ${j + 1}` })),
+          // The common player turns out for both sides.
+          ...(common.trim() ? [{ id: newId(), name: common.trim(), common: true }] : []),
+        ],
       }),
     ) as [Team, Team];
     const match = newMatch(newId(), built, { ...rules, playersPerSide: size }, {
@@ -239,6 +271,15 @@ export default function NewMatch() {
         ? { id: newId(), name: seriesName.trim() || `${names[0]} vs ${names[1]}`, of: Number(seriesOf), number: 1 }
         : undefined;
     if (series) match.series = series;
+    const pick = (key: 'captain' | 'keeper') =>
+      Object.fromEntries(
+        built.flatMap((t, i) => {
+          const idx = teams[i][key];
+          return idx !== undefined && t.players[idx] ? [[t.id, t.players[idx].id]] : [];
+        }),
+      );
+    match.captains = pick('captain');
+    match.keepers = pick('keeper');
     rememberTeams(built.filter((t, i) => teams[i].name.trim()));
     saveMatch(match);
     tap('success');
@@ -321,6 +362,22 @@ export default function NewMatch() {
             </View>
             <TeamEditor label="Team B" draft={teams[1]} saved={savedTeams} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} />
           </View>
+
+          <Card style={{ gap: space.sm, marginTop: space.md }}>
+            <Text style={styles.question}>Common player (optional)</Text>
+            <TextInput
+              value={common}
+              onChangeText={setCommon}
+              placeholder="Plays for both sides, e.g. when a team is short"
+              placeholderTextColor={colors.faint}
+              style={styles.seriesInput}
+              maxLength={24}
+              autoCapitalize="words"
+            />
+            {common.trim() ? (
+              <Text style={styles.help}>{common.trim()} bats and bowls for both teams; their stats count once.</Text>
+            ) : null}
+          </Card>
 
           <SectionLabel>Format</SectionLabel>
           <Card style={{ paddingVertical: space.sm }}>
@@ -463,6 +520,18 @@ const styles = StyleSheet.create({
   tossTitle: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 32, color: colors.text, textTransform: 'uppercase' },
   tossBody: { color: colors.muted, fontSize: 13, fontFamily: font.medium, marginTop: 2 },
   pasteBox: { gap: space.sm, marginTop: space.sm },
+  mark: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.borderHi,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  markText: { color: colors.faint, fontSize: 11, fontFamily: font.heavy },
+  markTextOn: { color: colors.onAccent },
   bounceRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingBottom: space.md },
   seriesInput: {
     color: colors.text,

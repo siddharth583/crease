@@ -127,3 +127,22 @@ test('a series is won as soon as it can’t be caught', () => {
   assert.match(five.status, /lead 1–0/);
   assert.equal(five.next, 2);
 });
+
+test('a common player plays for both sides and is counted once', () => {
+  const both = (m: Match) => {
+    m.teams[0].players.push({ id: 'c-a', name: 'Joker', common: true });
+    m.teams[1].players.push({ id: 'c-b', name: 'Joker', common: true });
+    return m;
+  };
+  const m = both(
+    game(9, (g) => [
+      { type: 'openers', striker: 'c-a', nonStriker: id(g, 'Rohit') },
+      { type: 'bowler', bowler: id(g, 'Sam') },
+      ball(4),
+    ]),
+  );
+  const joker = careerStats([m]).find((c) => c.name === 'Joker')!;
+  assert.equal(joker.matches, 1);
+  assert.equal(joker.team, 'Both teams');
+  assert.equal(joker.batting.runs, 4);
+});

@@ -11,7 +11,7 @@ const sr = (r: number, b: number) => (b ? ((r * 100) / b).toFixed(1) : '–');
 const econ = (r: number, b: number) => (b ? ((r * 6) / b).toFixed(2) : '–');
 
 function inningsHtml(match: Match, s: InningsState, label: string) {
-  const extras = s.extras.wide + s.extras.noball + s.extras.bye + s.extras.legbye;
+  const extras = s.extras.wide + s.extras.noball + s.extras.bye + s.extras.legbye + s.extras.penalty;
   const atCrease = [s.striker, s.nonStriker];
   const yetToBat = s.battingTeam.players.filter((p) => !s.batters.some((b) => b.id === p.id));
 
@@ -19,7 +19,7 @@ function inningsHtml(match: Match, s: InningsState, label: string) {
     .map((b) => {
       const notOut = !b.out && !b.retired && atCrease.includes(b.id);
       return `<tr>
-        <td class="name">${esc(playerName(match, b.id))}${notOut ? '*' : ''}<div class="how">${esc(dismissal(match, b))}</div></td>
+        <td class="name">${esc(playerName(match, b.id))}${notOut ? '*' : ''}${match.captains?.[s.battingTeam.id] === b.id ? ' (c)' : ''}${match.keepers?.[s.battingTeam.id] === b.id ? ' †' : ''}<div class="how">${esc(dismissal(match, b))}</div></td>
         <td class="strong">${b.runs}</td><td>${b.balls}</td><td>${b.fours}</td><td>${b.sixes}</td><td>${sr(b.runs, b.balls)}</td>
       </tr>`;
     })
@@ -55,7 +55,7 @@ function inningsHtml(match: Match, s: InningsState, label: string) {
     <table>
       <thead><tr><th class="name">Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead>
       <tbody>${batting}
-        <tr class="extras"><td class="name">Extras <span class="how">wd ${s.extras.wide}, nb ${s.extras.noball}, b ${s.extras.bye}, lb ${s.extras.legbye}</span></td><td class="strong">${extras}</td><td colspan="4"></td></tr>
+        <tr class="extras"><td class="name">Extras <span class="how">wd ${s.extras.wide}, nb ${s.extras.noball}, b ${s.extras.bye}, lb ${s.extras.legbye}${s.extras.penalty ? `, pen ${s.extras.penalty}` : ''}</span></td><td class="strong">${extras}</td><td colspan="4"></td></tr>
       </tbody>
     </table>
     ${yetToBat.length ? `<p class="note"><b>Yet to bat</b> ${yetToBat.map((p) => esc(p.name)).join(', ')}</p>` : ''}
@@ -101,7 +101,7 @@ function matchHtml(match: Match, all: Match[]) {
     r.lastManStands ? 'last man stands' : '',
   ].filter(Boolean);
 
-  const played = state.innings.filter((_, i) => match.innings[i].events.length > 0);
+  const played = state.innings.filter((_, i) => match.innings[i]?.events.length > 0);
   return `<article class="match">
     <header>
       <div class="brand"><span class="logo">C</span> CREASE <span class="date">${esc(date)}</span></div>
@@ -111,7 +111,7 @@ function matchHtml(match: Match, all: Match[]) {
       <div class="meta">${esc(toss)} won the toss and chose to ${match.toss.choice} &nbsp;·&nbsp; ${esc(rules.join(' · '))}</div>
       ${potm ? `<div class="potm"><span>Man of the match</span> <b>${esc(potm.name)}</b> ${esc(potm.summary)}</div>` : ''}
     </header>
-    ${played.map((s, i) => inningsHtml(match, s, i === 0 ? '1st innings' : '2nd innings')).join('')}
+    ${played.map((s, i) => inningsHtml(match, s, i >= 2 ? 'Super over' : i === 0 ? '1st innings' : '2nd innings')).join('')}
     <footer>Scored ball by ball with Crease</footer>
   </article>`;
 }

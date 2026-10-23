@@ -35,7 +35,7 @@ export type InningsState = {
   wickets: number;
   legalBalls: number;
   maxBalls: number;
-  extras: Record<Extra, number>;
+  extras: Record<Extra | 'penalty', number>;
   striker: string | null;
   nonStriker: string | null;
   bowler: string | null;
@@ -99,7 +99,8 @@ export function inningsState(match: Match, index: number, target: number | null)
   const innings = match.innings[index];
   const battingTeam = teamById(match, innings.battingTeam);
   const bowlingTeam = teamById(match, innings.bowlingTeam);
-  const limit = allOutAt(rules, battingTeam);
+  // A super over (innings 3 and 4) is one over, and two wickets end it.
+  const limit = index >= 2 ? Math.min(2, allOutAt(rules, battingTeam)) : allOutAt(rules, battingTeam);
 
   const s: InningsState = {
     battingTeam,
@@ -107,8 +108,8 @@ export function inningsState(match: Match, index: number, target: number | null)
     runs: 0,
     wickets: 0,
     legalBalls: 0,
-    maxBalls: rules.overs * 6,
-    extras: { wide: 0, noball: 0, bye: 0, legbye: 0 },
+    maxBalls: index >= 2 ? 6 : rules.overs * 6,
+    extras: { wide: 0, noball: 0, bye: 0, legbye: 0, penalty: 0 },
     striker: null,
     nonStriker: null,
     bowler: null,
@@ -147,6 +148,12 @@ export function inningsState(match: Match, index: number, target: number | null)
     let e = event;
     if (e.type === 'endInnings') {
       s.endedEarly = true;
+      continue;
+    }
+    if (e.type === 'deadBall') continue;
+    if (e.type === 'penalty') {
+      s.runs += e.runs;
+      s.extras.penalty += e.runs;
       continue;
     }
     if (e.type === 'openers') {
@@ -312,28 +319,79 @@ export function inningsState(match: Match, index: number, target: number | null)
   return s;
 }
 
+/** The chase target: the first innings plus one, unless one was agreed after lost overs. */
+export const chaseTarget = (match: Match, firstRuns: number) => match.revisedTarget ?? firstRuns + 1;
+
 export function matchState(match: Match): MatchState {
   const first = inningsState(match, 0, null);
-  const second = inningsState(match, 1, first.runs + 1);
+  const target = chaseTarget(match, first.runs);
+  const second = inningsState(match, 1, target);
   const innings = [first, second];
-  const current = first.status === 'done' ? 1 : 0;
+  let current = first.status === 'done' ? 1 : 0;
 
   let result: string | null = null;
   let winner: string | null = null;
   if (first.status === 'done' && second.status === 'done') {
-    if (second.runs >= first.runs + 1) {
+    if (second.runs >= target) {
       const left = allOutAt(match.rules, second.battingTeam) - second.wickets;
       winner = second.battingTeam.id;
       result = `${second.battingTeam.name} won by ${left} wicket${left === 1 ? '' : 's'}`;
-    } else if (second.runs === first.runs) {
+    } else if (second.runs === target - 1) {
       result = 'Match tied';
     } else {
-      const margin = first.runs - second.runs;
+      const margin = target - 1 - second.runs;
       winner = first.battingTeam.id;
       result = `${first.battingTeam.name} won by ${margin} run${margin === 1 ? '' : 's'}`;
     }
+
+    // A tie goes to a super over once one is started: the side that batted second bats first.
+    if (result === 'Match tied' && match.innings.length >= 4) {
+      const so1 = inningsState(match, 2, null);
+      const so2 = inningsState(match, 3, so1.runs + 1);
+      innings.push(so1, so2);
+      current = so1.status === 'done' ? 3 : 2;
+      result = null;
+      if (so1.status === 'done' && so2.status === 'done') {
+        if (so2.runs > so1.runs) {
+          winner = so2.battingTeam.id;
+          result = `${so2.battingTeam.name} won the super over`;
+        } else if (so2.runs === so1.runs) {
+          result = 'Tied, and the super over too';
+        } else {
+          winner = so1.battingTeam.id;
+          result = `${so1.battingTeam.name} won the super over`;
+        }
+      }
+    }
   }
   return { innings, current, result, winner };
+}
+
+/** Start a super over after a tie: the side that batted second bats first. */
+export function startSuperOver(match: Match): Match {
+  if (match.innings.length >= 4 || matchState(match).result !== 'Match tied') return match;
+  const [first, second] = match.innings;
+  return {
+    ...match,
+    innings: [
+      ...match.innings,
+      { battingTeam: second.battingTeam, bowlingTeam: first.battingTeam, events: [] },
+      { battingTeam: first.battingTeam, bowlingTeam: second.battingTeam, events: [] },
+    ],
+  };
+}
+
+/** A fair chase target after overs are lost: the first innings scaled to the overs the chase gets, plus one. */
+export function parTarget(firstRuns: number, originalOvers: number, chaseOvers: number): number {
+  return Math.floor((firstRuns * chaseOvers) / originalOvers) + 1;
+}
+
+/** Add a late arrival (or substitute) to a side mid-match. */
+export function addPlayer(match: Match, teamId: string, player: { id: string; name: string }): Match {
+  return {
+    ...match,
+    teams: match.teams.map((t) => (t.id === teamId ? { ...t, players: [...t.players, player] } : t)) as [Team, Team],
+  };
 }
 
 export function teamById(match: Match, id: string): Team {
@@ -406,6 +464,10 @@ export function canUndo(match: Match) {
 }
 
 export function undo(match: Match): Match {
+  // An unstarted super over is undone by taking it away, which puts the match back at the tie.
+  if (match.innings.length > 2 && match.innings.slice(2).every((i) => i.events.length === 0)) {
+    return { ...match, innings: match.innings.slice(0, 2) };
+  }
   const last = [...match.innings.keys()].reverse().find((i) => match.innings[i].events.length > 0);
   if (last === undefined) return match;
   return {
@@ -417,7 +479,11 @@ export function undo(match: Match): Match {
 /** Fix or remove one delivery that has no wicket. Everything after it is worked out again. */
 export function replaceBall(match: Match, inningsIndex: number, eventIndex: number, ball: BallEvent | null): Match {
   const old = match.innings[inningsIndex]?.events[eventIndex];
-  if (!old || old.type !== 'ball' || old.wicket || ball?.wicket) return match;
+  if (!old || old.type !== 'ball') return match;
+  // A wicket can be corrected (how out, who caught it) but must stay a wicket of the same batter:
+  // everything after it was scored with that batter gone.
+  if (Boolean(old.wicket) !== Boolean(ball?.wicket)) return match;
+  if (old.wicket && ball?.wicket && old.wicket.playerOut !== ball.wicket.playerOut) return match;
   return {
     ...match,
     innings: match.innings.map((inn, i) =>
@@ -436,7 +502,7 @@ export function replaceBall(match: Match, inningsIndex: number, eventIndex: numb
 /** Change the overs mid-match (rain, light). Never below what has already been bowled. */
 export function setOvers(match: Match, overs: number): Match {
   const bowled = Math.max(...matchState(match).innings.map((s) => Math.ceil(s.legalBalls / 6)), 1);
-  return { ...match, rules: { ...match.rules, overs: Math.max(overs, bowled) } };
+  return { ...match, originalOvers: match.originalOvers ?? match.rules.overs, rules: { ...match.rules, overs: Math.max(overs, bowled) } };
 }
 
 /** One line for what an event was, e.g. for "Undid: FOUR by Rohit". */
@@ -454,6 +520,10 @@ export function describeEvent(match: Match, e: InningsEvent, striker: string | n
       return `${playerName(match, e.batter)} retiring`;
     case 'endInnings':
       return 'end of innings';
+    case 'penalty':
+      return `${e.runs} penalty runs`;
+    case 'deadBall':
+      return 'dead ball';
   }
   if (e.wicket && e.wicket.kind !== 'retired') return `wicket of ${playerName(match, e.wicket.playerOut)}`;
   const runs = `${e.runs} run${e.runs === 1 ? '' : 's'}`;

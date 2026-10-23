@@ -32,8 +32,10 @@ function shareText(match: Match, state: MatchState) {
 
 /** A player's name that opens their career profile, unless they were never named. */
 function PlayerLink({ match, team, id, style }: { match: Match; team: Team; id: string; style: StyleProp<TextStyle> }) {
-  const name = playerName(match, id);
-  if (isPlaceholder(name)) return <Text numberOfLines={1} style={style}>{name}</Text>;
+  const base = playerName(match, id);
+  const marks = `${match.captains?.[team.id] === id ? ' (c)' : ''}${match.keepers?.[team.id] === id ? ' †' : ''}`;
+  const name = base;
+  if (isPlaceholder(name)) return <Text numberOfLines={1} style={style}>{name + marks}</Text>;
   return (
     <Pressable
       hitSlop={6}
@@ -43,6 +45,7 @@ function PlayerLink({ match, team, id, style }: { match: Match; team: Team; id: 
       {({ pressed }) => (
         <Text numberOfLines={1} style={[style, pressed && { opacity: 0.6 }]}>
           {name}
+          {marks}
         </Text>
       )}
     </Pressable>
@@ -50,7 +53,7 @@ function PlayerLink({ match, team, id, style }: { match: Match; team: Team; id: 
 }
 
 function InningsCard({ match, s }: { match: Match; s: InningsState }) {
-  const extras = s.extras.wide + s.extras.noball + s.extras.bye + s.extras.legbye;
+  const extras = s.extras.wide + s.extras.noball + s.extras.bye + s.extras.legbye + s.extras.penalty;
   const yetToBat = s.battingTeam.players.filter((p) => !s.batters.some((b) => b.id === p.id));
   const atCrease = [s.striker, s.nonStriker];
 
@@ -102,6 +105,7 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
           <Text style={[styles.name, { flex: 1 }]}>Extras</Text>
           <Text style={styles.how}>
             wd {s.extras.wide}, nb {s.extras.noball}, b {s.extras.bye}, lb {s.extras.legbye}
+            {s.extras.penalty ? `, pen ${s.extras.penalty}` : ''}
           </Text>
           <Text style={[styles.td, styles.strong, { width: 40 }]}>{extras}</Text>
         </View>
@@ -166,14 +170,14 @@ export default function Scorecard() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { match } = useMatch(id);
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<'0' | '1' | null>(null);
+  const [tab, setTab] = useState<string | null>(null);
   const toast = useToast();
   const { exportMatches, exportPdf } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
 
   if (!match) return <Screen>{null}</Screen>;
   const state = matchState(match);
-  const shown = tab ?? (String(state.current) as '0' | '1');
+  const shown = tab ?? (String(state.current));
   const s = state.innings[Number(shown)];
   const started = match.innings[Number(shown)].events.length > 0;
 
@@ -199,7 +203,7 @@ export default function Scorecard() {
         <Segmented
           value={shown}
           onChange={setTab}
-          options={state.innings.map((inn, i) => ({ value: String(i) as '0' | '1', label: inn.battingTeam.name }))}
+          options={state.innings.map((inn, i) => ({ value: String(i), label: i >= 2 ? `SO · ${inn.battingTeam.name}` : inn.battingTeam.name }))}
         />
         {started ? (
           <InningsCard match={match} s={s} />

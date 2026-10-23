@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addEvent, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, setOvers, undo } from './engine.ts';
+import { addEvent, addPlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, parTarget, replaceBall, setOvers, startSuperOver, undo } from './engine.ts';
 import { playerOfTheMatch } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Rules, Team } from './types.ts';
 
@@ -57,7 +57,7 @@ test('wides and no-balls are re-bowled and charged to the bowler', () => {
   const s = matchState(m).innings[0];
   assert.equal(s.runs, 1 + 5 + 2);
   assert.equal(s.legalBalls, 1);
-  assert.deepEqual(s.extras, { wide: 1, noball: 1, bye: 2, legbye: 0 });
+  assert.deepEqual(s.extras, { wide: 1, noball: 1, bye: 2, legbye: 0, penalty: 0 });
   const a1 = s.batters.find((b) => b.id === 'a1')!;
   assert.equal(a1.runs, 4);
   assert.equal(a1.balls, 2, 'no-ball and bye are faced, the wide is not');
@@ -314,4 +314,74 @@ test('bouncers: fair up to the allowance, then called as a wide or no-ball, rese
   s = matchState(m).innings[0];
   assert.equal(s.legalBalls, 7);
   assert.equal(describeEvent(m, bounce(1), 'a1'), 'bouncer + 1 run');
+});
+
+test('a tie goes to a super over: one over, two wickets, the side that batted second goes first', () => {
+  let m = start(setup({ overs: 1 }));
+  m = play(m, ball(2), ball(0), ball(0), ball(0), ball(0), ball(0));
+  m = start(m, 'b1', 'b2', 'a1');
+  m = play(m, ball(2), ball(0), ball(0), ball(0), ball(0), ball(0));
+  assert.equal(matchState(m).result, 'Match tied');
+  m = startSuperOver(m);
+  let st = matchState(m);
+  assert.equal(st.result, null, 'not over until the super over is');
+  assert.equal(st.current, 2);
+  assert.equal(st.innings[2].battingTeam.id, 'b');
+  // B: two wickets end it.
+  const out = (p: string): BallEvent => ball(0, undefined, { kind: 'bowled', playerOut: p });
+  m = play(m, { type: 'openers', striker: 'b1', nonStriker: 'b2' }, { type: 'bowler', bowler: 'a1' }, ball(4), out('b1'), { type: 'batter', batter: 'b3' }, out('b3'));
+  st = matchState(m);
+  assert.equal(st.innings[2].status, 'done');
+  assert.equal(st.current, 3);
+  m = play(m, { type: 'openers', striker: 'a1', nonStriker: 'a2' }, { type: 'bowler', bowler: 'b1' }, ball(6));
+  st = matchState(m);
+  assert.equal(st.result, 'A won the super over');
+  assert.equal(st.winner, 'a');
+});
+
+test('undo takes away a super over that has not started', () => {
+  let m = start(setup({ overs: 1 }));
+  m = play(m, ball(0), ball(0), ball(0), ball(0), ball(0), ball(0));
+  m = start(m, 'b1', 'b2', 'a1');
+  m = play(m, ball(0), ball(0), ball(0), ball(0), ball(0), ball(0));
+  const so = startSuperOver(m);
+  assert.equal(so.innings.length, 4);
+  assert.equal(undo(so).innings.length, 2);
+});
+
+test('rain: a revised target for the chase', () => {
+  assert.equal(parTarget(100, 10, 6), 61);
+  let m = start(setup({ overs: 2 }));
+  m = play(m, ball(4), ball(4), ball(0), ball(0), ball(0), ball(0), { type: 'bowler', bowler: 'b2' }, ball(0), ball(0), ball(0), ball(0), ball(0), ball(0));
+  m = { ...setOvers(m, 1), revisedTarget: parTarget(8, 2, 1) };
+  m = start(m, 'b1', 'b2', 'a1');
+  m = play(m, ball(4), ball(1));
+  const st = matchState(m);
+  assert.equal(st.innings[1].target, 5);
+  assert.equal(st.result, 'B won by 3 wickets');
+});
+
+test('penalty runs and dead balls', () => {
+  const m = play(start(setup()), { type: 'penalty', runs: 5 }, { type: 'deadBall' }, ball(1));
+  const s = matchState(m).innings[0];
+  assert.equal(s.runs, 6);
+  assert.equal(s.extras.penalty, 5);
+  assert.equal(s.legalBalls, 1);
+});
+
+test('a late player can bat', () => {
+  let m = start(setup({}, 2));
+  m = addPlayer(m, 'a', { id: 'a9', name: 'Late Larry' });
+  m = play(m, ball(0, undefined, { kind: 'bowled', playerOut: 'a1' }));
+  const s = matchState(m).innings[0];
+  assert.equal(s.status, 'batter', 'two players would have been all out; the late one can come in');
+  assert.deepEqual(s.available, ['a9']);
+});
+
+test('a wicket can be corrected but stays a wicket of the same batter', () => {
+  const m = play(start(setup()), ball(0, undefined, { kind: 'bowled', playerOut: 'a1' }));
+  const i = 2;
+  const caught = replaceBall(m, 0, i, ball(0, undefined, { kind: 'caught', playerOut: 'a1', fielder: 'b3' }));
+  assert.equal(dismissal(caught, matchState(caught).innings[0].batters[0]), 'c b3 b b1');
+  assert.equal(replaceBall(m, 0, i, ball(0, undefined, { kind: 'bowled', playerOut: 'a2' })), m, 'a different batter is refused');
 });

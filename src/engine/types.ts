@@ -1,4 +1,7 @@
-export type Player = { id: string; name: string };
+export type Role = 'bat' | 'bowl' | 'ar' | 'wk';
+
+/** `common`: plays for both sides (a joker when numbers are short); counted once in the stats. */
+export type Player = { id: string; name: string; common?: boolean; role?: Role };
 
 export type Team = { id: string; name: string; players: Player[] };
 
@@ -44,6 +47,10 @@ export type InningsEvent =
   | { type: 'endInnings' }
   /** Retired hurt between balls: not a wicket, and they can bat again later. */
   | { type: 'retire'; batter: string }
+  /** Penalty runs to the batting side (usually 5), awarded by the umpire. */
+  | { type: 'penalty'; runs: number }
+  /** The umpire called dead ball: nothing counts, kept only for the record. */
+  | { type: 'deadBall' }
   | BallEvent;
 
 export type Innings = { battingTeam: string; bowlingTeam: string; events: InningsEvent[] };
@@ -57,6 +64,18 @@ export type Match = {
   innings: Innings[];
   /** Part of a series: which one, how long it is, and which match of it this is. */
   series?: SeriesInfo;
+  /** Part of a tournament: which one and which stage. */
+  tournament?: TournamentInfo;
+  /** Captain and wicketkeeper for this match, by team id. */
+  captains?: Record<string, string>;
+  keepers?: Record<string, string>;
+  /** A target agreed for the chase after overs were lost (rain, light). */
+  revisedTarget?: number;
+  /** The overs the match started with, kept when overs are cut. */
+  originalOvers?: number;
 };
+
+export type TournamentStage = 'league' | 'semi' | 'final';
+export type TournamentInfo = { id: string; name: string; stage: TournamentStage; teams: string[] };
 
 export type SeriesInfo = { id: string; name: string; of: number; number: number };

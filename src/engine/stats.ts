@@ -42,6 +42,11 @@ export const isPlaceholder = (name: string) => /^player \d+$/.test(norm(name));
 
 export const playerKey = (team: Team, name: string) => `${norm(team.name)}|${norm(name)}`;
 
+/** A common player (plays for both sides) is one person, whichever side they turned out for. */
+export const COMMON_TEAM = 'Both teams';
+export const keyFor = (team: Team, p: { name: string; common?: boolean }) =>
+  p.common ? `common|${norm(p.name)}` : playerKey(team, p.name);
+
 export const battingAverage = (c: Career) => {
   const outs = c.batting.innings - c.batting.notOuts;
   return outs > 0 ? c.batting.runs / outs : null;
@@ -63,7 +68,7 @@ export function careerStats(matches: Match[]): Career[] {
       const opponent = match.teams.find((t) => t !== team)!;
       for (const p of team.players) {
         if (isPlaceholder(p.name)) continue;
-        const key = playerKey(team, p.name);
+        const key = keyFor(team, p);
         idToKey.set(p.id, key);
         let c = careers.get(key);
         if (!c) {
@@ -81,7 +86,9 @@ export function careerStats(matches: Match[]): Career[] {
         }
         // Latest spelling wins for display.
         c.name = p.name.trim();
-        c.team = team.name.trim();
+        c.team = p.common ? COMMON_TEAM : team.name.trim();
+        // A common player is in both squads: one match, not two.
+        if (c.history[0]?.matchId === match.id) continue;
         c.matches += 1;
         c.history.unshift({
           matchId: match.id,
@@ -98,7 +105,7 @@ export function careerStats(matches: Match[]): Career[] {
       return c ? { c, line: c.history[0] } : null;
     };
 
-    for (const inn of state.innings) {
+    for (const inn of state.innings.slice(0, 2)) {
       for (const b of inn.batters) {
         const hit = lineFor(b.id);
         if (!hit) continue;
@@ -179,12 +186,13 @@ function impacts(match: Match): Impact[] {
     if (!l) {
       const team = match.teams.find((t) => t.players.some((p) => p.id === id))!;
       const name = team.players.find((p) => p.id === id)!.name;
-      l = { id, key: playerKey(team, name), name, team: team.name, score: 0, runs: 0, balls: 0, notOut: false, batted: false, wickets: 0, conceded: 0, bowled: false, field: 0 };
+      const p = team.players.find((x) => x.id === id)!;
+      l = { id, key: keyFor(team, p), name, team: p.common ? COMMON_TEAM : team.name, score: 0, runs: 0, balls: 0, notOut: false, batted: false, wickets: 0, conceded: 0, bowled: false, field: 0 };
       lines.set(id, l);
     }
     return l;
   };
-  for (const inn of state.innings) {
+  for (const inn of state.innings.slice(0, 2)) {
     for (const b of inn.batters) {
       const l = line(b.id);
       const sr = b.balls ? (b.runs * 100) / b.balls : 0;

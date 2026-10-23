@@ -217,6 +217,8 @@ export function sampleSeason(now = new Date(), seed = SEED): { matches: Match[];
     m.createdAt = lastSunday.getTime() - week * 7 * 86_400_000;
     m.series = { id: 'copan-cup-2026', name: 'Copan Cup', of: 7, number: 6 - week };
     const today = { [a.id]: withKeeper(rng, sides[a.id]), [b.id]: withKeeper(rng, sides[b.id]) };
+    m.keepers = { [a.id]: today[a.id].keeper!, [b.id]: today[b.id].keeper! };
+    m.captains = { [a.id]: a.players[0].id, [b.id]: b.players[0].id }; // Siddharth and Nihal lead
     for (const i of [0, 1]) {
       const inn = m.innings[i];
       m = playInnings(rng, m, i, today[inn.battingTeam], today[inn.bowlingTeam]);

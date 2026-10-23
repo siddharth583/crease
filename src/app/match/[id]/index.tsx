@@ -16,7 +16,7 @@ function useScreenAwake() {
     };
   }, []);
 }
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import {
@@ -42,22 +42,25 @@ import {
 } from '../../../components/ui.tsx';
 import {
   addEvent,
+  addPlayer,
   canUndo,
   describeEvent,
   highlights,
   matchState,
   oversLeft,
   oversText,
+  parTarget,
   playerName,
   replaceBall,
   setOvers,
+  startSuperOver,
   undo,
   type BallView,
   type InningsState,
 } from '../../../engine/engine.ts';
 import { isPlaceholder, playerOfTheMatch, seriesState } from '../../../engine/stats.ts';
 import type { BallEvent, Extra, InningsEvent, Match, WicketKind } from '../../../engine/types.ts';
-import { useMatch, useMatches } from '../../../store/matches.tsx';
+import { newId, useMatch, useMatches } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
 import { colors, font, gradients, radius, space, type } from '../../../theme.ts';
 
@@ -82,7 +85,7 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
       <View style={styles.heroTop}>
         <View style={styles.livePill}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveText}>{index === 0 ? '1st innings' : '2nd innings'}</Text>
+          <Text style={styles.liveText}>{index >= 2 ? 'Super over' : index === 0 ? '1st innings' : '2nd innings'}</Text>
         </View>
         <Text style={styles.heroOvers}>
           OV <Text style={{ color: colors.text }}>{oversText(s.legalBalls)}</Text>
@@ -126,7 +129,7 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
         </View>
       ) : (
         <Text style={styles.heroFoot}>
-          Extras {s.extras.wide + s.extras.noball + s.extras.bye + s.extras.legbye}
+          Extras {s.extras.wide + s.extras.noball + s.extras.bye + s.extras.legbye + s.extras.penalty}
           {s.partnership.balls > 0 || s.partnership.runs > 0
             ? `   ·   Partnership ${s.partnership.runs} (${s.partnership.balls})`
             : ''}
@@ -236,39 +239,93 @@ const EDIT_KINDS: { value: 'none' | Extra; label: string }[] = [
   { value: 'legbye', label: 'LB' },
 ];
 
-/** Fix a ball scored wrongly: change it or take it out. Everything after it is worked out again. */
+const WICKET_EDIT_KINDS: { value: WicketKind; label: string }[] = [
+  { value: 'bowled', label: 'Bowled' },
+  { value: 'caught', label: 'Caught' },
+  { value: 'lbw', label: 'LBW' },
+  { value: 'runout', label: 'Run out' },
+  { value: 'stumped', label: 'Stumped' },
+  { value: 'hitwicket', label: 'Hit wicket' },
+];
+
+/** Fix a ball scored wrongly. Runs and extras can change, or the ball can go; a wicket can be corrected in place. */
 function BallEditSheet({
   ball,
   event,
+  match,
+  s,
   onClose,
   onSave,
 }: {
   ball: BallView | null;
   event: BallEvent | null;
+  match: Match;
+  s: InningsState;
   onClose: () => void;
   onSave: (next: BallEvent | null) => void;
 }) {
   const [kind, setKind] = useState<'none' | Extra>('none');
   const [runs, setRuns] = useState(0);
+  const [how, setHow] = useState<WicketKind>('bowled');
+  const [fielder, setFielder] = useState<string | undefined>();
   useEffect(() => {
     if (!event) return;
     setKind(event.extra ?? 'none');
     setRuns(event.runs);
+    if (event.wicket) {
+      setHow(event.wicket.kind);
+      setFielder(event.wicket.fielder);
+    }
   }, [event]);
   if (!ball || !event) return null;
   const byes = kind === 'bye' || kind === 'legbye';
+  const keeper = match.keepers?.[s.bowlingTeam.id];
 
   return (
     <Sheet visible onClose={onClose} title="Fix this ball">
-      <View style={{ gap: space.md, paddingBottom: space.md }}>
+      <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
         <View style={styles.editNow}>
           <BallChip ball={ball} size={44} />
           <Text style={styles.editNowText}>Scored as {ball.label === '•' ? 'a dot ball' : ball.label}</Text>
         </View>
-        {ball.wicket ? (
-          <Text style={styles.editNote}>
-            A wicket changes who bats next, so it can’t be edited here. Use undo to go back to it and score it again.
-          </Text>
+        {event.wicket ? (
+          <>
+            <Text style={styles.editNote}>
+              {playerName(match, event.wicket.playerOut)} stays out (everything after was scored without them). Fix how,
+              or who took it. To take the wicket away, undo back to it.
+            </Text>
+            <View style={styles.wrap}>
+              {WICKET_EDIT_KINDS.map((k) => (
+                <Chip key={k.value} tone="danger" label={k.label} selected={how === k.value} onPress={() => setHow(k.value)} />
+              ))}
+            </View>
+            {(how === 'caught' || how === 'runout' || how === 'stumped') && (
+              <View style={styles.wrap}>
+                {s.bowlingTeam.players.map((p) => (
+                  <Chip
+                    key={p.id}
+                    label={p.id === keeper ? `${p.name} †` : p.name}
+                    selected={fielder === p.id}
+                    onPress={() => setFielder(fielder === p.id ? undefined : p.id)}
+                  />
+                ))}
+              </View>
+            )}
+            {how === 'runout' && (
+              <Segmented value={String(runs)} onChange={(v) => setRuns(Number(v))} options={['0', '1', '2', '3'].map((v) => ({ value: v, label: `${v} run${v === '1' ? '' : 's'}` }))} />
+            )}
+            <Button
+              label="Save wicket"
+              icon="checkmark"
+              onPress={() =>
+                onSave({
+                  ...event,
+                  runs: how === 'runout' ? runs : 0,
+                  wicket: { kind: how, playerOut: event.wicket!.playerOut, fielder: how === 'caught' || how === 'runout' || how === 'stumped' ? fielder : undefined },
+                })
+              }
+            />
+          </>
         ) : (
           <>
             <Segmented value={kind} onChange={setKind} options={EDIT_KINDS} />
@@ -286,40 +343,62 @@ function BallEditSheet({
             <Button variant="ghost" label="Delete this ball" icon="trash-outline" onPress={() => onSave(null)} />
           </>
         )}
-      </View>
+      </ScrollView>
     </Sheet>
   );
 }
 
-/** Things that happen to the match rather than to a ball: rain, a declaration. */
+/** Things that happen to the match rather than to a ball: rain, a declaration, a late arrival, penalties. */
 function MatchMenu({
   visible,
   match,
+  s,
+  firstInningsRuns,
   onClose,
   onOvers,
+  onTarget,
+  onAddPlayer,
+  onPenalty,
+  onDeadBall,
   onEndInnings,
   inningsLabel,
 }: {
   visible: boolean;
   match: Match;
+  s: InningsState;
+  /** Known once the first innings is over. */
+  firstInningsRuns: number | null;
   onClose: () => void;
   onOvers: (overs: number) => void;
+  onTarget: (target: number | undefined) => void;
+  onAddPlayer: (teamId: string, name: string) => void;
+  onPenalty: (runs: number) => void;
+  onDeadBall: () => void;
   onEndInnings: () => void;
   inningsLabel: string;
 }) {
   const [overs, setOversDraft] = useState(match.rules.overs);
+  const [target, setTargetDraft] = useState(0);
   const [arming, setArming] = useState(false);
+  const [lateTeam, setLateTeam] = useState(match.teams[0].id);
+  const [lateName, setLateName] = useState('');
+  const original = match.originalOvers ?? match.rules.overs;
+  const fair = firstInningsRuns !== null ? parTarget(firstInningsRuns, original, overs) : null;
   useEffect(() => {
     if (visible) {
       setOversDraft(match.rules.overs);
+      setTargetDraft(match.revisedTarget ?? (firstInningsRuns ?? 0) + 1);
       setArming(false);
+      setLateName('');
     }
-  }, [visible, match.rules.overs]);
+  }, [visible, match.rules.overs, match.revisedTarget, firstInningsRuns]);
+
   return (
     <Sheet visible={visible} onClose={onClose} title="Match">
-      <View style={{ gap: space.md, paddingBottom: space.md }}>
+      <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
+        <Text style={styles.sheetLabel}>Rain or bad light</Text>
         <Card style={{ paddingVertical: space.sm }}>
-          <Stepper label="Overs per innings" hint="Rain or bad light? Cut the overs." value={overs} min={1} max={50} onChange={setOversDraft} />
+          <Stepper label="Overs per innings" hint={`Started at ${original}`} value={overs} min={1} max={50} onChange={setOversDraft} />
         </Card>
         <Button
           variant="ghost"
@@ -328,14 +407,63 @@ function MatchMenu({
           disabled={overs === match.rules.overs}
           onPress={() => onOvers(overs)}
         />
-        <Text style={styles.editNote}>The target doesn’t change by itself. Agree a new one and end the innings if needed.</Text>
+        {firstInningsRuns !== null && (
+          <Card style={{ gap: space.sm }}>
+            <Stepper
+              label="Chase target"
+              hint={fair !== null && overs !== original ? `Fair target for ${overs} overs: ${fair}` : `${firstInningsRuns} + 1 as it stands`}
+              value={target}
+              min={1}
+              max={999}
+              onChange={setTargetDraft}
+            />
+            <View style={{ flexDirection: 'row', gap: space.sm }}>
+              {fair !== null && overs !== original && <Chip label={`Use ${fair}`} onPress={() => setTargetDraft(fair)} />}
+              <Chip label="Back to normal" onPress={() => setTargetDraft(firstInningsRuns + 1)} />
+            </View>
+            <Button
+              variant="ghost"
+              label={`Set the target to ${target}`}
+              icon="flag-outline"
+              disabled={target === (match.revisedTarget ?? firstInningsRuns + 1)}
+              onPress={() => onTarget(target === firstInningsRuns + 1 ? undefined : target)}
+            />
+          </Card>
+        )}
+
+        <Text style={styles.sheetLabel}>Late arrival</Text>
+        <Card style={{ gap: space.sm }}>
+          <Segmented value={lateTeam} onChange={setLateTeam} options={match.teams.map((t) => ({ value: t.id, label: t.name }))} />
+          <TextInput
+            value={lateName}
+            onChangeText={setLateName}
+            placeholder="Their name"
+            placeholderTextColor={colors.faint}
+            style={styles.input}
+            autoCapitalize="words"
+            maxLength={24}
+          />
+          <Button variant="ghost" label="Add to the side" icon="person-add-outline" disabled={!lateName.trim()} onPress={() => onAddPlayer(lateTeam, lateName.trim())} />
+        </Card>
+
+        <Text style={styles.sheetLabel}>Umpire’s call</Text>
+        <View style={{ flexDirection: 'row', gap: space.sm }}>
+          <View style={{ flex: 1 }}>
+            <Button variant="ghost" label={`+5 to ${s.battingTeam.name}`} icon="alert-circle-outline" onPress={() => onPenalty(5)} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button variant="ghost" label="Dead ball" icon="hand-left-outline" onPress={onDeadBall} />
+          </View>
+        </View>
+
         <Button
           variant="danger"
           label={arming ? 'Tap again to end it' : `End ${inningsLabel} now`}
           icon="flag-outline"
           onPress={() => (arming ? onEndInnings() : setArming(true))}
+          style={{ marginTop: space.sm }}
         />
-      </View>
+      </ScrollView>
     </Sheet>
   );
 }
@@ -617,6 +745,10 @@ function WicketSheet({
     setDelivery(preset === 'wide' || preset === 'noball' ? preset : 'legal');
   }, [visible, preset]);
 
+  const keeper = match.keepers?.[s.bowlingTeam.id];
+  useEffect(() => {
+    if (kind === 'stumped' && keeper) setFielder(keeper);
+  }, [kind, keeper]);
   const chooseWho = kind === 'runout' || kind === 'retired';
   const needsFielder = kind === 'caught' || kind === 'runout' || kind === 'stumped';
   const deliveries =
@@ -695,7 +827,7 @@ function WicketSheet({
               {s.bowlingTeam.players.map((p) => (
                 <Chip
                   key={p.id}
-                  label={p.id === s.bowler && kind === 'caught' ? `${p.name} (bowler)` : p.name}
+                  label={p.id === s.bowler && kind === 'caught' ? `${p.name} (bowler)` : p.id === keeper ? `${p.name} †` : p.name}
                   selected={fielder === p.id}
                   onPress={() => setFielder(fielder === p.id ? undefined : p.id)}
                 />
@@ -783,7 +915,11 @@ export default function LiveMatch() {
     setOpeners([]);
     saveMatch(prev);
   };
-  const freshChase = index === 1 && match.innings[1].events.length === 0;
+  // The start of the chase or of a super over: show the break screen before picking openers.
+  const freshChase = index >= 1 && match.innings[index].events.length === 0;
+  const superOver = index >= 2;
+  const inningsLabel = superOver ? 'the super over' : index === 0 ? 'the 1st innings' : 'the 2nd innings';
+  const firstDone = state.innings[0].status === 'done';
   const live = !state.result && s.status === 'live';
 
   let body = null;
@@ -849,6 +985,9 @@ export default function LiveMatch() {
           </View>
         </View>
         <View style={{ gap: space.md, marginTop: space.lg }}>
+          {state.result === 'Match tied' && match.innings.length < 4 && (
+            <Button label="Play a super over" icon="flash" onPress={() => saveMatch(startSuperOver(match))} />
+          )}
           <Button
             label="Full scorecard"
             icon="list"
@@ -889,12 +1028,24 @@ export default function LiveMatch() {
           <FadeIn>
             <View style={styles.breakCard}>
               <PitchStripes />
-              <Text style={styles.breakEyebrow}>INNINGS BREAK</Text>
-              <Text style={styles.breakTarget}>{s.target}</Text>
-              <Text style={styles.breakTitle}>{s.battingTeam.name} need this to win</Text>
+              <Text style={styles.breakEyebrow}>{superOver ? 'SUPER OVER · ONE OVER, TWO WICKETS' : 'INNINGS BREAK'}</Text>
+              {s.target !== null ? (
+                <>
+                  <Text style={styles.breakTarget}>{s.target}</Text>
+                  <Text style={styles.breakTitle}>{s.battingTeam.name} need this to win</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.breakTarget, { fontSize: 72, lineHeight: 72 }]}>TIED</Text>
+                  <Text style={styles.breakTitle}>{s.battingTeam.name} bat first</Text>
+                </>
+              )}
               <Text style={styles.breakSub}>
-                {state.innings[0].battingTeam.name} made {state.innings[0].runs}/{state.innings[0].wickets} in{' '}
-                {oversText(state.innings[0].legalBalls)} overs · {Math.max(0, s.maxBalls)} balls to get them
+                {superOver
+                  ? s.target !== null
+                    ? `${state.innings[2].battingTeam.name} made ${state.innings[2].runs}/${state.innings[2].wickets} in their over`
+                    : 'The side that batted second goes first. Most runs in the over wins it.'
+                  : `${state.innings[0].battingTeam.name} made ${state.innings[0].runs}/${state.innings[0].wickets} in ${oversText(state.innings[0].legalBalls)} overs · ${Math.max(0, s.maxBalls)} balls to get them${match.revisedTarget ? ' (revised target)' : ''}`}
               </Text>
             </View>
           </FadeIn>
@@ -1005,6 +1156,8 @@ export default function LiveMatch() {
       <BallEditSheet
         ball={editing}
         event={editing?.event !== undefined ? (match.innings[index].events[editing.event] as BallEvent) : null}
+        match={match}
+        s={s}
         onClose={() => setEditing(null)}
         onSave={(next) => {
           if (editing?.event === undefined) return;
@@ -1016,11 +1169,32 @@ export default function LiveMatch() {
       <MatchMenu
         visible={menu}
         match={match}
-        inningsLabel={index === 0 ? 'the 1st innings' : 'the 2nd innings'}
+        s={s}
+        firstInningsRuns={firstDone && !superOver ? state.innings[0].runs : null}
+        inningsLabel={inningsLabel}
         onClose={() => setMenu(false)}
         onOvers={(o) => {
           saveMatch(setOvers(match, o));
           toast.show(`Now ${o} overs an innings`, 'success');
+        }}
+        onTarget={(t) => {
+          saveMatch({ ...match, revisedTarget: t });
+          toast.show(t ? `Chase target is now ${t}` : 'Target back to normal', 'success');
+          setMenu(false);
+        }}
+        onAddPlayer={(teamId, name) => {
+          saveMatch(addPlayer(match, teamId, { id: newId(), name }));
+          toast.show(`${name} added`, 'success');
+          setMenu(false);
+        }}
+        onPenalty={(runs) => {
+          push({ type: 'penalty', runs });
+          toast.show(`${runs} penalty runs to ${s.battingTeam.name}`, 'info');
+          setMenu(false);
+        }}
+        onDeadBall={() => {
+          push({ type: 'deadBall' });
+          toast.show('Dead ball. Nothing counts.', 'info');
           setMenu(false);
         }}
         onEndInnings={() => {
@@ -1221,6 +1395,17 @@ const styles = StyleSheet.create({
   editNowText: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   editNote: { color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 19 },
   editRuns: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  input: {
+    color: colors.text,
+    fontSize: 15,
+    fontFamily: font.medium,
+    backgroundColor: colors.bg,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
+    height: 44,
+  },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
