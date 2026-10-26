@@ -2,13 +2,14 @@ import { File, Paths } from 'expo-file-system';
 import { createContext, createElement, useCallback, useContext, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import type { Auction } from '../engine/auction.ts';
-import { DEFAULT_SQUAD, type SquadPlayer } from '../engine/squad.ts';
+import { DEFAULT_SQUAD, TEAMS_REVISION, updateSquad, type SquadPlayer } from '../engine/squad.ts';
 import { setRegulars } from '../engine/stats.ts';
 
 // The squad and the auctions, kept on this phone. Read synchronously at start-up, like the preferences, so the
 // regulars are known before any stats are worked out.
 
-type Saved = { squad: SquadPlayer[]; auctions: Auction[] };
+/** `revision`: which version of the usual sides the squad was last brought up to. */
+type Saved = { squad: SquadPlayer[]; auctions: Auction[]; revision?: number };
 
 const KEY = 'crease.squad.v1';
 const fileFor = () => new File(Paths.document, 'crease-squad.json');
@@ -25,8 +26,13 @@ function read(): Saved {
           : null;
     const saved = raw ? (JSON.parse(raw) as Partial<Saved>) : {};
     // Squads saved before players had an auction category take the usual one for each regular.
-    const squad = (saved.squad ?? DEFAULT_SQUAD).map((p) => (p.category ? p : { ...p, category: DEFAULT_SQUAD.find((d) => d.id === p.id)?.category }));
-    return { squad, auctions: saved.auctions ?? [] };
+    let squad = (saved.squad ?? DEFAULT_SQUAD).map((p) => (p.category ? p : { ...p, category: DEFAULT_SQUAD.find((d) => d.id === p.id)?.category }));
+    // New sides since this phone last looked: rename and add the players they bring, once.
+    if ((saved.revision ?? 1) < TEAMS_REVISION) {
+      squad = updateSquad(squad);
+      write({ squad, auctions: saved.auctions ?? [], revision: TEAMS_REVISION });
+    }
+    return { squad, auctions: saved.auctions ?? [], revision: TEAMS_REVISION };
   } catch {
     return { squad: DEFAULT_SQUAD, auctions: [] };
   }

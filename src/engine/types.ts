@@ -3,7 +3,8 @@ export type Role = 'bat' | 'bowl' | 'ar' | 'wk';
 /** `common`: plays for both sides (a joker when numbers are short); counted once in the stats. */
 export type Player = { id: string; name: string; common?: boolean; role?: Role };
 
-export type Team = { id: string; name: string; players: Player[] };
+/** `captain` and `keeper` are player ids: who usually leads and keeps for a saved side. */
+export type Team = { id: string; name: string; players: Player[]; captain?: string; keeper?: string };
 
 export type Rules = {
   overs: number;

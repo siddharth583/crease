@@ -37,8 +37,8 @@ function draftFrom(team: Team, match?: Match): Draft {
   return {
     name: team.name,
     players: own.map((p) => (isPlaceholderName(p.name) ? '' : p.name)),
-    captain: at(match?.captains?.[team.id]),
-    keeper: at(match?.keepers?.[team.id]),
+    captain: at(match?.captains?.[team.id] ?? team.captain),
+    keeper: at(match?.keepers?.[team.id] ?? team.keeper),
   };
 }
 
@@ -303,7 +303,11 @@ export default function NewMatch() {
       );
     match.captains = pick('captain');
     match.keepers = pick('keeper');
-    rememberTeams(built.filter((t, i) => teams[i].name.trim()));
+    rememberTeams(
+      built
+        .filter((t, i) => teams[i].name.trim())
+        .map((t) => ({ ...t, captain: match.captains?.[t.id], keeper: match.keepers?.[t.id] })),
+    );
     saveMatch(match);
     if (fromAuction) saveAuction({ ...fromAuction, matchId: match.id });
     tap('success');

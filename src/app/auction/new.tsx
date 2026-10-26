@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, tap } from '../../components/ui.tsx';
 import { auctionState, DEFAULT_BASES, money, moneyShort, newAuction, reserveFor, type AuctionSettings } from '../../engine/auction.ts';
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_NAME, categoryOf, overall, type Category, type SquadPlayer } from '../../engine/squad.ts';
-import { newId } from '../../store/matches.tsx';
+import { ratedSquad } from '../../engine/ratings.ts';
+import { newId, useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { colors, edge, font, radius, space, type } from '../../theme.ts';
 
@@ -48,7 +49,10 @@ function CaptainPicker({ label, players, value, other, onChange }: { label: stri
 
 export default function NewAuction() {
   const insets = useSafeAreaInsets();
-  const { squad, auctions, saveAuction } = useSquad();
+  const { squad: kept, auctions, saveAuction } = useSquad();
+  const { matches } = useMatches();
+  // The stars from their matches, unless set by hand: what the auction prices players by.
+  const squad = useMemo(() => ratedSquad(matches, kept), [matches, kept]);
   const best = [...squad].sort((a, b) => overall(b) - overall(a));
   const [guests, setGuests] = useState<SquadPlayer[]>([]);
   const [playing, setPlaying] = useState<Set<string>>(() => new Set(squad.map((p) => p.id)));

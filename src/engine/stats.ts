@@ -36,7 +36,19 @@ export type Career = {
   history: MatchLine[];
 };
 
-const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+const squash = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/** Players who now go by a longer name: matches scored under the old one are theirs too. */
+export const RENAMED: Record<string, string> = { chirag: 'Chirag Taneja', rohit: 'Rohit Kumar' };
+
+/** A name as the stats know it: trimmed, any case, and an old short name read as the full one. */
+const norm = (s: string) => {
+  const n = squash(s);
+  return RENAMED[n] ? squash(RENAMED[n]) : n;
+};
+
+/** How a name is shown: the full name for a player who was renamed. */
+export const displayName = (s: string) => RENAMED[squash(s)] ?? s.trim();
 
 /** Names the setup screen fills in for blanks: these could be anyone, so they get no career. */
 export const isPlaceholder = (name: string) => /^player \d+$/.test(norm(name));
@@ -94,7 +106,7 @@ export function careerStats(matches: Match[]): Career[] {
           careers.set(key, c);
         }
         // Latest spelling wins for display.
-        c.name = p.name.trim();
+        c.name = displayName(p.name);
         c.team = p.common ? COMMON_TEAM : team.name.trim();
         // A common player is in both squads: one match, not two.
         if (c.history[0]?.matchId === match.id) continue;

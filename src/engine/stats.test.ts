@@ -54,7 +54,7 @@ const twoGames = () => [
 
 test('adds a player up across matches by team and name', () => {
   const stats = careerStats(twoGames());
-  const rohit = stats.find((c) => c.name === 'Rohit')!;
+  const rohit = stats.find((c) => c.name === 'Rohit Kumar')!;
   assert.equal(rohit.matches, 2);
   assert.equal(rohit.batting.innings, 2);
   assert.equal(rohit.batting.runs, 10);

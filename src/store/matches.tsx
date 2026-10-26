@@ -1,12 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { mergeMatches } from '../engine/backup.ts';
-import { DEFAULT_TEAMS } from '../engine/squad.ts';
+import { DEFAULT_TEAMS, TEAMS_REVISION } from '../engine/squad.ts';
 import type { Match, Team } from '../engine/types.ts';
 
 // Everything lives on the phone (grounds often have no signal). Match files and backups move it between phones.
 const MATCHES_KEY = 'crease.matches.v1';
 const TEAMS_KEY = 'crease.teams.v1';
+const TEAMS_REVISION_KEY = 'crease.teamsRevision.v1';
 /** Left behind by the club sync that used to be here; cleared on start. */
 const OLD_KEYS = ['crease.club.v1', 'crease.dirty.v1'];
 
@@ -50,10 +51,14 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
   latest.current = matches;
 
   useEffect(() => {
-    Promise.all([load<Match[]>(MATCHES_KEY, []), load<Team[]>(TEAMS_KEY, [])]).then(([m, t]) => {
+    Promise.all([load<Match[]>(MATCHES_KEY, []), load<Team[]>(TEAMS_KEY, []), load<number>(TEAMS_REVISION_KEY, 1)]).then(([m, t, revision]) => {
       setMatches(m);
-      // A phone with no saved teams (a new phone, or a new web address) starts with the club's two usual sides.
-      setSavedTeams(t.length ? t : DEFAULT_TEAMS);
+      // A phone with no saved teams (a new phone, or a new web address) starts with the club's two usual sides; one
+      // that has them gets the new line-ups of those two once, when the sides change. Other saved teams stay.
+      if (!t.length) setSavedTeams(DEFAULT_TEAMS);
+      else if (revision < TEAMS_REVISION) setSavedTeams(mergeTeams(t, DEFAULT_TEAMS));
+      else setSavedTeams(t);
+      if (revision < TEAMS_REVISION) AsyncStorage.setItem(TEAMS_REVISION_KEY, JSON.stringify(TEAMS_REVISION)).catch(() => {});
       setReady(true);
     });
     AsyncStorage.multiRemove(OLD_KEYS).catch(() => {});

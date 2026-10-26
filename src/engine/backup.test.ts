@@ -35,7 +35,7 @@ test('a match file round-trips and carries the player stats with it', () => {
   assert.equal(back.matches.length, 1);
   assert.equal(back.teams.length, 2);
   assert.equal(back.skipped, 0);
-  const rohit = careerStats(back.matches).find((c) => c.name === 'Rohit')!;
+  const rohit = careerStats(back.matches).find((c) => c.name === 'Rohit Kumar')!;
   assert.equal(rohit.batting.runs, 8);
 });
 

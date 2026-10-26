@@ -20,6 +20,8 @@ export type SquadPlayer = {
   keeper?: boolean;
   /** Price band in the auction; worked out from the role when not set. */
   category?: Category;
+  /** Stars kept as set here, rather than worked out from their matches. */
+  manual?: boolean;
 };
 
 export const ROLE_LABEL: Record<Role, string> = { bat: 'Batter', bowl: 'Bowler', ar: 'All-rounder', wk: 'Keeper' };
@@ -52,10 +54,15 @@ export const DEFAULT_SQUAD: SquadPlayer[] = (
     { name: 'Ashwani Singh', role: 'ar', bat: 4, bowl: 4, field: 4 },
     { name: 'Karandeep Singh', role: 'bowl', bat: 1, bowl: 4, field: 3 },
     { name: 'Navjot Singh', role: 'bat', bat: 3, bowl: 1, field: 3, keeper: true },
-    { name: 'Chirag', role: 'ar', bat: 3, bowl: 3, field: 3 },
+    { name: 'Chirag Taneja', role: 'ar', bat: 3, bowl: 3, field: 3 },
     { name: 'Charanjeet', role: 'ar', bat: 2, bowl: 2, field: 2, category: 'other' },
     { name: 'Rajeev', role: 'bat', bat: 2, bowl: 1, field: 2, category: 'other' },
-    { name: 'Rohit', role: 'bowl', bat: 1, bowl: 3, field: 2 },
+    { name: 'Rohit Kumar', role: 'bowl', bat: 1, bowl: 3, field: 2 },
+    // Joined for the new sides (October 2026): rated as they play.
+    { name: 'Mahika Kaushik', role: 'ar', bat: 3, bowl: 3, field: 3 },
+    { name: 'Ajayvir Singh Ghai', role: 'ar', bat: 3, bowl: 3, field: 3 },
+    { name: 'Vivek Kumar', role: 'ar', bat: 3, bowl: 3, field: 3 },
+    { name: 'Sejal Chauhan', role: 'ar', bat: 3, bowl: 3, field: 3 },
   ] as (Omit<SquadPlayer, 'id' | 'bat' | 'bowl' | 'field'> & { bat: number; bowl: number; field: number })[]
 ).map((p, i) => ({
   ...p,
@@ -71,8 +78,39 @@ export function overall(p: Pick<SquadPlayer, 'bat' | 'bowl' | 'field'>): number 
   return Math.round((best * 0.6 + second * 0.25 + p.field * 0.15) * 10) / 10;
 }
 
-/** The club's two usual sides, for a phone that has none saved yet: the first eight regulars and the last eight. */
-export const DEFAULT_TEAMS: Team[] = [
-  { id: 'copan-a', name: 'Copan A', players: DEFAULT_SQUAD.slice(0, 8).map((p, i) => ({ id: `copan-a-p${i + 1}`, name: p.name, role: p.role })) },
-  { id: 'copan-b', name: 'Copan B', players: DEFAULT_SQUAD.slice(8).map((p, i) => ({ id: `copan-b-p${i + 1}`, name: p.name, role: p.role })) },
+/** The sides as they are now, captain first. Bump `TEAMS_REVISION` when they change, so phones pick them up. */
+const SIDES: { id: string; name: string; players: string[]; captain: string; keeper?: string }[] = [
+  {
+    id: 'copan-a',
+    name: 'Copan A',
+    players: ['Nihal Walia', 'Karandeep Singh', 'Harleen Singh', 'Nitin Parmar', 'Chirag Taneja', 'Navjot Singh', 'Rohit Kumar', 'Mahika Kaushik', 'Satnoor Singh'],
+    captain: 'Nihal Walia',
+    keeper: 'Nihal Walia',
+  },
+  {
+    id: 'copan-b',
+    name: 'Copan B',
+    players: ['Ashwani Singh', 'Rishav Bhattacharjee', 'Siddharth Singh', 'Anshul Rana', 'Ajayvir Singh Ghai', 'Vivek Kumar', 'Charanjeet', 'Supreet Guleria', 'Sejal Chauhan', 'Rajeev'],
+    captain: 'Ashwani Singh',
+  },
 ];
+
+/** Which version of the usual sides a phone has. */
+export const TEAMS_REVISION = 2;
+
+/** The club's two usual sides: for a new phone, and to bring a phone's saved Copan A and B up to date. */
+export const DEFAULT_TEAMS: Team[] = SIDES.map((side) => {
+  const players = side.players.map((name, i) => ({ id: `${side.id}-p${i + 1}`, name, role: DEFAULT_SQUAD.find((p) => p.name === name)?.role }));
+  const idOf = (name?: string) => players.find((p) => p.name === name)?.id;
+  return { id: side.id, name: side.name, players, captain: idOf(side.captain), keeper: idOf(side.keeper) };
+});
+
+/** A saved squad brought up to date: renamed players get their full names, and new regulars join. */
+export function updateSquad(squad: SquadPlayer[]): SquadPlayer[] {
+  const renamed = squad.map((p) => {
+    const full = { chirag: 'Chirag Taneja', rohit: 'Rohit Kumar' }[p.name.trim().toLowerCase()];
+    return full ? { ...p, name: full } : p;
+  });
+  const has = new Set(renamed.map((p) => p.name.trim().toLowerCase()));
+  return [...renamed, ...DEFAULT_SQUAD.filter((p) => !has.has(p.name.toLowerCase()))];
+}

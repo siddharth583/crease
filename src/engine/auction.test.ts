@@ -104,11 +104,12 @@ test('each category opens at its own base price', () => {
   assert.equal(nextBid(a, null), s.opening);
   assert.equal(basePrice(a.settings, roster.find((x) => x.name === 'Moses Wiliams')!), 3_000);
   assert.equal(basePrice(a.settings, roster.find((x) => x.name === 'Nihal Walia')!), 10_000);
-  assert.equal(basePrice(a.settings, roster.find((x) => x.name === 'Rohit')!), 6_000);
+  assert.equal(basePrice(a.settings, roster.find((x) => x.name === 'Rohit Kumar')!), 6_000);
 });
 
 test('a captain keeps back the cheapest base prices still to come', () => {
-  const roster = DEFAULT_SQUAD;
+  // The squad as it was first described: sixteen, eight a side.
+  const roster = DEFAULT_SQUAD.slice(0, 16);
   const settings = { purse: 100_000, base: 5_000, step: 1_000, bases: { ar: 10_000, bat: 7_000, bowl: 7_000, other: 3_000 } };
   const a = newAuction('a4', roster, [
     { name: 'A', captain: roster[0].id },
