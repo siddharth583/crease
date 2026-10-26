@@ -3,13 +3,12 @@ import { router } from 'expo-router';
 import { useMemo, useState, type ComponentProps } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BallChip, Card, Chip, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../components/ui.tsx';
+import { BallChip, Card, Chip, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../components/ui.tsx';
 import { CountUp, GrowBar, Tug } from '../components/motion.tsx';
-import { recordBookHtml } from '../engine/recordBook.ts';
 import { FaceOff } from '../components/FaceOff.tsx';
 import { headToHead, matchups, records, teamNames, verdict } from '../engine/records.ts';
 import { useMatches } from '../store/matches.tsx';
-import { savePdf } from '../store/files.ts';
+import { useMatchFiles } from '../store/useMatchFiles.ts';
 import { useSquad } from '../store/squad.ts';
 import { plural } from '../engine/text.ts';
 import { colors, edge, font, hero, radius, space, type, HERO_BG } from '../theme.ts';
@@ -127,28 +126,30 @@ export default function Records() {
   const leaning = duels.filter((d) => lean === 'all' || verdict(d).side === lean);
   const toast = useToast();
   const [saving, setSaving] = useState(false);
-  const exportBook = async () => {
-    if (!matches.length || saving) return;
+  const [exporting, setExporting] = useState(false);
+  const { exportRecordBook, importFile } = useMatchFiles(toast.show);
+  const exportBook = async (format: 'pdf' | 'file') => {
+    if (saving) return;
+    setExporting(false);
     setSaving(true);
-    try {
-      const stamp = new Date().toISOString().slice(0, 10);
-      const result = await savePdf(`crease-record-book-${stamp}.pdf`, recordBookHtml(matches));
-      toast.show(result === 'downloaded' ? 'Choose “Save as PDF” in the print window' : 'Record book PDF ready to send', 'success');
-    } catch {
-      toast.show('Couldn’t make the PDF. Try again.', 'error');
-    } finally {
-      setSaving(false);
-    }
+    await exportRecordBook(format);
+    setSaving(false);
   };
 
   return (
     <Screen>
       <View style={styles.header}>
         <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/players'))} />
-        <PressableScale accessibilityLabel="Export the record book as a PDF" disabled={!matches.length || saving} onPress={exportBook} style={styles.export}>
-          <Ionicons name="document-text-outline" size={17} color={colors.onAccent} />
-          <Text style={styles.exportText}>{saving ? 'Making PDF…' : 'Export PDF'}</Text>
-        </PressableScale>
+        <View style={styles.headerActions}>
+          <PressableScale accessibilityLabel="Import a record book or match file" onPress={() => importFile('The record book is up to date.')} style={styles.importPill}>
+            <Ionicons name="download-outline" size={17} color={colors.text} />
+            <Text style={styles.importText}>Import</Text>
+          </PressableScale>
+          <PressableScale accessibilityLabel="Export the record book" disabled={!matches.length || saving} onPress={() => setExporting(true)} style={styles.export}>
+            <Ionicons name="share-outline" size={17} color={colors.onAccent} />
+            <Text style={styles.exportText}>{saving ? 'Exporting…' : 'Export'}</Text>
+          </PressableScale>
+        </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }} stickyHeaderIndices={[2]}>
         <Text style={styles.pageTitle}>
@@ -365,6 +366,31 @@ export default function Records() {
           </>
         )}
       </ScrollView>
+      <Sheet visible={exporting} onClose={() => setExporting(false)} title="Export record book">
+        <View style={{ gap: space.sm }}>
+          {(
+            [
+              { format: 'pdf', icon: 'document-text', title: 'PDF', body: 'Every record, to read, print or send to anyone' },
+              { format: 'file', icon: 'swap-horizontal', title: 'Record book file', body: `All ${plural(matches.length, 'match', 'matches')}, to import into Crease on another phone` },
+            ] as { format: 'pdf' | 'file'; icon: IconName; title: string; body: string }[]
+          ).map((o) => (
+            <PressableScale key={o.format} scaleTo={0.98} onPress={() => exportBook(o.format)} style={styles.option}>
+              <View style={styles.optionIcon}>
+                <Ionicons name={o.icon} size={20} color={colors.accentInk} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.optionTitle}>{o.title}</Text>
+                <Text style={styles.optionBody}>{o.body}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.faint} />
+            </PressableScale>
+          ))}
+          <Text style={styles.optionNote}>
+            Importing a record book file adds its matches to yours; matches you already have are kept, and every record is
+            worked out again.
+          </Text>
+        </View>
+      </Sheet>
       {toast.element}
     </Screen>
   );
@@ -372,6 +398,33 @@ export default function Records() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  importPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.surfaceHi,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    height: 38,
+  },
+  importText: { color: colors.text, fontSize: 13, fontFamily: font.heavy },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: colors.surfaceHi,
+    borderWidth: 1,
+    borderColor: colors.borderHi,
+    borderRadius: radius.lg,
+    padding: space.md,
+  },
+  optionIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentDim },
+  optionTitle: { fontFamily: font.poster, fontSize: 17, color: colors.text },
+  optionBody: { color: colors.muted, fontSize: 12, fontFamily: font.medium, marginTop: 2 },
+  optionNote: { color: colors.muted, fontSize: 12, fontFamily: font.medium, lineHeight: 18 },
   export: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: space.md, height: 38, ...edge },
   exportText: { color: colors.onAccent, fontSize: 13, fontFamily: font.heavy },
   pageTitle: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },

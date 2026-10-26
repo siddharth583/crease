@@ -64,11 +64,21 @@ export async function savePdf(name: string, html: string): Promise<SaveResult> {
     doc.open();
     doc.write(html);
     doc.close();
-    // Let the fonts load, then print; the frame goes once the dialog closes.
+    // "Save as PDF" names the file after the page's title, so both carry the file's name while the dialog is open.
+    const title = name.replace(/\.pdf$/i, '');
+    const was = document.title;
+    doc.title = title;
+    document.title = title;
+    const restore = () => {
+      document.title = was;
+      frame.remove();
+    };
+    frame.contentWindow!.addEventListener('afterprint', () => setTimeout(restore, 500), { once: true });
+    // Let the fonts load, then print; the frame goes once the dialog closes (or after a minute, if no one says).
     await new Promise((r) => setTimeout(r, 600));
     frame.contentWindow!.focus();
     frame.contentWindow!.print();
-    setTimeout(() => frame.remove(), 60_000);
+    setTimeout(restore, 60_000);
     return 'downloaded';
   }
 

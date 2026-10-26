@@ -316,7 +316,7 @@ export default function Home() {
           <SectionLabel>Match files</SectionLabel>
           <View style={styles.files}>
             <View style={{ flex: 1 }}>
-              <PressableScale onPress={importFile} style={styles.fileButton}>
+              <PressableScale onPress={() => importFile()} style={styles.fileButton}>
                 <View style={styles.fileIcon}>
                   <Ionicons name="push-outline" size={18} color={colors.accentInk} />
                 </View>

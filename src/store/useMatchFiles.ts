@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
-import { backupFileName, makeBackup, parseBackup } from '../engine/backup.ts';
+import { backupFileName, makeBackup, parseBackup, recordBookFileName } from '../engine/backup.ts';
+import { recordBookHtml } from '../engine/recordBook.ts';
 import type { Match } from '../engine/types.ts';
 import type { ToastTone } from '../components/ui.tsx';
 import { matchReportHtml } from '../engine/report.ts';
@@ -42,7 +43,29 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
     [notify, matches],
   );
 
-  const importFile = useCallback(async () => {
+  /** The record book: a PDF to read, or a file of every match that loads the whole book on another phone. */
+  const exportRecordBook = useCallback(
+    async (format: 'pdf' | 'file') => {
+      if (!matches.length) return notify('No matches yet: the record book fills up as you play.', 'info');
+      try {
+        if (format === 'pdf') {
+          const result = await savePdf(recordBookFileName(new Date(), 'pdf'), recordBookHtml(matches));
+          if (result === 'downloaded') notify('Choose “Save as PDF” in the print window');
+          if (result === 'shared') notify('Record book PDF ready to send');
+        } else {
+          const result = await saveTextFile(recordBookFileName(new Date(), 'json'), JSON.stringify(makeBackup(matches, savedTeams)));
+          if (result === 'downloaded') notify(`Record book saved to your downloads (${plural(matches.length, 'match')})`);
+          if (result === 'shared') notify('Record book file ready to send');
+        }
+      } catch {
+        notify(format === 'pdf' ? 'Couldn’t make the PDF. Try again.' : 'Couldn’t export. Try again.', 'error');
+      }
+    },
+    [matches, savedTeams, notify],
+  );
+
+  /** `done` says what the import brought up to date: the player stats, or the record book. */
+  const importFile = useCallback(async (done = 'Player stats are up to date.') => {
     try {
       const text = await pickTextFile();
       if (text === null) return;
@@ -50,11 +73,11 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
       if (!file.matches.length) return notify('There are no matches in that file.', 'info');
       const { added, updated } = importMatches(file.matches, file.teams);
       const parts = [added && `${plural(added, 'match')} added`, updated && `${plural(updated, 'match')} updated`].filter(Boolean);
-      notify(parts.length ? `${parts.join(', ')}. Player stats are up to date.` : 'You already have everything in that file.', parts.length ? 'success' : 'info');
+      notify(parts.length ? `${parts.join(', ')}. ${done}` : 'You already have everything in that file.', parts.length ? 'success' : 'info');
     } catch (e) {
       notify(e instanceof Error && e.message.includes('Crease') ? e.message : 'Couldn’t read that file.', 'error');
     }
   }, [importMatches, notify]);
 
-  return { exportMatches, exportPdf, exportAll: () => exportMatches(matches), importFile };
+  return { exportMatches, exportPdf, exportAll: () => exportMatches(matches), exportRecordBook, importFile };
 }

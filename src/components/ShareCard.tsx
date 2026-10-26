@@ -8,6 +8,7 @@ import type { Match } from '../engine/types.ts';
 import { shareImage } from '../store/files.ts';
 import { font } from '../theme.ts';
 import { Button, GhostWord, PitchStripes, Sheet, type ToastTone } from './ui.tsx';
+import { pictureFileName } from '../engine/backup.ts';
 
 // The poster people actually send round the group: always in the night colours, whatever the app theme, so
 // every card looks the same in the chat.
@@ -124,8 +125,7 @@ export function ShareCardSheet({
     setBusy(true);
     try {
       const uri = await captureRef(ref, { format: 'png', quality: 1, result: Platform.OS === 'web' ? 'data-uri' : 'tmpfile' });
-      const [a, b] = match.teams;
-      const result = await shareImage(uri, `crease-${a.name}-vs-${b.name}.png`.toLowerCase().replace(/[^a-z0-9.]+/g, '-'));
+      const result = await shareImage(uri, pictureFileName(match));
       if (result === 'downloaded') notify('Picture saved to your downloads');
       onClose();
     } catch {

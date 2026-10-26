@@ -72,9 +72,15 @@ test('importing adds new matches, moves matches forward, never back, and is safe
 test('file names say what is inside', () => {
   const m = match('m1', 1, opening);
   const day = new Date('2026-10-23T10:00:00Z');
-  assert.equal(backupFileName([m], day), 'crease-strikers-vs-royals-2026-10-23.json');
-  assert.equal(backupFileName([m, m], day), 'crease-2-matches-2026-10-23.json');
-  assert.equal(backupFileName([m], day, 'pdf'), 'crease-strikers-vs-royals-2026-10-23.pdf');
+  const played = { ...m, createdAt: new Date(2026, 9, 21, 18).getTime() };
+  assert.equal(backupFileName([played], day), 'Strikers vs Royals - 21 Oct 2026.json', 'the day it was played');
+  assert.equal(backupFileName([m, m], day), 'Crease - 2 matches - 23 Oct 2026.json');
+  assert.equal(backupFileName([played], day, 'pdf'), 'Strikers vs Royals - 21 Oct 2026.pdf');
+  const series = { ...played, series: { id: 's', name: 'Copan Cup', of: 5, number: 3 } };
+  assert.equal(backupFileName([series], day), 'Copan Cup - Match 3 - Strikers vs Royals - 21 Oct 2026.json');
+  assert.equal(backupFileName([series, series], day), 'Copan Cup - 2 matches - 23 Oct 2026.json');
+  const odd = { ...played, teams: [{ ...played.teams[0], name: 'A/B: "XI"' }, played.teams[1]] as Match['teams'] };
+  assert.equal(backupFileName([odd], day), 'A B XI vs Royals - 21 Oct 2026.json', 'no characters a file name can’t hold');
 });
 
 test('the printable report has a page per match, with names escaped', async () => {

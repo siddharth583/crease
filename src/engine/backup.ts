@@ -19,21 +19,37 @@ export function makeBackup(matches: Match[], teams: Team[]): Backup {
   return { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: new Date().toISOString(), matches, teams };
 }
 
-const slug = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 24);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** "26 Oct 2026": the same on every phone, whatever its language. */
+export const fileDate = (when: number | Date) => {
+  const d = new Date(when);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+};
+
+/** A name as people would write it, without the characters phones and computers refuse in file names. */
+const clean = (s: string) => s.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * What an exported file is called. One match: its teams and the day it was played, with the series and match number
+ * when it's part of one ("Copan Cup - Match 3 - Copan A vs Copan B - 26 Oct 2026"). Several: how many, and when.
+ */
 export function backupFileName(matches: Match[], when = new Date(), ext: 'json' | 'pdf' = 'json') {
-  const date = when.toISOString().slice(0, 10);
   if (matches.length === 1) {
-    const [a, b] = matches[0].teams;
-    return `crease-${slug(a.name)}-vs-${slug(b.name)}-${date}.${ext}`;
+    const m = matches[0];
+    const [a, b] = m.teams;
+    const series = m.series ? `${m.series.name} - Match ${m.series.number} - ` : '';
+    return `${clean(`${series}${a.name} vs ${b.name} - ${fileDate(m.createdAt)}`)}.${ext}`;
   }
-  return `crease-${matches.length}-matches-${date}.${ext}`;
+  const series = new Set(matches.map((m) => m.series?.id)).size === 1 ? matches[0].series?.name : undefined;
+  return `${clean(`${series ?? 'Crease'} - ${matches.length} matches - ${fileDate(when)}`)}.${ext}`;
 }
+
+/** The record book, as a PDF to read or a file to load on another phone. */
+export const recordBookFileName = (when = new Date(), ext: 'json' | 'pdf' = 'pdf') => `Crease Record Book - ${fileDate(when)}.${ext}`;
+
+/** The result picture of a match. */
+export const pictureFileName = (m: Match) => `${clean(`${m.teams[0].name} vs ${m.teams[1].name} - Result - ${fileDate(m.createdAt)}`)}.png`;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
