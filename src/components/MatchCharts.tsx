@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
   pRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
   pWicket: { width: 16, color: colors.faint, fontFamily: font.posterBlack, fontSize: 16 },
   pNames: { flex: 1, color: colors.text, fontSize: 14, fontFamily: font.bold },
-  pRuns: { fontFamily: font.posterBlack, fontSize: 20, color: colors.text, ...type.num },
+  pRuns: { fontFamily: font.posterBlack, fontSize: 16, color: colors.text, ...type.num },
   pBalls: { fontFamily: font.poster, fontSize: 13, color: colors.faint },
   track: { height: 6, borderRadius: 3, backgroundColor: ink(0.08), marginTop: 4, marginLeft: 24, overflow: 'hidden' },
   fill: { height: '100%', backgroundColor: colors.accent, borderRadius: 3 },

@@ -105,7 +105,7 @@ export default function SquadScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>
-            THE <Text style={{ color: colors.accentInk }}>SQUAD</Text>
+            The squad
           </Text>
           <Text style={styles.lead}>
             Your {squad.length} regulars. Their stats follow them whichever side they play for, and the ratings set them up for the auction.
@@ -154,7 +154,7 @@ export default function SquadScreen() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', paddingHorizontal: space.lg, paddingVertical: space.sm },
-  title: { fontFamily: font.posterBlack, fontSize: 52, lineHeight: 52, color: colors.text, letterSpacing: -1 },
+  title: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
   lead: { color: colors.muted, fontSize: 14, fontFamily: font.medium, marginTop: 4, lineHeight: 20 },
   hint: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
   addCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.lg, padding: space.sm, paddingLeft: space.sm },
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   row: { padding: 0, overflow: 'hidden' },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md },
   badge: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center' },
-  badgeText: { fontFamily: font.posterBlack, fontSize: 20, color: colors.accentInk, ...type.num },
+  badgeText: { fontFamily: font.posterBlack, fontSize: 16, color: colors.accentInk, ...type.num },
   name: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   wk: { color: colors.cyan, fontSize: 11, fontFamily: font.heavy },
   mini: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 3, flexWrap: 'wrap' },

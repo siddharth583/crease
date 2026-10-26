@@ -155,19 +155,19 @@ export function recordBookHtml(matches: Match[]): string {
 ${REPORT_HEAD}
 <style>
   .part { margin-top: 18px; }
-  .part h2 { font-family: 'Barlow Condensed', 'Arial Narrow', Impact, sans-serif; font-style: italic; font-weight: 900; text-transform: uppercase; font-size: 26px; margin: 0 2px 8px; break-after: avoid; }
-  .rb-title { font-family: 'Barlow Condensed', 'Arial Narrow', Impact, sans-serif; font-style: italic; font-weight: 900; text-transform: uppercase; font-size: 62px; line-height: .95; margin-top: 6px; position: relative; z-index: 1; }
+  .part h2 { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 26px; margin: 0 2px 8px; break-after: avoid; }
+  .rb-title { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 62px; line-height: .95; margin-top: 6px; position: relative; z-index: 1; }
   .rb-cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 8px; margin-top: 14px; position: relative; z-index: 1; }
-  .rb-v { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 900; font-size: 30px; line-height: 1; color: #F4F4EE; }
+  .rb-v { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 30px; line-height: 1; color: #F4F4EE; }
   .rb-k { font-size: 8px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: #9C9C94; margin-top: 2px; }
   .boards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .rb-board { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; break-inside: avoid; }
   .rb-board.wide { grid-column: 1 / -1; }
   .rb-board > .label { padding: 9px 12px 7px; }
   .holder { display: flex; align-items: center; gap: 10px; justify-content: space-between; background: #F3FBD6; padding: 9px 12px; }
-  .h-name { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 900; text-transform: uppercase; font-size: 18px; line-height: 1.05; }
+  .h-name { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 18px; line-height: 1.05; }
   .h-sub { font-size: 9px; color: var(--muted); }
-  .h-val { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 900; font-size: 28px; line-height: 1; white-space: nowrap; }
+  .h-val { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 28px; line-height: 1; white-space: nowrap; }
   .b-row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-top: 1px solid #F1F2EE; }
   .b-rank { width: 12px; color: var(--faint); font-weight: 800; }
   .b-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -184,10 +184,10 @@ ${REPORT_HEAD}
   .h2h-side { flex: 1; }
   .h2h-side.right { text-align: right; }
   .h2h-mid { text-align: center; padding: 0 12px; }
-  .h2h-w { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 900; font-size: 44px; line-height: 1; color: var(--volt-ink); }
+  .h2h-w { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 44px; line-height: 1; color: var(--volt-ink); }
   .h2h-w.b { color: #5B3FCB; }
-  .h2h-n { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; text-transform: uppercase; font-size: 16px; }
-  .h2h-p { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 900; font-size: 26px; color: var(--faint); }
+  .h2h-n { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 800; font-size: 16px; }
+  .h2h-p { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 26px; color: var(--faint); }
   .part table th, .part table td { padding-left: 8px; padding-right: 8px; }
   .part th.name, .part td.name { width: auto; }
   .verdict { font-size: 8px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; border-radius: 5px; padding: 2px 6px; background: var(--soft); color: #3A3D36; }

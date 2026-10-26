@@ -3,7 +3,8 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ExportSheet } from '../../components/ExportSheet.tsx';
-import { Button, FadeIn, GhostWord, PitchStripes, PressableScale, Screen, SectionLabel, useToast } from '../../components/ui.tsx';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Button, FadeIn, PitchStripes, PressableScale, Screen, SectionLabel, useToast } from '../../components/ui.tsx';
 import { sampleSeason } from '../../demo/sampleSeason.ts';
 import { matchState, oversText } from '../../engine/engine.ts';
 import { allSeries, careerStats, playerOfTheMatch, type SeriesState } from '../../engine/stats.ts';
@@ -12,7 +13,7 @@ import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
 import { usePrefs } from '../../store/prefs.ts';
-import { colors, font, radius, space, type, hero, edge, isDay } from '../../theme.ts';
+import { colors, font, gradients, radius, space, type, hero, edge } from '../../theme.ts';
 
 function confirmDelete(onYes: () => void) {
   if (Platform.OS === 'web') {
@@ -28,64 +29,76 @@ function confirmDelete(onYes: () => void) {
 const openMatch = (m: Match, live: boolean) =>
   router.push(live ? { pathname: '/match/[id]', params: { id: m.id } } : { pathname: '/match/[id]/scorecard', params: { id: m.id } });
 
-/** The match on right now takes over the top of the screen, like a broadcast's live scorebug. */
+const greeting = () => {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+};
+
+/** The match on right now leads the screen: a scoreboard on the pitch green, one tap from the scoring pad. */
 function LiveHero({ match }: { match: Match }) {
   const state = matchState(match);
   const s = state.innings[state.current];
   const batted = match.innings[state.current].events.length > 0;
   const need = s.target !== null ? Math.max(s.target - s.runs, 0) : null;
+  const rr = s.legalBalls ? ((s.runs * 6) / s.legalBalls).toFixed(2) : '0.00';
   return (
-    <PressableScale scaleTo={0.98} onPress={() => openMatch(match, true)} style={styles.liveHero}>
-      <PitchStripes opacity={0.06} />
-      <GhostWord size={170} style={{ right: -24, bottom: -40, color: 'rgba(0,0,0,0.07)' }}>
-        LIVE
-      </GhostWord>
-      <View style={styles.liveTop}>
-        <View style={styles.liveTag}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveTagText}>LIVE NOW</Text>
+    <PressableScale scaleTo={0.98} onPress={() => openMatch(match, true)} accessibilityLabel={`Live: ${s.battingTeam.name} ${s.runs} for ${s.wickets}. Open scoring`}>
+      <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.liveHero}>
+        <PitchStripes opacity={0.035} tint="255,255,255" />
+        <View style={styles.liveTop}>
+          <View style={styles.liveTag}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveTagText}>Live</Text>
+          </View>
+          <Text style={styles.liveVs} numberOfLines={1}>
+            vs {s.bowlingTeam.name}
+          </Text>
         </View>
-        <Text style={styles.liveOvers}>
-          {oversText(s.legalBalls)} / {match.rules.overs} OV
+        <Text style={styles.liveTeam} numberOfLines={1}>
+          {s.battingTeam.name}
         </Text>
-      </View>
-      <Text style={styles.liveTeam} numberOfLines={1}>
-        {s.battingTeam.name}
-      </Text>
-      <Text style={styles.liveScore}>{batted ? `${s.runs}/${s.wickets}` : 'NEW'}</Text>
-      <View style={styles.liveFoot}>
-        <Text style={styles.liveFootText} numberOfLines={1}>
-          {need !== null && batted ? `Need ${need} off ${s.maxBalls - s.legalBalls}` : `vs ${s.bowlingTeam.name}`}
-        </Text>
-        <View style={styles.liveGo}>
-          <Text style={styles.liveGoText}>SCORE</Text>
-          <Ionicons name="arrow-forward" size={16} color={colors.accentInk} />
+        <View style={styles.liveScoreRow}>
+          <Text style={styles.liveScore}>{batted ? s.runs : '0'}</Text>
+          <Text style={styles.liveWkts}>/{batted ? s.wickets : 0}</Text>
+          <View style={{ flex: 1 }} />
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.liveMetaValue}>
+              {oversText(s.legalBalls)}
+              <Text style={styles.liveMetaOf}> / {match.rules.overs}</Text>
+            </Text>
+            <Text style={styles.liveMetaLabel}>Overs</Text>
+          </View>
         </View>
-      </View>
+        <View style={styles.liveFoot}>
+          <Text style={styles.liveFootText} numberOfLines={1}>
+            {need !== null && batted ? `Need ${need} off ${s.maxBalls - s.legalBalls}` : batted ? `Run rate ${rr}` : 'Ready to start'}
+          </Text>
+          <View style={styles.liveGo}>
+            <Text style={styles.liveGoText}>Score</Text>
+            <Ionicons name="arrow-forward" size={16} color={colors.onAccent} />
+          </View>
+        </View>
+      </LinearGradient>
     </PressableScale>
   );
 }
 
 function PosterHero() {
   return (
-    <View style={styles.poster}>
-      <PitchStripes tint="255,255,255" />
-      <GhostWord size={190} style={{ left: -12, bottom: -50, color: hero.ink(0.05) }}>
-        CRICKET
-      </GhostWord>
-      <Text style={styles.posterEyebrow}>MATCHDAY</Text>
-      <Text style={styles.posterTitle}>
-        GAME{'\n'}
-        <Text style={{ color: hero.accent }}>ON.</Text>
-      </Text>
+    <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.poster}>
+      <PitchStripes opacity={0.035} tint="255,255,255" />
+      <View style={styles.posterBall}>
+        <MaterialCommunityIcons name="cricket" size={26} color={colors.onAccent} />
+      </View>
+      <Text style={styles.posterTitle}>Ready for{'\n'}the toss?</Text>
       <Text style={styles.posterBody}>Score every ball. Every player’s numbers add up, match after match.</Text>
-      <Button label={'Start a match'} icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
-    </View>
+      <Button label="Start a match" icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
+    </LinearGradient>
   );
 }
 
 function Season({ matches }: { matches: Match[] }) {
-  const { runs, wickets, top } = useMemo(() => {
+  const { runs, wickets, sixes, top } = useMemo(() => {
     let r = 0;
     let w = 0;
     for (const m of matches)
@@ -93,38 +106,49 @@ function Season({ matches }: { matches: Match[] }) {
         r += inn.runs;
         w += inn.wickets;
       }
-    const best = [...careerStats(matches)].sort((a, b) => b.batting.runs - a.batting.runs)[0];
-    return { runs: r, wickets: w, top: best && best.batting.runs > 0 ? best : null };
+    const careers = careerStats(matches);
+    const best = [...careers].sort((a, b) => b.batting.runs - a.batting.runs)[0];
+    return { runs: r, wickets: w, sixes: careers.reduce((n, c) => n + c.batting.sixes, 0), top: best && best.batting.runs > 0 ? best : null };
   }, [matches]);
 
   return (
-    <View style={styles.season}>
-      {(
-        [
-          ['MATCHES', matches.length],
-          ['RUNS', runs],
-          ['WICKETS', wickets],
-        ] as const
-      ).map(([label, value], i) => (
-        <View key={label} style={[styles.seasonCell, i > 0 && styles.seasonBorder]}>
-          <Text style={styles.seasonValue}>{value}</Text>
-          <Text style={styles.seasonLabel}>{label}</Text>
+    <View style={{ gap: space.sm }}>
+      <View style={styles.bento}>
+        <View style={[styles.tile, styles.tileBig]}>
+          <Text style={styles.tileLabel}>Runs scored</Text>
+          <Text style={styles.tileBigValue}>{runs}</Text>
+          <Text style={styles.tileSub}>
+            in {matches.length} match{matches.length === 1 ? '' : 'es'}
+          </Text>
         </View>
-      ))}
+        <View style={{ flex: 1, gap: space.sm }}>
+          <View style={styles.tile}>
+            <Text style={styles.tileValue}>{wickets}</Text>
+            <Text style={styles.tileLabel}>Wickets</Text>
+          </View>
+          <View style={styles.tile}>
+            <Text style={styles.tileValue}>{sixes}</Text>
+            <Text style={styles.tileLabel}>Sixes</Text>
+          </View>
+        </View>
+      </View>
       {top && (
-        <View style={{ flexBasis: '100%' }}>
-          <PressableScale
-            scaleTo={0.98}
-            onPress={() => router.push({ pathname: '/player/[key]', params: { key: top.key } })}
-            style={styles.topScorer}
-          >
+        <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/player/[key]', params: { key: top.key } })} style={styles.topScorer}>
+          <View style={styles.topIcon}>
             <MaterialCommunityIcons name="crown" size={18} color={colors.gold} />
-            <Text style={styles.topScorerText} numberOfLines={1}>
-              Top scorer <Text style={{ color: colors.text }}>{top.name}</Text> · {top.batting.runs} runs
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.tileLabel}>Top scorer</Text>
+            <Text style={styles.topName} numberOfLines={1}>
+              {top.name}
             </Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.faint} />
-          </PressableScale>
-        </View>
+          </View>
+          <Text style={styles.topRuns}>
+            {top.batting.runs}
+            <Text style={styles.topUnit}> runs</Text>
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+        </PressableScale>
       )}
     </View>
   );
@@ -134,7 +158,7 @@ function SeriesCard({ s }: { s: SeriesState }) {
   return (
     <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/series/[id]', params: { id: s.id } })} style={styles.series}>
       <View style={{ flex: 1, gap: 6 }}>
-        <Text style={styles.seriesEyebrow}>{s.over ? 'SERIES · FINAL' : `SERIES · BEST OF ${s.of}`}</Text>
+        <Text style={styles.seriesEyebrow}>{s.over ? 'Series · final' : `Series · best of ${s.of}`}</Text>
         <Text style={styles.seriesName} numberOfLines={1}>
           {s.name}
         </Text>
@@ -166,7 +190,7 @@ function ResultRow({ match, onDelete }: { match: Match; onDelete: () => void }) 
     >
       <View style={styles.date}>
         <Text style={styles.dateDay}>{d.getDate()}</Text>
-        <Text style={styles.dateMonth}>{d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}</Text>
+        <Text style={styles.dateMonth}>{d.toLocaleDateString(undefined, { month: 'short' })}</Text>
       </View>
       <View style={{ flex: 1, gap: 4 }}>
         {/* The match itself; a super over shows in the result line. */}
@@ -174,7 +198,7 @@ function ResultRow({ match, onDelete }: { match: Match; onDelete: () => void }) 
           const won = state.winner === inn.battingTeam.id;
           return (
             <View key={i} style={styles.resultLine}>
-              <View style={[styles.winBar, won && { backgroundColor: colors.accent }]} />
+              <View style={[styles.winBar, won && { backgroundColor: colors.accentInk }]} />
               <Text numberOfLines={1} style={[styles.resultTeam, won && { color: colors.text }]}>
                 {inn.battingTeam.name}
               </Text>
@@ -218,20 +242,22 @@ export default function Home() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.brandRow}>
           <View style={styles.logo}>
-            <MaterialCommunityIcons name="cricket" size={20} color={colors.onAccent} />
+            <MaterialCommunityIcons name="cricket" size={18} color={colors.onAccent} />
           </View>
-          <Text style={styles.brand}>CREASE</Text>
+          <Text style={styles.brand}>crease</Text>
           <View style={{ flex: 1 }} />
-          <PressableScale accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={styles.gear}>
-            <Ionicons name="settings-outline" size={18} color={colors.text} />
-          </PressableScale>
           <PressableScale accessibilityLabel="Auction: pick the teams" onPress={() => router.push('/auction/new')} style={styles.auctionPill}>
             <Ionicons name="hammer" size={15} color={colors.accentInk} />
             <Text numberOfLines={1} style={styles.auctionText}>
               Auction
             </Text>
           </PressableScale>
+          <PressableScale accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={styles.gear}>
+            <Ionicons name="settings-outline" size={18} color={colors.text} />
+          </PressableScale>
         </View>
+        <Text style={styles.dateLine}>{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
+        <Text style={styles.greeting}>{greeting()}</Text>
 
         <FadeIn>{live[0] ? <LiveHero match={live[0]} /> : <PosterHero />}</FadeIn>
         {live.slice(1).map((m, i) => (
@@ -286,15 +312,19 @@ export default function Home() {
           <View style={styles.files}>
             <View style={{ flex: 1 }}>
               <PressableScale onPress={importFile} style={styles.fileButton}>
-                <Ionicons name="push-outline" size={20} color={colors.accentInk} />
-                <Text style={styles.fileTitle}>IMPORT</Text>
+                <View style={styles.fileIcon}>
+                  <Ionicons name="push-outline" size={18} color={colors.accentInk} />
+                </View>
+                <Text style={styles.fileTitle}>Import</Text>
                 <Text style={styles.fileBody}>A match someone sent you</Text>
               </PressableScale>
             </View>
             <View style={{ flex: 1 }}>
               <PressableScale disabled={!matches.length} onPress={() => setExporting(matches)} style={styles.fileButton}>
-                <Ionicons name="download-outline" size={20} color={colors.accentInk} />
-                <Text style={styles.fileTitle}>EXPORT</Text>
+                <View style={styles.fileIcon}>
+                  <Ionicons name="download-outline" size={18} color={colors.accentInk} />
+                </View>
+                <Text style={styles.fileTitle}>Export</Text>
                 <Text style={styles.fileBody}>PDF or match file, any matches</Text>
               </PressableScale>
             </View>
@@ -344,131 +374,139 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: 130 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.lg },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   logo: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.sm,
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ skewX: '-8deg' }],
   },
-  brand: { fontFamily: font.posterBlack, fontSize: 28, color: colors.text, letterSpacing: 0.5 },
+  brand: { fontFamily: font.posterBlack, fontSize: 22, color: colors.text, letterSpacing: -0.6 },
+  dateLine: { color: colors.muted, fontSize: 13, fontFamily: font.medium, marginTop: space.xl },
+  greeting: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.2, marginBottom: space.lg },
   auctionPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    maxWidth: 150,
-    height: 36,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
+    height: 38,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.borderHi,
+    borderColor: colors.border,
     ...edge,
   },
+  auctionText: { color: colors.text, fontSize: 14, fontFamily: font.semibold },
   gear: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.borderHi,
+    borderColor: colors.border,
     ...edge,
   },
   backup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    backgroundColor: isDay ? colors.surface : colors.goldDim,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: isDay ? colors.border : colors.gold,
-    padding: space.md,
-    marginTop: space.md,
-    ...edge,
-  },
-  backupTitle: { color: colors.text, fontSize: 14, fontFamily: font.bold },
-  backupBody: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 1 },
-  backupButton: { backgroundColor: isDay ? colors.text : colors.gold, borderRadius: isDay ? radius.pill : radius.sm, paddingHorizontal: space.md, height: 34, justifyContent: 'center' },
-  backupButtonText: { color: isDay ? colors.surface : colors.onAccent, fontSize: 13, fontFamily: font.heavy },
-  auctionText: { color: colors.text, fontSize: 13, fontFamily: font.bold, flexShrink: 1 },
-
-  poster: {
-    borderRadius: radius.xl,
-    padding: space.xl,
-    paddingTop: space.xxl,
-    overflow: 'hidden',
-    backgroundColor: '#101010',
-    borderWidth: 1,
-    borderColor: hero.line,
-  },
-  posterEyebrow: { ...type.label, color: hero.accent },
-  posterTitle: { fontFamily: font.posterBlack, fontSize: 116, lineHeight: 100, color: hero.text, letterSpacing: -3, marginTop: space.sm },
-  posterBody: { color: hero.muted, fontSize: 15, fontFamily: font.medium, lineHeight: 21, marginTop: space.md, maxWidth: 270 },
-
-  liveHero: {
-    borderRadius: radius.xl,
-    padding: space.xl,
-    overflow: 'hidden',
-    backgroundColor: colors.accent,
-    marginBottom: space.sm,
-  },
-  liveTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  liveTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.onAccent,
-    paddingHorizontal: 10,
-    height: 24,
-    borderRadius: radius.sm,
-  },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.danger },
-  liveTagText: { ...type.label, fontSize: 11, color: colors.accentInk },
-  liveOvers: { fontFamily: font.poster, fontSize: 18, color: colors.onAccent, ...type.num },
-  liveTeam: { fontFamily: font.poster, fontSize: 26, color: colors.onAccent, textTransform: 'uppercase', marginTop: space.lg },
-  liveScore: { fontFamily: font.posterBlack, fontSize: 104, lineHeight: 104, color: colors.onAccent, letterSpacing: -3, ...type.num },
-  liveFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.sm },
-  liveFootText: { color: colors.onAccent, fontFamily: font.bold, fontSize: 14, flex: 1, opacity: 0.75 },
-  liveGo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.onAccent,
-    paddingHorizontal: space.md,
-    height: 36,
-    borderRadius: radius.md,
-  },
-  liveGoText: { fontFamily: font.poster, fontSize: 18, color: colors.accentInk },
-
-  season: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    overflow: 'hidden',
+    padding: space.md,
+    paddingLeft: space.lg,
+    marginTop: space.md,
     ...edge,
   },
-  seasonCell: { flex: 1, paddingVertical: space.lg, alignItems: 'center' },
-  seasonBorder: { borderLeftWidth: 1, borderLeftColor: colors.border },
-  seasonValue: { fontFamily: font.posterBlack, fontSize: 44, lineHeight: 46, color: colors.text, ...type.num },
-  seasonLabel: { ...type.label, fontSize: 10, color: colors.faint },
+  backupTitle: { color: colors.text, fontSize: 14, fontFamily: font.bold },
+  backupBody: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 2, lineHeight: 17 },
+  backupButton: { backgroundColor: colors.text, borderRadius: radius.pill, paddingHorizontal: space.md, height: 36, justifyContent: 'center' },
+  backupButtonText: { color: colors.bg, fontSize: 13, fontFamily: font.bold },
+
+  poster: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden' },
+  posterBall: { width: 48, height: 48, borderRadius: 24, backgroundColor: hero.accent, alignItems: 'center', justifyContent: 'center' },
+  posterTitle: { fontFamily: font.posterBlack, fontSize: 46, lineHeight: 51, color: hero.text, letterSpacing: -1.6, marginTop: space.xl },
+  posterBody: { color: hero.muted, fontSize: 15, fontFamily: font.medium, lineHeight: 22, marginTop: space.md, maxWidth: 290 },
+
+  liveHero: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden', marginBottom: space.sm },
+  liveTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
+  liveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,90,60,0.16)',
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: radius.pill,
+  },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.danger },
+  liveTagText: { fontSize: 12, fontFamily: font.bold, color: '#FF8A73' },
+  liveVs: { color: hero.muted, fontSize: 13, fontFamily: font.medium, flexShrink: 1 },
+  liveTeam: { fontFamily: font.poster, fontSize: 22, color: hero.text, marginTop: space.lg, letterSpacing: -0.4 },
+  liveScoreRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  liveScore: { fontFamily: font.posterBlack, fontSize: 92, lineHeight: 101, color: hero.text, letterSpacing: -4, ...type.num },
+  liveWkts: { fontFamily: font.poster, fontSize: 40, lineHeight: 70, color: hero.faint, letterSpacing: -1 },
+  liveMetaValue: { fontFamily: font.posterBlack, fontSize: 26, color: hero.text, ...type.num },
+  liveMetaOf: { fontFamily: font.poster, fontSize: 16, color: hero.faint },
+  liveMetaLabel: { ...type.label, fontSize: 10, color: hero.muted, marginBottom: 14 },
+  liveFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: space.md,
+    paddingTop: space.md,
+    borderTopWidth: 1,
+    borderTopColor: hero.ink(0.08),
+  },
+  liveFootText: { color: hero.muted, fontFamily: font.semibold, fontSize: 14, flex: 1 },
+  liveGo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: hero.accent,
+    paddingHorizontal: space.lg,
+    height: 40,
+    borderRadius: radius.pill,
+  },
+  liveGoText: { fontFamily: font.bold, fontSize: 15, color: colors.onAccent },
+
+  bento: { flexDirection: 'row', gap: space.sm },
+  tile: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: space.lg,
+    justifyContent: 'space-between',
+    ...edge,
+  },
+  tileBig: { flex: 1.3, backgroundColor: colors.accent, borderColor: colors.accent },
+  tileLabel: { ...type.label, fontSize: 10, color: colors.muted },
+  tileBigValue: { fontFamily: font.posterBlack, fontSize: 64, lineHeight: 70, color: colors.onAccent, letterSpacing: -3, marginTop: space.xl, ...type.num },
+  tileSub: { color: 'rgba(10,13,6,0.6)', fontSize: 13, fontFamily: font.semibold },
+  tileValue: { fontFamily: font.posterBlack, fontSize: 32, lineHeight: 36, color: colors.text, letterSpacing: -1, ...type.num },
   topScorer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    gap: space.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: space.md,
+    paddingRight: space.lg,
+    ...edge,
   },
-  topScorerText: { flex: 1, color: colors.muted, fontSize: 13, fontFamily: font.semibold },
+  topIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.goldDim, alignItems: 'center', justifyContent: 'center' },
+  topName: { color: colors.text, fontSize: 16, fontFamily: font.bold, marginTop: 2 },
+  topRuns: { fontFamily: font.posterBlack, fontSize: 24, color: colors.text, ...type.num },
+  topUnit: { fontFamily: font.medium, fontSize: 13, color: colors.muted },
 
   files: { flexDirection: 'row', gap: space.sm },
   series: {
@@ -477,15 +515,15 @@ const styles = StyleSheet.create({
     gap: space.md,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: space.lg,
     ...edge,
   },
   seriesEyebrow: { ...type.label, fontSize: 10, color: colors.accentInk },
-  seriesName: { fontFamily: font.posterBlack, fontSize: 28, lineHeight: 30, color: colors.text, textTransform: 'uppercase' },
-  seriesStatus: { color: colors.muted, fontSize: 13, fontFamily: font.bold },
-  seriesScore: { fontFamily: font.posterBlack, fontSize: 54, lineHeight: 56, color: colors.text, ...type.num },
+  seriesName: { fontFamily: font.posterBlack, fontSize: 24, lineHeight: 28, color: colors.text, letterSpacing: -0.6 },
+  seriesStatus: { color: colors.muted, fontSize: 13, fontFamily: font.medium },
+  seriesScore: { fontFamily: font.posterBlack, fontSize: 44, lineHeight: 48, color: colors.text, letterSpacing: -1.5, ...type.num },
   fileButton: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -495,8 +533,9 @@ const styles = StyleSheet.create({
     gap: 4,
     ...edge,
   },
-  fileTitle: { fontFamily: font.poster, fontSize: 22, color: colors.text, marginTop: space.sm },
-  fileBody: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
+  fileIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center' },
+  fileTitle: { fontFamily: font.poster, fontSize: 18, color: colors.text, marginTop: space.md, letterSpacing: -0.3 },
+  fileBody: { color: colors.muted, fontSize: 12, fontFamily: font.medium, lineHeight: 16 },
 
   hint: { color: colors.faint, fontSize: 12, fontFamily: font.regular },
   devButton: {
@@ -505,8 +544,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: space.sm,
     marginTop: space.md,
-    height: 40,
-    borderRadius: radius.md,
+    height: 42,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: colors.borderHi,
@@ -524,7 +563,7 @@ const styles = StyleSheet.create({
     ...edge,
   },
   date: {
-    width: 54,
+    width: 52,
     alignSelf: 'stretch',
     borderRadius: radius.md,
     backgroundColor: colors.surfaceHi,
@@ -532,15 +571,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: space.sm,
   },
-  dateDay: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 30, color: colors.text },
-  dateMonth: { ...type.label, fontSize: 10, color: colors.accentInk },
+  dateDay: { fontFamily: font.posterBlack, fontSize: 24, lineHeight: 26, color: colors.text, ...type.num },
+  dateMonth: { fontSize: 11, fontFamily: font.semibold, color: colors.muted },
   resultLine: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  winBar: { width: 3, height: 16, borderRadius: 2, backgroundColor: 'transparent' },
-  resultTeam: { flex: 1, color: colors.muted, fontSize: 15, fontFamily: font.bold },
-  resultScore: { color: colors.muted, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
-  resultOvers: { fontSize: 14, fontFamily: font.poster, color: colors.faint },
-  resultText: { color: colors.accentInk, fontSize: 12, fontFamily: font.bold, marginTop: 2, marginLeft: 11 },
-  resultMom: { flexDirection: 'row', alignItems: 'center', gap: 5, marginLeft: 11 },
+  winBar: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'transparent' },
+  resultTeam: { flex: 1, color: colors.muted, fontSize: 15, fontFamily: font.semibold },
+  resultScore: { color: colors.muted, fontSize: 20, fontFamily: font.posterBlack, letterSpacing: -0.4, ...type.num },
+  resultOvers: { fontSize: 13, fontFamily: font.medium, color: colors.faint },
+  resultText: { color: colors.accentInk, fontSize: 12, fontFamily: font.semibold, marginTop: 4, marginLeft: 14 },
+  resultMom: { flexDirection: 'row', alignItems: 'center', gap: 5, marginLeft: 14 },
   resultMomText: { flex: 1, color: colors.muted, fontSize: 12, fontFamily: font.medium },
-  resultMomName: { color: colors.text, fontFamily: font.bold },
+  resultMomName: { color: colors.text, fontFamily: font.semibold },
 });

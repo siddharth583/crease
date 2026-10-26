@@ -10,9 +10,8 @@ import type { WicketKind } from '../engine/types.ts';
 import { useMatches } from '../store/matches.tsx';
 import { useSquad } from '../store/squad.ts';
 import { plural } from '../engine/text.ts';
-import { colors, font, hero, radius, space, type } from '../theme.ts';
+import { colors, font, hero, radius, space, type, HERO_BG } from '../theme.ts';
 
-const HERO_BG = '#101010';
 const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 const HOW: Record<WicketKind, string> = {
   bowled: 'Bowled',
@@ -205,18 +204,18 @@ export default function RivalryScreen() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
-  headerTitle: { color: colors.text, fontSize: 24, fontFamily: font.poster, textTransform: 'uppercase' },
+  headerTitle: { color: colors.text, fontSize: 20, fontFamily: font.poster },
   lead: { color: colors.muted, fontSize: 15, fontFamily: font.medium },
   hero: { backgroundColor: HERO_BG, borderRadius: radius.xl, padding: space.xl, overflow: 'hidden', gap: 2 },
   heroRole: { ...type.label, fontSize: 9, color: hero.muted },
-  heroName: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 40, textTransform: 'uppercase' },
-  heroVs: { fontFamily: font.poster, fontSize: 15, color: hero.faint, textTransform: 'uppercase', textAlign: 'center', marginVertical: 2 },
+  heroName: { fontFamily: font.posterBlack, fontSize: 31, lineHeight: 35 },
+  heroVs: { fontFamily: font.poster, fontSize: 15, color: hero.faint, textAlign: 'center', marginVertical: 2 },
   tugWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.lg },
   tugEnd: { fontSize: 10, fontFamily: font.heavy, letterSpacing: 1 },
   tug: { flex: 1, flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2, backgroundColor: hero.ink(0.1) },
   tugBat: { backgroundColor: colors.accent, borderRadius: 5 },
   tugBowl: { backgroundColor: colors.violet, borderRadius: 5 },
-  verdictTitle: { fontFamily: font.posterBlack, fontSize: 32, lineHeight: 34, textTransform: 'uppercase', marginTop: space.lg },
+  verdictTitle: { fontFamily: font.posterBlack, fontSize: 26, lineHeight: 29, marginTop: space.lg },
   verdictLine: { color: hero.text, fontSize: 14, fontFamily: font.medium, lineHeight: 20 },
   met: { color: hero.muted, fontSize: 12, fontFamily: font.medium, marginTop: space.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
@@ -230,7 +229,7 @@ const styles = StyleSheet.create({
     padding: space.md,
   },
   statLabel: { ...type.label, fontSize: 9, color: colors.muted },
-  statValue: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 34, color: colors.text, ...type.num },
+  statValue: { fontFamily: font.posterBlack, fontSize: 25, lineHeight: 28, color: colors.text, ...type.num },
   statSub: { color: colors.faint, fontSize: 11, fontFamily: font.medium },
   stack: { flexDirection: 'row', height: 14, borderRadius: 7, overflow: 'hidden', gap: 2 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
@@ -248,7 +247,7 @@ const styles = StyleSheet.create({
   meetingTop: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
   meetingDate: { ...type.label, fontSize: 9, color: colors.muted },
   meetingTitle: { color: colors.text, fontSize: 15, fontFamily: font.bold, marginTop: 2 },
-  meetingScore: { fontFamily: font.posterBlack, fontSize: 26, lineHeight: 28, color: colors.text, ...type.num },
+  meetingScore: { fontFamily: font.posterBlack, fontSize: 21, lineHeight: 24, color: colors.text, ...type.num },
   meetingBalls: { fontFamily: font.poster, fontSize: 14, color: colors.faint },
   meetingOut: { color: colors.muted, fontSize: 11, fontFamily: font.bold, textTransform: 'uppercase' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },

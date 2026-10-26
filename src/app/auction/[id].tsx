@@ -11,9 +11,8 @@ import { careerStats, playerKey } from '../../engine/stats.ts';
 import { plural } from '../../engine/text.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
-import { colors, edge, font, hero, radius, space, type } from '../../theme.ts';
+import { colors, edge, font, hero, radius, space, type, HERO_BG } from '../../theme.ts';
 
-const HERO_BG = '#101010';
 const SIDE_TINT = [colors.accent, colors.violet];
 
 /** A captain's purse and side so far. */
@@ -257,7 +256,7 @@ export default function AuctionScreen() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
-  headerTitle: { color: colors.text, fontSize: 24, fontFamily: font.poster, textTransform: 'uppercase' },
+  headerTitle: { color: colors.text, fontSize: 20, fontFamily: font.poster },
   lead: { color: colors.muted, fontSize: 15, fontFamily: font.medium },
   sides: { flexDirection: 'row', gap: space.sm },
   side: {
@@ -272,8 +271,8 @@ const styles = StyleSheet.create({
     ...edge,
   },
   sideBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
-  sideName: { color: colors.text, fontSize: 15, fontFamily: font.poster, textTransform: 'uppercase' },
-  purse: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 34, color: colors.text, ...type.num },
+  sideName: { color: colors.text, fontSize: 15, fontFamily: font.poster },
+  purse: { fontFamily: font.posterBlack, fontSize: 25, lineHeight: 28, color: colors.text, ...type.num },
   sideMeta: { color: colors.muted, fontSize: 11, fontFamily: font.semibold },
   lot: { backgroundColor: HERO_BG, borderRadius: radius.xl, padding: space.xl, marginTop: space.md, overflow: 'hidden' },
   lotTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -281,18 +280,18 @@ const styles = StyleSheet.create({
   overall: { color: hero.muted, fontSize: 13, fontFamily: font.bold },
   lastCall: { backgroundColor: colors.danger, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 3 },
   lastCallText: { color: '#FFFFFF', fontSize: 11, fontFamily: font.heavy, letterSpacing: 1 },
-  lotName: { fontFamily: font.posterBlack, fontSize: 46, lineHeight: 46, color: hero.text, textTransform: 'uppercase', marginTop: space.sm },
+  lotName: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 43, color: hero.text, marginTop: space.sm },
   ratings: { flexDirection: 'row', gap: space.lg, marginTop: space.md, flexWrap: 'wrap' },
   rating: { gap: 3 },
   ratingLabel: { ...type.label, fontSize: 9, color: hero.muted },
   career: { color: hero.muted, fontSize: 12, fontFamily: font.medium, marginTop: space.md },
   bidBox: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: space.lg, paddingTop: space.md, borderTopWidth: 1, borderTopColor: hero.ink(0.1) },
   bidLabel: { color: hero.muted, fontSize: 13, fontFamily: font.bold, flex: 1 },
-  bidValue: { fontFamily: font.posterBlack, fontSize: 56, lineHeight: 58, color: hero.text, ...type.num },
+  bidValue: { fontFamily: font.posterBlack, fontSize: 46, lineHeight: 52, color: hero.text, ...type.num },
   bidRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   bidButton: { borderRadius: radius.lg, padding: space.md, alignItems: 'center', minHeight: 76, justifyContent: 'center', ...edge },
   bidWho: { color: colors.onAccent, fontSize: 13, fontFamily: font.bold },
-  bidAmount: { color: colors.onAccent, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
+  bidAmount: { color: colors.onAccent, fontSize: 18, fontFamily: font.posterBlack, ...type.num },
   help: { color: colors.muted, fontSize: 13, fontFamily: font.medium, textAlign: 'center', marginTop: space.md, lineHeight: 18 },
   count: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
   next: { flexDirection: 'row', alignItems: 'center', gap: space.md },
@@ -300,9 +299,9 @@ const styles = StyleSheet.create({
   again: { color: colors.danger, fontSize: 11, fontFamily: font.bold },
   nextRole: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
   doneHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.accent, borderRadius: radius.md, padding: space.md, marginVertical: space.md, ...edge },
-  doneText: { color: colors.onAccent, fontSize: 18, fontFamily: font.poster, textTransform: 'uppercase', flex: 1 },
+  doneText: { color: colors.onAccent, fontSize: 18, fontFamily: font.poster, flex: 1 },
   resultHead: { flexDirection: 'row', alignItems: 'center', padding: space.md, borderLeftWidth: 4, borderBottomWidth: 1, borderBottomColor: colors.border },
-  resultTeam: { color: colors.text, fontSize: 26, fontFamily: font.posterBlack, textTransform: 'uppercase' },
+  resultTeam: { color: colors.text, fontSize: 21, fontFamily: font.posterBlack },
   resultMeta: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   resultNo: { width: 18, color: colors.faint, fontFamily: font.posterBlack, fontSize: 16 },
@@ -310,7 +309,7 @@ const styles = StyleSheet.create({
   resultRole: { color: colors.muted, fontSize: 12, fontFamily: font.regular },
   cap: { color: colors.accentInk, fontSize: 10, fontFamily: font.heavy },
   wk: { color: colors.cyan, fontSize: 10, fontFamily: font.heavy },
-  price: { fontFamily: font.posterBlack, fontSize: 22, color: colors.text, ...type.num },
+  price: { fontFamily: font.posterBlack, fontSize: 18, color: colors.text, ...type.num },
   footer: {
     position: 'absolute',
     left: 0,

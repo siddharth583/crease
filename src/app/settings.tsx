@@ -24,7 +24,7 @@ export default function SettingsScreen() {
         <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
-        <Text style={styles.title}>{'Settings'.toUpperCase()}</Text>
+        <Text style={styles.title}>Settings</Text>
 
         <SectionLabel>Look</SectionLabel>
         <Card style={{ gap: space.md }}>
@@ -64,7 +64,7 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', paddingHorizontal: space.lg, paddingVertical: space.sm },
-  title: { fontFamily: font.posterBlack, fontSize: 54, lineHeight: 54, color: colors.text, letterSpacing: -1 },
+  title: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
   note: { color: colors.muted, fontSize: 13, fontFamily: font.regular },
   body: { color: colors.text, fontSize: 14, fontFamily: font.medium, lineHeight: 20 },
   divider: { height: 1, backgroundColor: colors.border },

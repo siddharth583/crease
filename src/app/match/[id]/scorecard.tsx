@@ -261,7 +261,7 @@ export default function Scorecard() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
-  headerTitle: { color: colors.text, fontSize: 26, fontFamily: font.poster, textTransform: 'uppercase' },
+  headerTitle: { color: colors.text, fontSize: 21, fontFamily: font.poster },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -288,12 +288,12 @@ const styles = StyleSheet.create({
   },
   momIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldDim },
   momLabel: { ...type.label, fontSize: 9, color: colors.muted },
-  momName: { fontFamily: font.poster, fontSize: 24, color: colors.text, textTransform: 'uppercase' },
+  momName: { fontFamily: font.poster, fontSize: 20, color: colors.text },
   momLine: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
-  bannerText: { color: colors.text, fontSize: 20, fontFamily: font.poster, textTransform: 'uppercase', flex: 1 },
+  bannerText: { color: colors.text, fontSize: 16, fontFamily: font.poster, flex: 1 },
   totalRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: space.xl, paddingHorizontal: space.xs },
-  totalTeam: { color: colors.text, fontSize: 30, fontFamily: font.poster, textTransform: 'uppercase', flex: 1 },
-  total: { color: colors.accentInk, fontSize: 48, lineHeight: 50, fontFamily: font.posterBlack, ...type.num },
+  totalTeam: { color: colors.text, fontSize: 25, fontFamily: font.poster, flex: 1 },
+  total: { color: colors.accentInk, fontSize: 39, lineHeight: 44, fontFamily: font.posterBlack, ...type.num },
   totalOvers: { color: colors.muted, fontSize: 18, fontFamily: font.poster },
   head: { flexDirection: 'row', paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.sm },
   th: { ...type.label, fontSize: 10, color: colors.faint, width: 32, textAlign: 'right' },
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, minWidth: 0 },
   how: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 2, flexShrink: 1 },
   td: { width: 32, textAlign: 'right', color: colors.muted, fontSize: 18, fontFamily: font.poster, ...type.num },
-  strong: { color: colors.text, fontFamily: font.posterBlack, fontSize: 20 },
+  strong: { color: colors.text, fontFamily: font.posterBlack, fontSize: 16 },
   fow: { color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 20 },
   empty: { color: colors.muted, textAlign: 'center', marginTop: space.xxl },
 });

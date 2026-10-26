@@ -46,7 +46,7 @@ const open = (c: Career) => router.push({ pathname: '/player/[key]', params: { k
 /** The leader gets a poster; second and third stand beside each other underneath. */
 function Podium({ top, board }: { top: Career[]; board: Board }) {
   const [first, ...rest] = top;
-  const unit = board === 'batting' ? 'RUNS' : 'WICKETS';
+  const unit = board === 'batting' ? 'runs' : 'wickets';
   return (
     <View style={{ gap: space.sm }}>
       <PressableScale scaleTo={0.98} onPress={() => open(first)} style={styles.leader}>
@@ -152,7 +152,7 @@ export default function Players() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={styles.title}>PLAYERS</Text>
+          <Text style={styles.title}>Players</Text>
           <View style={{ flexDirection: 'row', gap: space.sm }}>
             <IconButton icon="people-outline" label="The squad" onPress={() => router.push('/squad')} />
             <IconButton icon="trophy-outline" label="Record book" onPress={() => router.push('/records')} />
@@ -202,7 +202,7 @@ export default function Players() {
 
         {list.length === 0 && (
           <View style={styles.empty}>
-            <Text style={styles.emptyBig}>{careers.length ? 'NOBODY' : 'NO STATS YET'}</Text>
+            <Text style={styles.emptyBig}>{careers.length ? 'Nobody' : 'No stats yet'}</Text>
             <Text style={styles.emptyBody}>
               {careers.length
                 ? 'No one matches that search. Try another name or team.'
@@ -229,7 +229,7 @@ export default function Players() {
 const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: 130 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.lg },
-  title: { fontFamily: font.posterBlack, fontSize: 54, lineHeight: 54, color: colors.text, letterSpacing: -1 },
+  title: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
   search: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -257,10 +257,10 @@ const styles = StyleSheet.create({
   },
   crownText: { ...type.label, color: colors.accentInk },
   leaderTeam: { color: colors.onAccent, fontFamily: font.bold, fontSize: 13, opacity: 0.65, flexShrink: 1, marginLeft: space.md },
-  leaderName: { fontFamily: font.posterBlack, fontSize: 56, lineHeight: 54, color: colors.onAccent, textTransform: 'uppercase', marginTop: space.lg, letterSpacing: -1 },
+  leaderName: { fontFamily: font.posterBlack, fontSize: 46, lineHeight: 52, color: colors.onAccent, marginTop: space.lg, letterSpacing: -1 },
   leaderFoot: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: space.sm },
-  leaderValue: { fontFamily: font.posterBlack, fontSize: 64, lineHeight: 64, color: colors.onAccent, ...type.num },
-  leaderUnit: { fontFamily: font.poster, fontSize: 20 },
+  leaderValue: { fontFamily: font.posterBlack, fontSize: 52, lineHeight: 58, color: colors.onAccent, ...type.num },
+  leaderUnit: { fontFamily: font.poster, fontSize: 16 },
   leaderStat: { fontFamily: font.poster, fontSize: 17, color: colors.onAccent, ...type.num },
 
   runnerUp: {
@@ -271,10 +271,10 @@ const styles = StyleSheet.create({
     padding: space.lg,
     ...edge,
   },
-  runnerRank: { fontFamily: font.posterBlack, fontSize: 40, lineHeight: 40 },
-  runnerName: { fontFamily: font.poster, fontSize: 24, lineHeight: 24, color: colors.text, textTransform: 'uppercase', marginTop: space.sm, minHeight: 48 },
+  runnerRank: { fontFamily: font.posterBlack, fontSize: 33, lineHeight: 37 },
+  runnerName: { fontFamily: font.poster, fontSize: 20, lineHeight: 22, color: colors.text, marginTop: space.sm, minHeight: 48 },
   runnerTeam: { color: colors.faint, fontSize: 12, fontFamily: font.semibold },
-  runnerValue: { fontFamily: font.posterBlack, fontSize: 36, lineHeight: 38, color: colors.text, marginTop: space.sm, ...type.num },
+  runnerValue: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 34, color: colors.text, marginTop: space.sm, ...type.num },
   runnerUnit: { fontFamily: font.poster, fontSize: 16, color: colors.faint },
 
   row: {
@@ -289,15 +289,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     ...edge,
   },
-  rank: { width: 30, color: colors.faint, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
+  rank: { width: 30, color: colors.faint, fontSize: 18, fontFamily: font.posterBlack, ...type.num },
   name: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   team: { color: colors.faint, fontSize: 13, fontFamily: font.semibold },
   statsLine: { flexDirection: 'row', gap: space.md, marginTop: 3 },
   stat: { color: colors.muted, fontSize: 12, fontFamily: font.bold, ...type.num },
   statKey: { color: colors.faint, fontSize: 10, fontFamily: font.heavy },
-  mainValue: { color: colors.text, fontSize: 32, fontFamily: font.posterBlack, ...type.num },
+  mainValue: { color: colors.text, fontSize: 26, fontFamily: font.posterBlack, ...type.num },
 
   empty: { paddingVertical: space.xxl, gap: space.sm },
-  emptyBig: { fontFamily: font.posterBlack, fontSize: 56, lineHeight: 56, color: colors.surfaceHi },
+  emptyBig: { fontFamily: font.posterBlack, fontSize: 46, lineHeight: 52, color: colors.surfaceHi },
   emptyBody: { color: colors.muted, fontSize: 14, fontFamily: font.regular, maxWidth: 300 },
 });

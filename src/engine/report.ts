@@ -218,7 +218,7 @@ function matchHtml(match: Match, all: Match[]) {
 
 /** Fonts and styles shared by every printed report (match reports and the record book). */
 export const REPORT_HEAD = `<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,700;1,800;1,900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   @page { size: A4; margin: 12mm 12mm 14mm; }
   :root { --ink: #101210; --muted: #6B6F66; --faint: #A3A79D; --soft: #F4F5F1; --line: #E9EBE5; --volt: #D7FF3A; --volt-ink: #3D7400; --red: #E0301E; }
@@ -227,7 +227,7 @@ export const REPORT_HEAD = `<link rel="preconnect" href="https://fonts.googleapi
   @media screen { body { padding: 28px; max-width: 840px; margin: 0 auto; } }
   .match { break-after: page; }
   .match:last-child { break-after: auto; }
-  .brand, .side-score, .side-name, .result, .team, .total, .tile-n, .tile-v, .ghost, .logo { font-family: 'Barlow Condensed', 'Arial Narrow', Impact, sans-serif; font-style: italic; text-transform: uppercase; }
+  .brand, .side-score, .side-name, .result, .team, .total, .tile-n, .tile-v, .ghost, .logo { font-family: 'Bricolage Grotesque', Inter, sans-serif; }
   .label, .eyebrow, th, .tile-k, .series { font-size: 8.5px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted); }
 
   /* Cover: the black scoreboard */
@@ -250,7 +250,7 @@ export const REPORT_HEAD = `<link rel="preconnect" href="https://fonts.googleapi
   .side.won .side-score { color: var(--volt); }
   .side.lost .side-score { color: #D9D9D1; }
   .side-ov { font-size: 10px; color: #9C9C94; margin-top: 2px; }
-  .vs { font-family: 'Barlow Condensed', sans-serif; font-style: italic; font-weight: 800; font-size: 18px; color: #5F5F59; padding-bottom: 30px; text-transform: uppercase; }
+  .vs { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 800; font-size: 18px; color: #5F5F59; padding-bottom: 30px; }
   .result { display: inline-block; margin-top: 10px; background: var(--volt); color: #0A0A0A; font-weight: 900; font-size: 19px; padding: 4px 12px 3px; border-radius: 8px; position: relative; z-index: 1; }
   .result.live { background: var(--red); color: #fff; }
   .toss { margin-top: 8px; font-size: 10px; color: #9C9C94; position: relative; z-index: 1; }

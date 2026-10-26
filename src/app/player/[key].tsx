@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: hero.line,
   },
-  name: { fontFamily: font.posterBlack, fontSize: 60, lineHeight: 58, color: hero.text, textTransform: 'uppercase', letterSpacing: -1.5, marginTop: space.lg, alignSelf: 'stretch' },
+  name: { fontFamily: font.posterBlack, fontSize: 49, lineHeight: 55, color: hero.text, letterSpacing: -1.5, marginTop: space.lg, alignSelf: 'stretch' },
   teamTag: { alignSelf: 'flex-start', backgroundColor: colors.accent, paddingHorizontal: 10, height: 24, borderRadius: radius.sm, justifyContent: 'center', transform: [{ skewX: '-8deg' }] },
   teamTagText: { ...type.label, color: colors.onAccent },
   heroStats: {
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
   },
   heroStat: { flex: 1, alignItems: 'center' },
-  heroValue: { color: hero.text, fontSize: 34, lineHeight: 36, fontFamily: font.posterBlack, ...type.num },
+  heroValue: { color: hero.text, fontSize: 28, lineHeight: 31, fontFamily: font.posterBlack, ...type.num },
   heroLabel: { ...type.label, fontSize: 9, color: hero.faint, marginTop: 2 },
   form: { flexDirection: 'row', gap: space.sm },
   formChip: {
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
   },
   tileHero: { borderColor: colors.accent, backgroundColor: colors.accentDim },
-  tileValue: { color: colors.text, fontSize: 34, lineHeight: 36, fontFamily: font.posterBlack, ...type.num },
+  tileValue: { color: colors.text, fontSize: 28, lineHeight: 31, fontFamily: font.posterBlack, ...type.num },
   tileLabel: { color: colors.muted, fontSize: 12, fontFamily: font.semibold, marginTop: 2 },
   none: { color: colors.muted, fontSize: 14 , fontFamily: font.regular},
   matchRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },

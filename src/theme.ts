@@ -1,61 +1,61 @@
 import type { BallTone } from './engine/engine.ts';
 import { startupPrefs } from './store/prefs.ts';
 
-// "Floodlight": a night match under the lights, cut like a broadcast graphic. Jet black, one volt accent,
-// cricket-ball red for wickets, and huge slanted condensed type. "Day match" is the same design for bright sun.
+// "Clubhouse": a cricket ground after dark, made calm and clean. A deep pitch-green black, soft rounded surfaces,
+// one bright volt accent used sparingly, cricket-ball red for wickets, and Bricolage Grotesque for headlines and
+// big numbers. "Day" is the same design on white, for bright sun.
 
 const NIGHT = {
-  bg: '#060606',
-  surface: '#111111',
-  surfaceHi: '#1B1B1B',
-  border: 'rgba(255,255,255,0.08)',
-  borderHi: 'rgba(255,255,255,0.18)',
-  text: '#F4F4EE',
-  muted: '#9C9C94',
-  faint: '#5F5F59',
+  bg: '#090C0A',
+  surface: '#121814',
+  surfaceHi: '#1A221C',
+  border: 'rgba(214,236,200,0.07)',
+  borderHi: 'rgba(214,236,200,0.16)',
+  text: '#F1F5EE',
+  muted: '#98A396',
+  faint: '#5B665C',
   /** Volt: the one accent. Primary actions, sixes, the live state. */
   accent: '#D7FF3A',
   /** The accent as text or an icon on the page (on night it's the volt itself). */
   accentInk: '#D7FF3A',
-  accentDim: 'rgba(215,255,58,0.12)',
-  onAccent: '#0A0A0A',
+  accentDim: 'rgba(215,255,58,0.11)',
+  onAccent: '#0A0D06',
   /** Fours. */
   cyan: '#7FE6FF',
   cyanDim: 'rgba(127,230,255,0.12)',
   /** Trophies and medals. */
-  gold: '#FFC93C',
-  goldDim: 'rgba(255,201,74,0.12)',
+  gold: '#FFCB52',
+  goldDim: 'rgba(255,203,82,0.12)',
   /** Cricket-ball red: wickets, live dot, destructive. */
-  danger: '#FF4B2B',
-  dangerDim: 'rgba(255,75,43,0.14)',
+  danger: '#FF5A3C',
+  dangerDim: 'rgba(255,90,60,0.14)',
   /** Extras. */
   violet: '#B9A6FF',
   violetDim: 'rgba(185,166,255,0.14)',
-  /** "r,g,b" of the ink, for faint stripes, ghost words and chart tracks: rgba(${ink}, a). */
-  ink: '255,255,255',
+  /** "r,g,b" of the ink, for faint tracks and lines: rgba(${ink}, a). */
+  ink: '241,245,238',
   /** Mown-grass stripes. */
-  stripe: '255,255,255',
+  stripe: '214,236,200',
   /** A recessed panel inside a card. */
-  inset: 'rgba(0,0,0,0.45)',
-  scrim: 'rgba(0,0,0,0.75)',
+  inset: 'rgba(0,0,0,0.35)',
+  scrim: 'rgba(3,5,4,0.72)',
 };
 
-// "Day match": the clubhouse in daylight. A soft grey-green ground, white cards that float on a gentle shadow with
-// no outlines, the volt kept as a bright fill with black type (deep green when it has to be text), and the
-// scoreboards black, like a TV scorebug.
+// Day: the same clubhouse on white. A soft off-white ground, white cards on a gentle shadow, the volt as a bright
+// fill with black type (deep green when it has to be text), and the scoreboards on the dark pitch green.
 const DAY: typeof NIGHT = {
-  bg: '#F1F2EE',
+  bg: '#F2F3EE',
   surface: '#FFFFFF',
-  surfaceHi: '#F5F6F2',
-  border: 'rgba(17,20,14,0.06)',
-  borderHi: 'rgba(17,20,14,0.13)',
-  text: '#0F110D',
-  muted: '#5F635A',
-  faint: '#9A9E94',
+  surfaceHi: '#F1F3EC',
+  border: 'rgba(17,24,14,0.07)',
+  borderHi: 'rgba(17,24,14,0.14)',
+  text: '#0E130D',
+  muted: '#5C6358',
+  faint: '#99A094',
   accent: '#D4FF3A',
-  accentInk: '#3D7400',
-  accentDim: 'rgba(150,200,0,0.14)',
-  onAccent: '#0A0A0A',
+  accentInk: '#3B7200',
+  accentDim: 'rgba(130,190,0,0.13)',
+  onAccent: '#0A0D06',
   cyan: '#00728F',
   cyanDim: 'rgba(0,114,143,0.08)',
   gold: '#A26E00',
@@ -64,16 +64,16 @@ const DAY: typeof NIGHT = {
   dangerDim: 'rgba(224,48,30,0.08)',
   violet: '#5B3FCB',
   violetDim: 'rgba(91,63,203,0.08)',
-  ink: '17,20,14',
-  stripe: '17,20,14',
-  inset: 'rgba(17,20,14,0.04)',
-  scrim: 'rgba(15,17,13,0.4)',
+  ink: '14,19,13',
+  stripe: '14,19,13',
+  inset: 'rgba(14,19,13,0.04)',
+  scrim: 'rgba(10,14,9,0.42)',
 };
 
 export const isDay = startupPrefs.theme === 'day';
 export const colors = isDay ? DAY : NIGHT;
 
-/** The black broadcast panels (scoreboards, posters): dark in both themes. */
+/** The dark pitch-green panels (scoreboards, the home hero): dark in both themes. */
 export const hero = {
   text: NIGHT.text,
   muted: NIGHT.muted,
@@ -85,29 +85,33 @@ export const hero = {
 
 /** How day cards sit on the page: no outline, a soft lift. Nothing at night. */
 export const edge = isDay
-  ? { borderColor: 'rgba(17,20,14,0.05)', boxShadow: '0px 1px 2px rgba(17,20,14,0.04), 0px 8px 24px rgba(17,20,14,0.06)' }
+  ? { borderColor: 'rgba(14,19,13,0.04)', boxShadow: '0px 1px 2px rgba(14,19,13,0.04), 0px 10px 30px rgba(14,19,13,0.06)' }
   : {};
 
 /** The ink at a given strength: faint stripes, tracks, ghost words. */
 export const ink = (alpha: number) => `rgba(${colors.ink},${alpha})`;
 
+/** The pitch at night: the scoreboards and hero panels, the same in both themes. */
+const PITCH = ['#1C3324', '#122017', '#0B130D'] as const;
+export const HERO_BG = '#0F1A12';
+
 export const gradients = isDay
   ? {
-      hero: ['#181818', '#0F0F0F', '#0A0A0A'] as const,
+      hero: PITCH,
       accent: ['#DBFF4A', '#C2EC10'] as const,
       danger: ['#E2342A', '#C61D14'] as const,
-      /** Sunlight falling from the top. */
-      glow: ['rgba(212,255,58,0.30)', 'rgba(241,242,238,0)'] as const,
+      /** Morning light over the ground. */
+      glow: ['rgba(196,240,90,0.22)', 'rgba(242,243,238,0)'] as const,
     }
   : {
-      hero: ['#151515', '#0B0B0B', '#060606'] as const,
+      hero: PITCH,
       accent: ['#E6FF6B', '#C8F51E'] as const,
       danger: ['#FF6A4D', '#FF3B1C'] as const,
-      /** Floodlight glow from the top of the screen. */
-      glow: ['rgba(215,255,58,0.16)', 'rgba(215,255,58,0)'] as const,
+      /** The floodlights' green haze at the top of the screen. */
+      glow: ['rgba(80,140,70,0.20)', 'rgba(9,12,10,0)'] as const,
     };
 
-export const radius = { sm: 6, md: 10, lg: 14, xl: 20, pill: 999 };
+export const radius = { sm: 10, md: 14, lg: 20, xl: 26, pill: 999 };
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
 export const ballColors: Record<BallTone, { bg: string; fg: string }> = {
@@ -128,19 +132,19 @@ export const font = {
   bold: 'Inter_700Bold',
   heavy: 'Inter_800ExtraBold',
   /** Scoreboard numbers. */
-  score: 'BarlowCondensed_700Bold',
-  scoreSemi: 'BarlowCondensed_600SemiBold',
-  /** Poster headlines: slanted, heavy, upper case. */
-  poster: 'BarlowCondensed_800ExtraBold_Italic',
-  posterBlack: 'BarlowCondensed_900Black_Italic',
+  score: 'BricolageGrotesque_700Bold',
+  scoreSemi: 'BricolageGrotesque_600SemiBold',
+  /** Headlines and big figures. */
+  poster: 'BricolageGrotesque_700Bold',
+  posterBlack: 'BricolageGrotesque_800ExtraBold',
 };
 
 export const type = {
-  display: { fontSize: 112, fontFamily: font.posterBlack, letterSpacing: -2, lineHeight: 112, fontVariant: ['tabular-nums' as const] },
-  poster: { fontFamily: font.poster, textTransform: 'uppercase' as const, letterSpacing: -0.5 },
-  title: { fontSize: 34, fontFamily: font.poster, letterSpacing: -0.5, textTransform: 'uppercase' as const },
+  display: { fontSize: 104, fontFamily: font.posterBlack, letterSpacing: -4, lineHeight: 108, fontVariant: ['tabular-nums' as const] },
+  poster: { fontFamily: font.poster, letterSpacing: -0.5 },
+  title: { fontSize: 30, fontFamily: font.posterBlack, letterSpacing: -0.8 },
   heading: { fontSize: 17, fontFamily: font.bold, letterSpacing: -0.2 },
   body: { fontSize: 15, fontFamily: font.medium },
-  label: { fontSize: 11, fontFamily: font.bold, letterSpacing: 1.4, textTransform: 'uppercase' as const },
+  label: { fontSize: 11, fontFamily: font.semibold, letterSpacing: 1.1, textTransform: 'uppercase' as const },
   num: { fontVariant: ['tabular-nums' as const] },
 };

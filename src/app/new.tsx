@@ -65,7 +65,7 @@ function CoinToss({ names, onResult }: { names: [string, string]; onResult: (win
     tap('medium');
     Animated.timing(spin, { toValue: 1, duration: 1100, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }).start(() => {
       setFlipping(false);
-      setFace(winner === '0' ? 'HEADS' : 'TAILS');
+      setFace(winner === '0' ? 'Heads' : 'Tails');
       tap('success');
       onResult(winner);
     });
@@ -323,7 +323,7 @@ export default function NewMatch() {
           {ongoing?.next ? (
             <>
               <Text style={styles.title}>
-                MATCH <Text style={{ color: colors.accentInk }}>{ongoing.next}</Text>
+                Match {ongoing.next}
               </Text>
               <Text style={styles.subtitle}>
                 {ongoing.name} · best of {ongoing.of} · {ongoing.status}
@@ -332,8 +332,7 @@ export default function NewMatch() {
           ) : (
             <>
               <Text style={styles.title}>
-                {source ? 'RE' : 'NEW '}
-                <Text style={{ color: colors.accentInk }}>MATCH</Text>
+                {source ? 'Rematch' : 'New match'}
               </Text>
               <Text style={styles.subtitle}>
                 {fromAuction
@@ -392,7 +391,7 @@ export default function NewMatch() {
             <TeamEditor label="Team A" draft={teams[0]} saved={savedTeams} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} />
             <View style={styles.vs} pointerEvents="none">
               <View style={styles.vsBadge}>
-                <Text style={styles.vsText}>VS</Text>
+                <Text style={styles.vsText}>vs</Text>
               </View>
             </View>
             <TeamEditor label="Team B" draft={teams[1]} saved={savedTeams} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} />
@@ -562,8 +561,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  coinText: { fontFamily: font.posterBlack, fontSize: 38, color: colors.onAccent },
-  tossTitle: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 32, color: colors.text, textTransform: 'uppercase' },
+  coinText: { fontFamily: font.posterBlack, fontSize: 31, color: colors.onAccent },
+  tossTitle: { fontFamily: font.posterBlack, fontSize: 25, lineHeight: 28, color: colors.text },
   tossBody: { color: colors.muted, fontSize: 13, fontFamily: font.medium, marginTop: 2 },
   pasteBox: { gap: space.sm, marginTop: space.sm },
   mark: {
@@ -610,17 +609,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  title: { fontFamily: font.posterBlack, fontSize: 64, lineHeight: 62, color: colors.text, letterSpacing: -1.5 },
+  title: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
   subtitle: { color: colors.muted, fontSize: 15, fontFamily: font.medium, marginTop: 4 },
-  teamInput: { color: colors.text, fontSize: 34, fontFamily: font.poster, textTransform: 'uppercase', paddingVertical: 2 },
+  teamInput: { color: colors.text, fontSize: 23, fontFamily: font.posterBlack, paddingVertical: 2, letterSpacing: -0.8 },
   squadToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     backgroundColor: colors.surfaceHi,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    height: 44,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
+    height: 46,
   },
   squadText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold, flex: 1 },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
@@ -639,26 +638,25 @@ const styles = StyleSheet.create({
   help: { color: colors.faint, fontSize: 12, fontFamily: font.regular, marginLeft: 32 },
   vs: { alignItems: 'center', marginVertical: -26, zIndex: 2 },
   vsBadge: {
-    width: 52,
-    height: 40,
-    borderRadius: radius.sm,
-    backgroundColor: colors.accent,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ skewX: '-10deg' }],
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: colors.bg,
   },
-  vsText: { color: colors.onAccent, fontFamily: font.posterBlack, fontSize: 22 },
+  vsText: { color: colors.bg, fontFamily: font.posterBlack, fontSize: 15 },
   divider: { height: 1, backgroundColor: colors.border },
   auctionLink: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     backgroundColor: colors.accentDim,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    height: 46,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
+    height: 48,
     marginBottom: space.md,
   },
   auctionText: { flex: 1, color: colors.text, fontSize: 14, fontFamily: font.bold },

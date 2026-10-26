@@ -26,7 +26,6 @@ import {
   Card,
   Chip,
   FadeIn,
-  GhostWord,
   IconButton,
   MomentFlash,
   PitchStripes,
@@ -63,9 +62,8 @@ import { isPlaceholder, playerOfTheMatch, seriesState } from '../../../engine/st
 import type { BallEvent, Extra, InningsEvent, Match, WicketKind } from '../../../engine/types.ts';
 import { newId, useMatch, useMatches } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
-import { colors, font, gradients, radius, space, type, ink, hero, edge } from '../../../theme.ts';
+import { colors, font, gradients, radius, space, type, ink, hero, edge, HERO_BG } from '../../../theme.ts';
 
-const HERO_BG = '#101010';
 
 const rate = (runs: number, balls: number) => (balls ? ((runs * 6) / balls).toFixed(2) : '0.00');
 
@@ -79,11 +77,8 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
   const progress = Math.min(1, s.legalBalls / s.maxBalls);
 
   return (
-    <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
-      <PitchStripes tint="255,255,255" />
-      <GhostWord size={150} style={[styles.heroGhost, { color: hero.ink(0.05) }]}>
-        {s.battingTeam.name}
-      </GhostWord>
+    <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+      <PitchStripes opacity={0.03} tint="255,255,255" />
 
       <View style={styles.heroTop}>
         <View style={styles.livePill}>
@@ -91,8 +86,8 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
           <Text style={styles.liveText}>{index >= 2 ? 'Super over' : index === 0 ? '1st innings' : '2nd innings'}</Text>
         </View>
         <Text style={styles.heroOvers}>
-          OV <Text style={{ color: hero.text }}>{oversText(s.legalBalls)}</Text>
-          <Text style={{ color: hero.faint }}> / {match.rules.overs}</Text>
+          <Text style={{ color: hero.text }}>{oversText(s.legalBalls)}</Text>
+          <Text style={{ color: hero.faint }}> / {match.rules.overs} ov</Text>
         </Text>
       </View>
 
@@ -126,9 +121,9 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
       {need !== null ? (
         <View style={styles.chase}>
           <Text style={styles.chaseText}>
-            NEED <Text style={styles.chaseBig}>{need}</Text> OFF <Text style={styles.chaseBig}>{ballsLeft}</Text>
+            Need <Text style={styles.chaseBig}>{need}</Text> off <Text style={styles.chaseBig}>{ballsLeft}</Text>
           </Text>
-          <Text style={styles.chaseTarget}>TARGET {s.target}</Text>
+          <Text style={styles.chaseTarget}>Target {s.target}</Text>
         </View>
       ) : (
         <Text style={styles.heroFoot}>
@@ -1088,7 +1083,7 @@ export default function LiveMatch() {
                 </>
               ) : (
                 <>
-                  <Text style={[styles.breakTarget, { fontSize: 72, lineHeight: 72 }]}>TIED</Text>
+                  <Text style={[styles.breakTarget, { fontSize: 72, lineHeight: 76 }]}>Tied</Text>
                   <Text style={styles.breakTitle}>{s.battingTeam.name} bat first</Text>
                 </>
               )}
@@ -1305,56 +1300,54 @@ export default function LiveMatch() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.sm },
-  headerTitle: { flex: 1, color: colors.text, fontSize: 20, fontFamily: font.poster, textAlign: 'center', textTransform: 'uppercase' },
+  headerTitle: { flex: 1, color: colors.text, fontSize: 20, fontFamily: font.poster, textAlign: 'center' },
 
-  hero: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden', borderWidth: 1, borderColor: hero.line },
-  heroGhost: { right: -30, bottom: -26 },
+  hero: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden' },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   livePill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.accent,
+    backgroundColor: 'rgba(215,255,58,0.14)',
     paddingHorizontal: 10,
-    height: 24,
-    borderRadius: radius.sm,
-    transform: [{ skewX: '-8deg' }],
+    height: 26,
+    borderRadius: radius.pill,
   },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger },
-  liveText: { ...type.label, fontSize: 11, color: colors.onAccent },
-  heroOvers: { color: hero.muted, fontSize: 18, fontFamily: font.poster, ...type.num },
-  heroTeam: { ...type.poster, color: hero.muted, fontSize: 22, marginTop: space.lg },
+  liveText: { ...type.label, fontSize: 10, color: hero.accent },
+  heroOvers: { color: hero.muted, fontSize: 16, fontFamily: font.poster, ...type.num },
+  heroTeam: { ...type.poster, color: hero.text, fontSize: 22, marginTop: space.lg },
   heroScoreRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   scoreWrap: { flexDirection: 'row', alignItems: 'flex-end', flexShrink: 1 },
   heroScore: { ...type.display, color: hero.text },
-  heroWickets: { fontFamily: font.posterBlack, fontSize: 56, lineHeight: 74, color: hero.faint, marginLeft: 2 },
+  heroWickets: { fontFamily: font.poster, fontSize: 48, lineHeight: 72, color: hero.faint, marginLeft: 2, letterSpacing: -1 },
   heroStats: { gap: space.sm, alignItems: 'flex-end', paddingBottom: 14 },
   stat: { alignItems: 'flex-end' },
   statLabel: { ...type.label, fontSize: 10, color: hero.faint },
-  statValue: { color: hero.text, fontSize: 26, fontFamily: font.posterBlack, lineHeight: 28, ...type.num },
+  statValue: { color: hero.text, fontSize: 24, fontFamily: font.posterBlack, lineHeight: 28, ...type.num },
   progress: {
-    height: 8,
-    backgroundColor: hero.ink(0.08),
-    borderRadius: 2,
+    height: 6,
+    backgroundColor: hero.ink(0.1),
+    borderRadius: 3,
     overflow: 'hidden',
     marginTop: space.md,
   },
-  progressFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.accent },
-  notch: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: '#0A0A0A' },
+  progressFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: hero.accent, borderRadius: 3 },
+  notch: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: HERO_BG },
   heroFoot: { color: hero.muted, fontSize: 13, fontFamily: font.semibold, marginTop: space.md },
   chase: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
+    backgroundColor: hero.accent,
+    borderRadius: radius.pill,
     paddingHorizontal: space.lg,
     paddingVertical: 8,
     marginTop: space.md,
   },
-  chaseText: { color: colors.onAccent, fontSize: 18, fontFamily: font.poster },
-  chaseBig: { fontSize: 26, fontFamily: font.posterBlack },
-  chaseTarget: { color: colors.onAccent, fontSize: 14, fontFamily: font.poster, opacity: 0.7 },
+  chaseText: { color: colors.onAccent, fontSize: 15, fontFamily: font.semibold },
+  chaseBig: { fontSize: 22, fontFamily: font.posterBlack },
+  chaseTarget: { color: colors.onAccent, fontSize: 13, fontFamily: font.semibold, opacity: 0.65 },
 
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   batter: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.md, paddingRight: space.lg, gap: space.md },
@@ -1362,13 +1355,13 @@ const styles = StyleSheet.create({
   batterName: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { color: colors.muted, fontSize: 17, fontFamily: font.bold, flexShrink: 1 },
   batterMeta: { color: colors.faint, fontSize: 12, fontFamily: font.semibold, marginTop: 2, ...type.num },
-  batterRuns: { color: colors.muted, fontSize: 40, lineHeight: 42, fontFamily: font.posterBlack, ...type.num },
+  batterRuns: { color: colors.muted, fontSize: 40, lineHeight: 44, fontFamily: font.posterBlack, ...type.num },
   batterBalls: { fontSize: 18, fontFamily: font.poster, color: colors.faint },
   bowlerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   bowlerIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.dangerDim,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1388,7 +1381,7 @@ const styles = StyleSheet.create({
     ...edge,
   },
   scorebugLabel: { borderRightWidth: 1, borderRightColor: colors.border, paddingRight: space.md },
-  scorebugTitle: { color: colors.text, fontSize: 18, fontFamily: font.poster },
+  scorebugTitle: { color: colors.text, fontSize: 16, fontFamily: font.poster },
   scorebugRuns: { color: colors.faint, fontSize: 11, fontFamily: font.bold, textTransform: 'uppercase' },
   overBalls: { gap: 6, alignItems: 'center' },
 
@@ -1401,13 +1394,13 @@ const styles = StyleSheet.create({
   chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 118 },
   barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   barValue: { color: colors.muted, fontSize: 13, fontFamily: font.poster, marginBottom: 3, ...type.num },
-  bar: { width: '100%', maxWidth: 22, borderRadius: 3, backgroundColor: ink(0.22) },
+  bar: { width: '100%', maxWidth: 20, borderRadius: 6, backgroundColor: ink(0.18) },
   barCurrent: { borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.accentDim },
   barWickets: { flexDirection: 'row', gap: 2, height: 8, marginTop: 3 },
   wicketDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger },
   barLabel: { color: colors.faint, fontSize: 10, fontFamily: font.bold, ...type.num },
 
-  pickerTitle: { ...type.title, fontSize: 40, lineHeight: 42, color: colors.text, marginTop: space.md },
+  pickerTitle: { ...type.title, fontSize: 32, lineHeight: 36, color: colors.text, marginTop: space.md },
   pickerSub: { color: colors.muted, fontSize: 14, fontFamily: font.medium, marginTop: 2 },
   pickRow: {
     flexDirection: 'row',
@@ -1416,44 +1409,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     height: 62,
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     ...edge,
   },
-  pickNum: { color: colors.accentInk, fontSize: 24, fontFamily: font.posterBlack, width: 32, ...type.num },
+  pickNum: { color: colors.faint, fontSize: 18, fontFamily: font.poster, width: 28, ...type.num },
   pickName: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   pickNote: { color: colors.muted, fontSize: 12, fontFamily: font.medium, marginTop: 1 },
   openersPicked: { flexDirection: 'row', marginTop: space.sm },
 
   padWrap: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    borderTopWidth: 2,
-    borderColor: colors.accent,
+    borderTopLeftRadius: radius.xl + 4,
+    borderTopRightRadius: radius.xl + 4,
+    borderTopWidth: 1,
+    borderColor: colors.borderHi,
     paddingHorizontal: space.md,
     paddingTop: space.md,
+    ...edge,
   },
   pad: { gap: space.sm },
   extrasRow: { flexDirection: 'row', gap: 6 },
   extraKey: {
     height: 38,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.borderHi,
+    borderColor: colors.border,
     backgroundColor: colors.surfaceHi,
     alignItems: 'center',
     justifyContent: 'center',
     ...edge,
   },
   extraKeyOn: { backgroundColor: colors.violet, borderColor: colors.violet },
-  extraText: { color: colors.muted, fontSize: 13, fontFamily: font.bold },
+  extraText: { color: colors.muted, fontSize: 13, fontFamily: font.semibold },
   modeHint: { ...type.label, fontSize: 10, color: colors.faint, textAlign: 'center', marginVertical: 2 },
   grid: { flexDirection: 'row', gap: space.sm },
   key: {
-    height: 66,
-    borderRadius: radius.md,
+    height: 64,
+    borderRadius: radius.lg,
     backgroundColor: colors.surfaceHi,
     borderWidth: 1,
     borderColor: colors.border,
@@ -1461,12 +1455,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...edge,
   },
-  keyFour: { backgroundColor: colors.cyanDim, borderColor: colors.cyan, borderWidth: 1.5 },
+  keyFour: { backgroundColor: colors.cyanDim, borderColor: 'transparent' },
   keySix: { backgroundColor: colors.accent, borderColor: colors.accent },
   keyMode: { backgroundColor: colors.violetDim, borderColor: colors.violet },
   keyOut: { backgroundColor: colors.danger, borderColor: colors.danger },
-  keyText: { color: colors.text, fontSize: 36, lineHeight: 38, fontFamily: font.posterBlack, ...type.num },
-  keySub: { fontSize: 9, fontFamily: font.heavy, letterSpacing: 1.2, marginTop: -2, opacity: 0.8 },
+  keyText: { color: colors.text, fontSize: 30, lineHeight: 34, fontFamily: font.posterBlack, ...type.num },
+  keySub: { fontSize: 9, fontFamily: font.semibold, letterSpacing: 1, marginTop: -1, opacity: 0.75 },
 
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   editNow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
@@ -1491,13 +1485,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     backgroundColor: colors.accent,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
     paddingVertical: 8,
     marginBottom: space.sm,
   },
-  bannerTitle: { fontFamily: font.posterBlack, fontSize: 22, color: colors.onAccent },
-  bannerBody: { flex: 1, fontFamily: font.bold, fontSize: 12, color: colors.onAccent },
+  bannerTitle: { fontFamily: font.posterBlack, fontSize: 17, color: colors.onAccent },
+  bannerBody: { flex: 1, fontFamily: font.semibold, fontSize: 12, color: colors.onAccent },
   sheetLabel: { ...type.label, color: colors.muted, marginTop: space.xs },
 
   result: {
@@ -1509,21 +1503,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   resultEyebrow: { ...type.label, color: colors.onAccent, opacity: 0.6, marginTop: space.md },
-  resultWinner: { fontFamily: font.posterBlack, fontSize: 64, lineHeight: 62, color: colors.onAccent, textTransform: 'uppercase', letterSpacing: -1.5 },
-  resultMargin: { fontFamily: font.poster, fontSize: 24, color: colors.onAccent, textTransform: 'uppercase' },
-  resultScores: { alignSelf: 'stretch', marginTop: space.xl, borderTopWidth: 2, borderTopColor: colors.onAccent, paddingTop: space.md, gap: 4 },
+  resultWinner: { fontFamily: font.posterBlack, fontSize: 40, lineHeight: 46, color: colors.onAccent, letterSpacing: -1.6 },
+  resultMargin: { fontFamily: font.poster, fontSize: 20, color: colors.onAccent, letterSpacing: -0.3, opacity: 0.75 },
+  resultScores: { alignSelf: 'stretch', marginTop: space.xl, borderTopWidth: 1, borderTopColor: 'rgba(10,13,6,0.18)', paddingTop: space.md, gap: 6 },
   resultScore: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   resultTeam: { color: colors.onAccent, fontFamily: font.bold, fontSize: 15, flex: 1 },
-  resultRuns: { color: colors.onAccent, fontFamily: font.posterBlack, fontSize: 28, ...type.num },
-  resultOvers: { fontFamily: font.poster, fontSize: 16, opacity: 0.6 },
+  resultRuns: { color: colors.onAccent, fontFamily: font.posterBlack, fontSize: 24, ...type.num },
+  resultOvers: { fontFamily: font.medium, fontSize: 13, opacity: 0.55 },
   potm: {
     alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    backgroundColor: colors.onAccent,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
+    backgroundColor: HERO_BG,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
     paddingVertical: space.md,
     marginTop: space.lg,
   },
@@ -1532,29 +1526,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 2,
-    borderColor: colors.onAccent,
-    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(10,13,6,0.25)',
+    borderRadius: radius.pill,
     paddingHorizontal: space.md,
     paddingVertical: 8,
     marginTop: space.sm,
   },
-  seriesLineText: { fontFamily: font.poster, fontSize: 20, color: colors.onAccent, textTransform: 'uppercase' },
+  seriesLineText: { fontFamily: font.poster, fontSize: 16, color: colors.onAccent },
   potmLabel: { ...type.label, fontSize: 9, color: hero.accent },
-  potmName: { fontFamily: font.poster, fontSize: 24, color: hero.text, textTransform: 'uppercase' },
-  potmLine: { fontFamily: font.poster, fontSize: 18, color: hero.text, ...type.num },
+  potmName: { fontFamily: font.poster, fontSize: 20, color: hero.text, letterSpacing: -0.3 },
+  potmLine: { fontFamily: font.semibold, fontSize: 14, color: hero.muted, ...type.num },
   exportHint: { color: colors.faint, fontSize: 12, fontFamily: font.regular, textAlign: 'center', marginTop: -4 },
 
   breakCard: {
     backgroundColor: HERO_BG,
     borderRadius: radius.xl,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
     padding: space.xl,
     overflow: 'hidden',
   },
   breakEyebrow: { ...type.label, color: hero.accent },
-  breakTarget: { fontFamily: font.posterBlack, fontSize: 120, lineHeight: 116, color: hero.text, letterSpacing: -3, ...type.num },
-  breakTitle: { ...type.poster, fontSize: 26, color: hero.text },
+  breakTarget: { fontFamily: font.posterBlack, fontSize: 104, lineHeight: 114, color: hero.text, letterSpacing: -5, ...type.num },
+  breakTitle: { ...type.poster, fontSize: 22, color: hero.text },
   breakSub: { color: hero.muted, fontSize: 13, fontFamily: font.medium, marginTop: space.sm },
 });

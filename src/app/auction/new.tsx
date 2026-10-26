@@ -107,7 +107,7 @@ export default function NewAuction() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>
-            THE <Text style={{ color: colors.accentInk }}>AUCTION</Text>
+            The auction
           </Text>
           <Text style={styles.lead}>Two captains, a wallet of ₹1 lakh each. Players come up one at a time and go to the highest bid.</Text>
 
@@ -222,7 +222,7 @@ export default function NewAuction() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
-  title: { fontFamily: font.posterBlack, fontSize: 52, lineHeight: 52, color: colors.text, letterSpacing: -1 },
+  title: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
   lead: { color: colors.muted, fontSize: 14, fontFamily: font.medium, marginTop: 4, lineHeight: 20 },
   count: { color: colors.faint, fontSize: 12, fontFamily: font.medium, ...type.num },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

@@ -11,9 +11,8 @@ import { useMatches } from '../store/matches.tsx';
 import { savePdf } from '../store/files.ts';
 import { useSquad } from '../store/squad.ts';
 import { plural } from '../engine/text.ts';
-import { colors, edge, font, hero, radius, space, type } from '../theme.ts';
+import { colors, edge, font, hero, radius, space, type, HERO_BG } from '../theme.ts';
 
-const HERO_BG = '#101010';
 const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 const openPlayer = (key: string) => () => router.push({ pathname: '/player/[key]', params: { key } });
 const openMatch = (id: string) => () => router.push({ pathname: '/match/[id]/scorecard', params: { id } });
@@ -99,7 +98,9 @@ function Season({ s }: { s: ReturnType<typeof records>['summary'] }) {
       <View style={styles.seasonRow}>
         {cells.map((c) => (
           <View key={c.k} style={{ flex: 1 }}>
-            <Text style={styles.seasonValue}>{c.v}</Text>
+            <Text style={styles.seasonValue} numberOfLines={1} adjustsFontSizeToFit>
+              {c.v}
+            </Text>
             <Text style={styles.seasonKey}>{c.k}</Text>
           </View>
         ))}
@@ -154,7 +155,7 @@ export default function Records() {
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }} stickyHeaderIndices={[2]}>
         <Text style={styles.pageTitle}>
-          RECORD <Text style={{ color: colors.accentInk }}>BOOK</Text>
+          Record book
         </Text>
         <Season s={r.summary} />
         <View style={styles.tabs}>
@@ -372,11 +373,11 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
   export: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: space.md, height: 38, ...edge },
   exportText: { color: colors.onAccent, fontSize: 13, fontFamily: font.heavy },
-  pageTitle: { fontFamily: font.posterBlack, fontSize: 52, lineHeight: 52, color: colors.text, letterSpacing: -1 },
+  pageTitle: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
   season: { backgroundColor: HERO_BG, borderRadius: radius.xl, padding: space.lg, marginTop: space.md, overflow: 'hidden' },
   seasonLabel: { ...type.label, color: hero.accent },
-  seasonRow: { flexDirection: 'row', marginTop: space.md },
-  seasonValue: { fontFamily: font.posterBlack, fontSize: 28, lineHeight: 32, color: hero.text, ...type.num },
+  seasonRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  seasonValue: { fontFamily: font.posterBlack, fontSize: 23, lineHeight: 26, color: hero.text, ...type.num },
   seasonKey: { ...type.label, fontSize: 9, color: hero.muted },
   seasonLine: { color: hero.muted, fontSize: 12, fontFamily: font.medium, marginTop: space.md },
   tabs: { backgroundColor: colors.bg, paddingVertical: space.sm, marginTop: space.md },
@@ -384,16 +385,16 @@ const styles = StyleSheet.create({
   champ: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, backgroundColor: colors.accentDim },
   champIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   champLabel: { ...type.label, fontSize: 9, color: colors.accentInk },
-  champName: { fontFamily: font.posterBlack, fontSize: 24, lineHeight: 26, color: colors.text, textTransform: 'uppercase' },
+  champName: { fontFamily: font.posterBlack, fontSize: 20, lineHeight: 22, color: colors.text },
   champSub: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
-  champValue: { fontFamily: font.posterBlack, fontSize: 40, lineHeight: 42, color: colors.text, ...type.num },
+  champValue: { fontFamily: font.posterBlack, fontSize: 33, lineHeight: 37, color: colors.text, ...type.num },
   champUnit: { fontFamily: font.poster, fontSize: 14, color: colors.muted },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: 1, borderTopColor: colors.border },
   rowTop: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
-  rank: { width: 18, fontFamily: font.posterBlack, fontSize: 20, color: colors.faint },
+  rank: { width: 18, fontFamily: font.posterBlack, fontSize: 16, color: colors.faint },
   title: { flex: 1, color: colors.text, fontSize: 15, fontFamily: font.bold },
   sub: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 3 },
-  value: { fontFamily: font.posterBlack, fontSize: 24, color: colors.text, ...type.num },
+  value: { fontFamily: font.posterBlack, fontSize: 20, color: colors.text, ...type.num },
   unit: { fontFamily: font.poster, fontSize: 13, color: colors.faint },
   track: { height: 4, borderRadius: 2, backgroundColor: colors.border, marginTop: 5, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 2, backgroundColor: colors.accentInk, opacity: 0.7 },
@@ -409,9 +410,9 @@ const styles = StyleSheet.create({
   vs: { ...type.label, color: colors.faint, textAlign: 'center' },
   h2h: { flexDirection: 'row', alignItems: 'center', marginTop: space.sm },
   h2hSide: { flex: 1 },
-  h2hWins: { fontFamily: font.posterBlack, fontSize: 64, lineHeight: 64, color: colors.muted },
-  h2hName: { fontFamily: font.poster, fontSize: 18, color: colors.text, textTransform: 'uppercase' },
-  h2hPlayed: { fontFamily: font.posterBlack, fontSize: 32, color: colors.faint },
+  h2hWins: { fontFamily: font.posterBlack, fontSize: 52, lineHeight: 58, color: colors.muted },
+  h2hName: { fontFamily: font.poster, fontSize: 18, color: colors.text },
+  h2hPlayed: { fontFamily: font.posterBlack, fontSize: 26, color: colors.faint },
   recent: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: 4 },
   dot: { width: 8, height: 8, borderRadius: 2, transform: [{ skewX: '-12deg' }] },
   recentText: { flex: 1, color: colors.muted, fontSize: 13, fontFamily: font.semibold },

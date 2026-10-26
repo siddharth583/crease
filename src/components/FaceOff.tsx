@@ -1,10 +1,9 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { verdict, type Matchup } from '../engine/records.ts';
-import { colors, edge, font, hero, radius, space, type } from '../theme.ts';
+import { colors, edge, font, hero, radius, space, type, HERO_BG } from '../theme.ts';
 import { PitchStripes, PressableScale } from './ui.tsx';
 
-const HERO_BG = '#101010';
 const openRivalry = (m: Matchup) => () => router.push({ pathname: '/rivalry', params: { bat: m.batterKey, bowl: m.bowlerKey } });
 
 /** Batter against bowler: who's ahead, as a tug of war. */
@@ -51,8 +50,8 @@ const styles = StyleSheet.create({
   faceBig: { backgroundColor: HERO_BG, borderColor: HERO_BG, padding: space.lg, gap: space.md },
   faceNames: { flexDirection: 'row', alignItems: 'flex-end', gap: space.sm },
   faceRole: { ...type.label, fontSize: 9, color: colors.faint },
-  faceName: { fontFamily: font.poster, fontSize: 19, textTransform: 'uppercase' },
-  faceNameBig: { fontFamily: font.posterBlack, fontSize: 28, lineHeight: 28 },
+  faceName: { fontFamily: font.poster, fontSize: 19 },
+  faceNameBig: { fontFamily: font.posterBlack, fontSize: 23, lineHeight: 26 },
   faceVs: { fontFamily: font.poster, fontSize: 15, color: colors.faint, paddingBottom: 3 },
   faceFoot: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   faceStats: { flex: 1, color: colors.muted, fontSize: 13, fontFamily: font.medium },

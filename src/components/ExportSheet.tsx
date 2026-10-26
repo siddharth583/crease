@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     ...edge,
   },
   formatOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  formatTitle: { fontFamily: font.poster, fontSize: 22, color: colors.text, textTransform: 'uppercase', marginTop: space.sm },
+  formatTitle: { fontFamily: font.poster, fontSize: 18, color: colors.text, marginTop: space.sm },
   formatBody: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
   listHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.lg, marginBottom: space.sm },
   listTitle: { ...type.label, color: colors.muted },

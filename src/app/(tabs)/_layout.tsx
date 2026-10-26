@@ -29,12 +29,13 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
               accessibilityRole="tab"
               accessibilityLabel={tab.label}
               accessibilityState={{ selected: on }}
-              scaleTo={0.9}
+              scaleTo={0.94}
               onPress={() => !on && navigateToTab(route.key)}
+              wrapStyle={{ flex: 1 }}
               style={[styles.tab, on && styles.tabOn]}
             >
-              <Ionicons name={on ? tab.iconOn : tab.icon} size={19} color={on ? colors.onAccent : colors.muted} />
-              {on && <Text style={styles.tabLabel}>{tab.label}</Text>}
+              <Ionicons name={on ? tab.iconOn : tab.icon} size={19} color={on ? colors.text : colors.faint} />
+              <Text style={[styles.tabLabel, on && styles.tabLabelOn]}>{tab.label}</Text>
             </PressableScale>
           );
         })}
@@ -83,35 +84,33 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 4,
     height: 62,
-    paddingHorizontal: 6,
-    borderRadius: radius.xl,
+    padding: 6,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.borderHi,
+    borderColor: colors.border,
     ...edge,
   },
   tab: {
     height: 48,
-    minWidth: 52,
-    paddingHorizontal: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.pill,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
   },
-  tabOn: { backgroundColor: colors.accent, paddingHorizontal: space.lg },
-  tabLabel: { color: colors.onAccent, fontFamily: font.poster, fontSize: 18, textTransform: 'uppercase' },
+  tabOn: { backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.borderHi },
+  tabLabel: { color: colors.faint, fontFamily: font.semibold, fontSize: 14 },
+  tabLabelOn: { color: colors.text },
   fab: {
     width: 62,
     height: 62,
-    borderRadius: radius.xl,
+    borderRadius: radius.pill,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ rotate: '0deg' }],
     ...edge,
   },
 });

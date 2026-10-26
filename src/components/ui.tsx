@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BallView } from '../engine/engine.ts';
-import { ballColors, colors, font, gradients, radius, space, type, ink, edge, isDay } from '../theme.ts';
+import { ballColors, colors, font, gradients, radius, space, type, edge, isDay } from '../theme.ts';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -39,7 +39,7 @@ export function tap(kind: 'light' | 'medium' | 'heavy' | 'success' | 'warning' =
 
 // ─── Surfaces ────────────────────────────────────────────────────────────────
 
-/** A screen under the floodlights: black, with a faint volt glow falling from the top. */
+/** A screen at the ground after dark: the pitch-black page with a faint green haze from the floodlights. */
 export function Screen({ children, style, glow = true }: { children: ReactNode; style?: StyleProp<ViewStyle>; glow?: boolean }) {
   const insets = useSafeAreaInsets();
   return (
@@ -66,30 +66,15 @@ export function PitchStripes({ count = 9, opacity = 0.035, tint }: { count?: num
   );
 }
 
-/** A huge, faint word behind content, used as texture. */
-export function GhostWord({ children, size = 160, style }: { children: string; size?: number; style?: StyleProp<TextStyle> }) {
-  return (
-    <Text
-      pointerEvents="none"
-      // The web adds "…" to a one-line Text; there a no-wrap style clips cleanly instead.
-      numberOfLines={Platform.OS === 'web' ? undefined : 1}
-      ellipsizeMode="clip"
-      style={[styles.ghost, { fontSize: size, lineHeight: size * 0.9 }, Platform.OS === 'web' && ({ whiteSpace: 'nowrap' } as object), style]}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    >
-      {children}
-    </Text>
-  );
+/** A huge, faint word behind content. Retired in the Clubhouse design (it made screens busy); kept so call sites stay simple. */
+export function GhostWord(_: { children: string; size?: number; style?: StyleProp<TextStyle> }) {
+  return null;
 }
 
 export function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <View style={styles.sectionRow}>
-      <View style={styles.sectionLeft}>
-        <View style={styles.sectionTick} />
-        <Text style={styles.sectionLabel}>{children}</Text>
-      </View>
+      <Text style={styles.sectionLabel}>{children}</Text>
       {right}
     </View>
   );
@@ -209,7 +194,6 @@ export function MomentFlash({ moment }: { moment: Moment | null }) {
   const opacity = v.interpolate({ inputRange: [0, 0.6, 1.4, 2], outputRange: [0, 0.96, 0.96, 0] });
   const scale = v.interpolate({ inputRange: [0, 1, 2], outputRange: [0.55, 1, 1.25] });
   const translateX = v.interpolate({ inputRange: [0, 1, 2], outputRange: [-60, 0, 80] });
-  const skew = v.interpolate({ inputRange: [0, 1, 2], outputRange: ['-14deg', '-8deg', '-4deg'] });
 
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.moment, { backgroundColor: m.bg, opacity }]}>
@@ -219,7 +203,7 @@ export function MomentFlash({ moment }: { moment: Moment | null }) {
         adjustsFontSizeToFit
         style={[
           styles.momentWord,
-          { color: m.fg, fontSize: 176 * m.size, lineHeight: 176 * m.size, transform: [{ translateX }, { scale }, { skewX: skew }] },
+          { color: m.fg, fontSize: 150 * m.size, lineHeight: 160 * m.size, transform: [{ translateX }, { scale }] },
         ]}
       >
         {m.word}
@@ -231,7 +215,7 @@ export function MomentFlash({ moment }: { moment: Moment | null }) {
 
 // ─── Controls ────────────────────────────────────────────────────────────────
 
-/** Primary is volt with a hard offset shadow it presses down into; ghost and danger are flat. */
+/** A pill: primary is volt with dark type, ghost a quiet surface, danger red. It sinks a little under the thumb. */
 export function Button({
   label,
   onPress,
@@ -250,7 +234,7 @@ export function Button({
   const press = useRef(new Animated.Value(0)).current;
   const to = (v: number) => Animated.spring(press, { toValue: v, useNativeDriver: native, speed: 50, bounciness: 6 }).start();
   const fg = variant === 'primary' ? colors.onAccent : variant === 'danger' ? '#FFFFFF' : colors.text;
-  const shift = press.interpolate({ inputRange: [0, 1], outputRange: [0, 4] });
+  const scale = press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] });
   const fill =
     variant === 'primary' ? styles.primaryFill : variant === 'danger' ? styles.dangerFill : styles.ghostFill;
 
@@ -267,8 +251,7 @@ export function Button({
       }}
       style={[styles.buttonWrap, { opacity: disabled ? 0.35 : 1 }, style]}
     >
-      {variant === 'primary' && !isDay && <View style={styles.buttonShadow} />}
-      <Animated.View style={[styles.buttonFill, fill, { transform: [{ translateX: shift }, { translateY: shift }] }]}>
+      <Animated.View style={[styles.buttonFill, fill, { transform: [{ scale }] }]}>
         {icon && <Ionicons name={icon} size={18} color={fg} />}
         <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
       </Animated.View>
@@ -321,7 +304,7 @@ export function Chip({
   icon?: IconName;
 }) {
   const on = {
-    accent: [colors.accent, colors.onAccent],
+    accent: [colors.text, colors.bg],
     violet: [colors.violet, isDay ? '#FFFFFF' : colors.onAccent],
     danger: [colors.danger, '#FFFFFF'],
   }[tone];
@@ -363,7 +346,7 @@ export function Segmented<T extends string>({
             wrapStyle={{ flex: 1 }}
             style={[styles.segment, on && styles.segmentOn]}
           >
-            <Text numberOfLines={1} style={[styles.segmentText, on && { color: colors.onAccent }]}>
+            <Text numberOfLines={1} style={[styles.segmentText, on && { color: colors.bg }]}>
               {o.label}
             </Text>
           </PressableScale>
@@ -442,19 +425,19 @@ export function BallChip({ ball, size = 36, animate = false }: { ball?: BallView
   useEffect(() => {
     if (animate) Animated.spring(v, { toValue: 1, useNativeDriver: native, speed: 16, bounciness: 12 }).start();
   }, [animate, v]);
-  if (!ball) return <View style={[styles.ball, styles.ballEmpty, { width: size, height: size }]} />;
+  if (!ball) return <View style={[styles.ball, styles.ballEmpty, { width: size, height: size, borderRadius: size / 2 }]} />;
   const c = ballColors[ball.tone];
-  const wide = ball.label.length > 2;
+  const wide = ball.label.length > 1;
   const scale = v.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
   return (
     <Animated.View
       style={[
         styles.ball,
-        { minWidth: size, height: size, backgroundColor: c.bg, paddingHorizontal: wide ? 7 : 0 },
+        { minWidth: size, height: size, borderRadius: size / 2, backgroundColor: c.bg, paddingHorizontal: wide ? 8 : 0 },
         { opacity: v, transform: [{ scale }] },
       ]}
     >
-      <Text style={[styles.ballText, { color: c.fg, fontSize: wide ? 14 : 19 }]}>{ball.label}</Text>
+      <Text style={[styles.ballText, { color: c.fg, fontSize: wide ? 13 : size * 0.44 }]}>{ball.label}</Text>
     </Animated.View>
   );
 }
@@ -494,7 +477,7 @@ export function useToast(placement: 'bottom' | 'top' = 'bottom') {
         { opacity: v, transform: [{ translateY: placement === 'top' ? Animated.multiply(translateY, -1) : translateY }] },
       ]}
     >
-      <View style={[styles.toast, { borderColor: color }]} accessibilityLiveRegion="polite">
+      <View style={styles.toast} accessibilityLiveRegion="polite">
         <Ionicons name={icon} size={18} color={color} />
         <Text style={styles.toastText}>{toast.text}</Text>
       </View>
@@ -532,7 +515,7 @@ export function Sheet({
 
 export const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
+  glow: { position: 'absolute', top: 0, left: 0, right: 0, height: 360 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -541,51 +524,33 @@ export const styles = StyleSheet.create({
     padding: space.lg,
     ...edge,
   },
-  ghost: {
-    position: 'absolute',
-    fontFamily: font.posterBlack,
-    color: ink(0.045),
-    textTransform: 'uppercase',
-    letterSpacing: -4,
-  },
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: space.xl,
-    marginBottom: space.sm,
-    paddingHorizontal: 2,
+    marginTop: space.xl + 4,
+    marginBottom: space.md,
+    paddingHorizontal: 4,
   },
-  sectionLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  sectionTick: { width: 14, height: 3, backgroundColor: isDay ? colors.accentInk : colors.accent, transform: [{ skewX: '-20deg' }] },
   sectionLabel: { ...type.label, color: colors.muted },
-  buttonWrap: { height: 56, marginRight: 4, marginBottom: 4 },
-  buttonShadow: {
-    position: 'absolute',
-    left: 4,
-    top: 4,
-    right: -4,
-    bottom: -4,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-  },
+  buttonWrap: { height: 56 },
   buttonFill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.xl,
   },
   primaryFill: { backgroundColor: colors.accent, ...edge },
   dangerFill: { backgroundColor: colors.danger },
-  ghostFill: { backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: isDay ? colors.border : colors.borderHi },
-  buttonText: { fontSize: 21, fontFamily: font.poster, textTransform: 'uppercase', letterSpacing: 0.3 },
+  ghostFill: { backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.border },
+  buttonText: { fontSize: 16, fontFamily: font.bold, letterSpacing: -0.1 },
   iconButton: {
     width: 42,
     height: 42,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surfaceHi,
@@ -598,62 +563,63 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
-    height: 38,
-    borderRadius: radius.sm,
+    height: 36,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.borderHi,
+    borderColor: colors.border,
     backgroundColor: colors.surfaceHi,
   },
-  chipText: { color: colors.muted, fontSize: 14, fontFamily: font.bold },
+  chipText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold },
   segmented: {
     flexDirection: 'row',
-    backgroundColor: colors.bg,
-    borderRadius: radius.md,
+    backgroundColor: colors.surfaceHi,
+    borderRadius: radius.pill,
     padding: 4,
     gap: 4,
     borderWidth: 1,
     borderColor: colors.border,
-    ...edge,
   },
-  segment: { height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, paddingHorizontal: 8 },
-  segmentOn: { backgroundColor: colors.accent },
-  segmentText: { color: colors.muted, fontSize: 14, fontFamily: font.bold },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.sm, minHeight: 56 },
-  rowTitle: { color: colors.text, fontSize: 15, fontFamily: font.bold },
-  rowHint: { color: colors.muted, fontSize: 13, fontFamily: font.regular, marginTop: 2 },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  stepperValue: { color: colors.accentInk, fontSize: 30, fontFamily: font.posterBlack, minWidth: 34, textAlign: 'center', ...type.num },
-  ball: { borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  ballEmpty: { borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed' },
+  segment: { height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, paddingHorizontal: 10 },
+  segmentOn: { backgroundColor: colors.text },
+  segmentText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.sm, minHeight: 58 },
+  rowTitle: { color: colors.text, fontSize: 15, fontFamily: font.semibold },
+  rowHint: { color: colors.muted, fontSize: 13, fontFamily: font.regular, marginTop: 2, lineHeight: 18 },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  stepperValue: { color: colors.text, fontSize: 26, fontFamily: font.posterBlack, minWidth: 40, textAlign: 'center', ...type.num },
+  ball: { alignItems: 'center', justifyContent: 'center' },
+  ballEmpty: { borderWidth: 1.5, borderColor: colors.borderHi, borderStyle: 'dashed' },
   ballText: { fontFamily: font.posterBlack, ...type.num },
   moment: { alignItems: 'center', justifyContent: 'center', zIndex: 50 },
-  momentWord: { fontFamily: font.posterBlack, fontSize: 176, lineHeight: 176, letterSpacing: -5 },
-  momentCaption: { fontFamily: font.poster, fontSize: 26, marginTop: -8, letterSpacing: 0.5, textTransform: 'uppercase' },
+  momentWord: { fontFamily: font.posterBlack, fontSize: 150, lineHeight: 165, letterSpacing: -6 },
+  momentCaption: { fontFamily: font.poster, fontSize: 24, marginTop: 0, letterSpacing: -0.3 },
   toastWrap: { position: 'absolute', left: space.lg, right: space.lg, alignItems: 'center', zIndex: 40 },
   toast: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    backgroundColor: colors.surfaceHi,
+    backgroundColor: isDay ? colors.text : colors.surfaceHi,
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
-    maxWidth: 420,
+    maxWidth: 440,
+    ...edge,
   },
-  toastText: { color: colors.text, fontSize: 14, fontFamily: font.semibold, flexShrink: 1 },
+  toastText: { color: isDay ? colors.bg : colors.text, fontSize: 14, fontFamily: font.semibold, flexShrink: 1 },
   backdrop: { flex: 1, backgroundColor: colors.scrim },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    borderTopWidth: 2,
-    borderColor: colors.accent,
+    borderTopLeftRadius: radius.xl + 4,
+    borderTopRightRadius: radius.xl + 4,
+    borderTopWidth: 1,
+    borderColor: colors.borderHi,
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
     maxHeight: '88%',
   },
-  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderHi, marginBottom: space.sm },
+  grabber: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: colors.borderHi, marginBottom: space.md },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
-  sheetTitle: { ...type.title, fontSize: 30, color: colors.text },
+  sheetTitle: { ...type.title, fontSize: 26, color: colors.text },
 });

@@ -1,9 +1,9 @@
 import {
-  BarlowCondensed_600SemiBold,
-  BarlowCondensed_700Bold,
-  BarlowCondensed_800ExtraBold_Italic,
-  BarlowCondensed_900Black_Italic,
-} from '@expo-google-fonts/barlow-condensed';
+  BricolageGrotesque_500Medium,
+  BricolageGrotesque_600SemiBold,
+  BricolageGrotesque_700Bold,
+  BricolageGrotesque_800ExtraBold,
+} from '@expo-google-fonts/bricolage-grotesque';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -28,10 +28,10 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
     Inter_800ExtraBold,
-    BarlowCondensed_600SemiBold,
-    BarlowCondensed_700Bold,
-    BarlowCondensed_800ExtraBold_Italic,
-    BarlowCondensed_900Black_Italic,
+    BricolageGrotesque_500Medium,
+    BricolageGrotesque_600SemiBold,
+    BricolageGrotesque_700Bold,
+    BricolageGrotesque_800ExtraBold,
   });
 
   // Wait for the fonts so text doesn't jump; if they fail, carry on with the system font.
