@@ -13,6 +13,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -34,8 +35,14 @@ export default function RootLayout() {
     BricolageGrotesque_800ExtraBold,
   });
 
-  // Wait for the fonts so text doesn't jump; if they fail, carry on with the system font.
-  if (!loaded && !failed) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  // Wait briefly for the fonts so text doesn't jump; on a slow connection, show the app after 2.5 seconds anyway
+  // and let the fonts swap in when they arrive. If they fail, carry on with the system font.
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setWaited(true), 2500);
+    return () => clearTimeout(t);
+  }, []);
+  if (!loaded && !failed && !waited) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
 
   return (
     <SafeAreaProvider>
