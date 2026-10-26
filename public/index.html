@@ -47,6 +47,14 @@
         window.addEventListener('load', function () {
           navigator.serviceWorker.register('/sw.js');
         });
+        // A new version took over: reload once so the page and its files come from the same version.
+        var hadController = !!navigator.serviceWorker.controller;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (hadController && !window.__creaseReloaded) {
+            window.__creaseReloaded = true;
+            window.location.reload();
+          }
+        });
       }
     </script>
   </body>
