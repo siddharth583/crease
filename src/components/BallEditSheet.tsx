@@ -67,7 +67,6 @@ export function BallEditSheet({
   s,
   onClose,
   onSave,
-  adding,
 }: {
   ball: BallView | null;
   event: BallEvent | null;
@@ -76,8 +75,6 @@ export function BallEditSheet({
   onClose: () => void;
   /** Returns why the fix can't be made, shown in the sheet, or nothing when it was made. */
   onSave: (next: BallEvent | null, bowler: string | null) => string | void;
-  /** Adding a ball to this over (its index) instead of fixing one: one the over was short of. */
-  adding?: number;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [kind, setKind] = useState<'none' | Extra>('none');
@@ -103,16 +100,14 @@ export function BallEditSheet({
   const keeper = match.keepers?.[s.bowlingTeam.id];
 
   // Where the ball sits: its over, and whether it opened it. The bowlers of the overs either side can't bowl it.
-  const o = adding ?? s.overs.findIndex((ov) => ov.some((b) => b.event === ball.event));
-  const position = adding !== undefined ? s.overs[o].length : o === -1 ? 0 : s.overs[o].findIndex((b) => b.event === ball.event);
+  const o = s.overs.findIndex((ov) => ov.some((b) => b.event === ball.event));
+  const position = o === -1 ? 0 : s.overs[o].findIndex((b) => b.event === ball.event);
   const opensOver = position === 0;
   const changed = bowler !== (ball.bowler ?? null);
   const save = (next: BallEvent | null, who: string | null) => setError(onSave(next, who) || null);
   const nextDoorOvers = [o - 1, o + 1].filter((i) => bowler && s.overBowlers[i]?.includes(bowler)).map((i) => i + 1);
 
-  const bowlerPart = adding !== undefined ? (
-    error && <Text style={styles.error}>{error}</Text>
-  ) : (
+  const bowlerPart = (
     <>
       <Text style={styles.label}>Bowler</Text>
       <Text style={styles.note}>
@@ -141,14 +136,12 @@ export function BallEditSheet({
   );
 
   return (
-    <Sheet visible onClose={onClose} title={adding !== undefined ? 'Add a ball' : 'Fix this ball'}>
+    <Sheet visible onClose={onClose} title="Fix this ball">
       <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
         <View style={styles.now}>
           <BallChip ball={ball} size={44} />
           <Text style={styles.nowText}>
-            {adding !== undefined
-              ? `Over ${o + 1}, ball ${position + 1} · bowled by ${playerName(match, ball.bowler)}`
-              : `Over ${o + 1}, ball ${position + 1} · scored as ${ball.label === '•' ? 'a dot ball' : ball.label}`}
+            Over {o + 1}, ball {position + 1} · scored as {ball.label === '•' ? 'a dot ball' : ball.label}
           </Text>
         </View>
         {event.wicket ? (
@@ -211,7 +204,7 @@ export function BallEditSheet({
                 save(same ? event : { type: 'ball', runs, extra: kind === 'none' ? undefined : kind }, bowler);
               }}
             />
-            {adding === undefined && <Button variant="ghost" label="Delete this ball" icon="trash-outline" onPress={() => save(null, null)} />}
+            <Button variant="ghost" label="Delete this ball" icon="trash-outline" onPress={() => save(null, null)} />
           </>
         )}
       </ScrollView>

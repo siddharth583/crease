@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addBallToOver, addEvent, addPlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, setOvers, startSuperOver, undo } from './engine.ts';
+import { addEvent, addPlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, replaceOver, setOvers, startSuperOver, undo, type OverBall } from './engine.ts';
 import { playerOfTheMatch } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Rules, Team } from './types.ts';
 
@@ -407,56 +407,65 @@ test('a first bounce is the umpire’s call (fair or wide); the second in the ov
   assert.equal(s.overs[0][0].label, '4');
 });
 
-test('a ball in a finished over can become a wide or stop being one, and the overs never shift', () => {
+test('a ball in a finished over can’t change whether it counts on its own: the over is rewritten as a whole', () => {
   let m = start(setup({ overs: 3 }));
-  m = play(m, ball(0, 'wide'), ...Array.from({ length: 6 }, () => ball(1)));
-  m = play(m, { type: 'bowler', bowler: 'b2' }, ball(1), ball(0, 'noball'));
-  const wideAt = m.innings[0].events.findIndex((e) => e.type === 'ball' && e.extra === 'wide');
-  const was = matchState(m).innings[0];
-  // The wide in the first (finished) over becomes a fair ball: the over keeps its six balls, b2's over is untouched.
-  const fair = matchState(replaceBall(m, 0, wideAt, ball(0))).innings[0];
-  assert.equal(fair.legalBalls, was.legalBalls);
-  assert.equal(fair.extras.wide, 0);
-  assert.deepEqual(fair.overBowlers.slice(0, 2), [['b1'], ['b2']]);
-  // A fair ball there becomes a wide: one more run, still six balls.
-  const wide = matchState(replaceBall(m, 0, wideAt + 1, ball(0, 'wide'))).innings[0];
-  assert.equal(wide.legalBalls, was.legalBalls);
-  assert.equal(wide.runs, was.runs - 1 + 1);
-  assert.equal(wide.bowlers.find((b) => b.id === 'b1')!.balls, 6);
-  // Fixed back, the override goes again.
-  const back = replaceBall(replaceBall(m, 0, wideAt + 1, ball(0, 'wide')), 0, wideAt + 1, ball(1));
-  assert.deepEqual(back.innings[0].events[wideAt + 1], ball(1));
-  // A counted ball in a finished over still can't be deleted: the over would be a ball short.
-  assert.equal(replaceBall(m, 0, wideAt + 1, null), m);
-  // The over being bowled now changes as before.
-  const fixed = replaceBall(m, 0, m.innings[0].events.length - 1, ball(0));
-  const s = matchState(fixed).innings[0];
-  assert.equal(s.legalBalls, 8);
-  assert.equal(s.bowlers.reduce((n, b) => n + b.balls, 0), s.legalBalls);
+  m = play(m, ...Array.from({ length: 6 }, () => ball(0)));
+  m = play(m, { type: 'bowler', bowler: 'b2' }, ball(1));
+  const first = m.innings[0].events.findIndex((e) => e.type === 'ball');
+  assert.equal(replaceBall(m, 0, first, ball(0, 'wide')), m);
+  assert.equal(replaceBall(m, 0, first, null), m);
 });
 
-test('an over fixed to have wides gets its missing balls added, and nothing after it moves', () => {
+/** The over as it stands, ready to rewrite. */
+const draftOf = (m: Match, o: number): OverBall[] =>
+  matchState(m).innings[0].overs[o].map((b) => ({ ball: m.innings[0].events[b.event!] as BallEvent, bowler: b.bowler!, from: b.event }));
+
+test('a bowled over is rewritten with its 6 fair balls: wides added in, and nothing after it moves', () => {
   let m = start(setup({ overs: 3 }));
   m = play(m, ...Array.from({ length: 6 }, () => ball(0)));
   m = play(m, { type: 'bowler', bowler: 'b2' }, ball(1), ball(1));
-  const balls = m.innings[0].events.flatMap((e, i) => (e.type === 'ball' ? [i] : []));
-  m = replaceBall(replaceBall(m, 0, balls[0], ball(0, 'wide')), 0, balls[2], ball(0, 'wide'));
-  let s = matchState(m).innings[0];
-  assert.equal(s.owed[0].length, 2, 'two balls short');
-  // The over being bowled now can simply take another ball.
-  assert.equal(matchState(addBallToOver(m, 0, 1, ball(4))).innings[0].legalBalls, 9);
-  m = addBallToOver(m, 0, 0, ball(6));
-  m = addBallToOver(m, 0, 0, ball(4));
-  s = matchState(m).innings[0];
-  assert.equal(s.owed[0].length, 0);
+  const draft = draftOf(m, 0);
+  draft[0] = { ...draft[0], ball: ball(0, 'wide') };
+  draft[2] = { ...draft[2], ball: ball(0, 'wide') };
+  // Two wides leave four fair balls: not an over yet.
+  assert.match(String(replaceOver(m, 0, 0, draft)), /has 4\. Add 2/);
+  const whole = [...draft, { ball: ball(6), bowler: 'b1' }, { ball: ball(4), bowler: 'b1' }];
+  const fixed = replaceOver(m, 0, 0, whole);
+  assert.equal(typeof fixed, 'object');
+  const s = matchState(fixed as Match).innings[0];
   assert.equal(s.overs[0].length, 8);
   assert.equal(s.legalBalls, 8);
-  assert.equal(s.runs, 1 + 1 + 6 + 4 + 2);
+  assert.equal(s.runs, 2 + 6 + 4 + 2);
   assert.deepEqual(s.overBowlers.slice(0, 2), [['b1'], ['b2']]);
   assert.equal(s.bowlers.find((b) => b.id === 'b1')!.balls, 6);
-  // No more room once it's whole; a wide can still go on.
-  assert.equal(addBallToOver(m, 0, 0, ball(1)), m);
-  assert.notEqual(addBallToOver(m, 0, 0, ball(0, 'wide')), m);
+  // Seven fair balls is one too many.
+  assert.match(String(replaceOver(m, 0, 0, [...draftOf(m, 0), { ball: ball(1), bowler: 'b1' }])), /has 7/);
+  // A wide after the sixth fair ball would spill into the next over.
+  assert.match(String(replaceOver(m, 0, 0, [...draftOf(m, 0), { ball: ball(0, 'wide'), bowler: 'b1' }])), /sixth fair ball/);
+});
+
+test('rewriting an over can take a ball away, and a bowler can take over partway through it', () => {
+  let m = start(setup({ overs: 3 }));
+  m = play(m, ball(0, 'noball'), ...Array.from({ length: 6 }, () => ball(1)));
+  m = play(m, { type: 'bowler', bowler: 'b2' }, ball(1));
+  const draft = draftOf(m, 0).slice(1).map((d, i) => (i >= 3 ? { ...d, bowler: 'b3' } : d));
+  const s = matchState(replaceOver(m, 0, 0, draft) as Match).innings[0];
+  assert.equal(s.extras.noball, 0);
+  assert.deepEqual(s.overBowlers.slice(0, 2), [['b1', 'b3'], ['b2']]);
+  assert.equal(s.bowlers.find((b) => b.id === 'b3')!.balls, 3);
+});
+
+test('a batter coming in after a wicket stays after it when the over is rewritten', () => {
+  let m = start(setup({ overs: 3 }));
+  m = play(m, ball(1), ball(0, undefined, { kind: 'bowled', playerOut: 'a2' }), { type: 'batter', batter: 'a3' }, ball(0), ball(0), ball(0), ball(0));
+  m = play(m, { type: 'bowler', bowler: 'b2' }, ball(1));
+  const draft = draftOf(m, 0);
+  draft[0] = { ...draft[0], ball: ball(0, 'wide') };
+  draft.push({ ball: ball(2), bowler: 'b1' });
+  const s = matchState(replaceOver(m, 0, 0, draft) as Match).innings[0];
+  assert.equal(s.wickets, 1);
+  assert.ok(s.batters.some((b) => b.id === 'a3'));
+  assert.equal(s.legalBalls, 7);
 });
 
 test('last man standing: the lone batter is credited with every run, after singles and over ends too', () => {

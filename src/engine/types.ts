@@ -40,8 +40,8 @@ export type BallEvent = {
   /** A bounce, and the umpire's call on it ('fair' or 'wide'; true is fair). Past the over's allowance it's called anyway. */
   bouncer?: boolean | 'fair' | 'wide';
   /**
-   * Whether it took up a ball of the over, whatever its extra says. Set when a ball in a finished over is fixed into
-   * (or out of) a wide or no-ball: that over stays as it was bowled, and so do the overs after it.
+   * Whether it took up a ball of the over, whatever its extra says. Only in matches fixed with an older version;
+   * rewriting the over takes it away.
    */
   counts?: boolean;
 };

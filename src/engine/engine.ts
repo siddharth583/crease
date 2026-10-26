@@ -63,11 +63,6 @@ export type InningsState = {
   overTotals: { runs: number; wickets: number }[];
   /** The bowlers of each over in the order they bowled in it (two when one couldn't finish it), in step with `overs`. */
   overBowlers: string[][];
-  /**
-   * Per over, the wides and no-balls (event indices) that were fixed in after the over and still take up one of its
-   * six balls: the over is that many balls short until they're added.
-   */
-  owed: number[][];
   partnership: { runs: number; balls: number };
   /** Every partnership in order; the last one is still going while the innings is. */
   partnerships: { batters: [string | null, string | null]; runs: number; balls: number }[];
@@ -156,7 +151,6 @@ export function inningsState(match: Match, index: number, target: number | null)
     overs: [[]],
     overTotals: [{ runs: 0, wickets: 0 }],
     overBowlers: [[]],
-    owed: [[]],
     partnership: { runs: 0, balls: 0 },
     partnerships: [],
     log: [],
@@ -246,7 +240,6 @@ export function inningsState(match: Match, index: number, target: number | null)
       bouncersThisOver += 1;
     }
     const legal = e.counts ?? isLegal(rules, e.extra);
-    if (e.counts && !isLegal(rules, e.extra)) s.owed[s.owed.length - 1].push(eventIndex);
     const penalty = e.extra === 'wide' || e.extra === 'noball' ? rules.extraRun : 0;
     const total = e.runs + penalty;
     s.runs += total;
@@ -340,7 +333,7 @@ export function inningsState(match: Match, index: number, target: number | null)
         s.lastOverBowler = bowlerId;
         s.barred = these;
         s.overBowlers.push([]);
-        s.owed.push([]);
+
         s.bowler = null;
         s.overs.push([]);
         bouncersThisOver = 0;
@@ -386,7 +379,6 @@ export function inningsState(match: Match, index: number, target: number | null)
     s.overs.pop();
     s.overTotals.pop();
     s.overBowlers.pop();
-    s.owed.pop();
   }
   return s;
 }
@@ -589,13 +581,11 @@ export function canChangeLegality(match: Match, inningsIndex: number, eventIndex
 }
 
 /**
- * Fix or remove one delivery. Everything after it is worked out again. A ball in a finished over can become a wide or
- * no-ball (or stop being one) but keeps its place in the over, so no over after it moves.
+ * Fix or remove one delivery. Everything after it is worked out again. Whether a ball counts can only change in the
+ * over being bowled; a finished over is changed as a whole with `replaceOver`.
  */
-export function replaceBall(match: Match, inningsIndex: number, eventIndex: number, fix: BallEvent | null): Match {
+export function replaceBall(match: Match, inningsIndex: number, eventIndex: number, ball: BallEvent | null): Match {
   const old = match.innings[inningsIndex]?.events[eventIndex];
-  let ball = fix && { ...fix };
-  if (ball) delete ball.counts;
   if (!old || old.type !== 'ball') return match;
   // A wicket can be corrected (how out, who caught it) but must stay a wicket of the same batter:
   // everything after it was scored with that batter gone.
@@ -612,51 +602,79 @@ export function replaceBall(match: Match, inningsIndex: number, eventIndex: numb
           },
     ),
   });
-  let next = build(ball);
-  // Over by over the balls must still line up with the bowlers who bowled them. In the over being bowled a ball can
-  // start or stop counting; in a finished one it keeps counting as it did. A counted ball there can't be deleted.
+  const next = build(ball);
+  // Over by over the balls must still line up with the bowlers who bowled them.
   const before = legalBallsTo(match, inningsIndex, eventIndex);
   const after = ball ? legalBallsTo(next, inningsIndex, eventIndex) : legalBallsTo(match, inningsIndex, eventIndex - 1);
-  if (before !== after && !canChangeLegality(match, inningsIndex, eventIndex)) {
-    if (!ball) return match;
-    ball = { ...ball, counts: before - legalBallsTo(match, inningsIndex, eventIndex - 1) === 1 };
-    next = build(ball);
-  }
+  if (before !== after && !canChangeLegality(match, inningsIndex, eventIndex)) return match;
   // And every later ball must still fall inside its innings' overs and wickets. A chase that now passes its target
   // sooner keeps the balls it was scored with: the scorecard says what happened.
   return fitsTogether(next) ? next : match;
 }
 
+/** One delivery of an over being rewritten, and who bowled it. `from` is its event index if it was already there. */
+export type OverBall = { ball: BallEvent; bowler: string; from?: number };
+
+/** Fair deliveries in a list: the ones that take up a ball of the over. */
+export const fairBalls = (rules: Rules, balls: BallEvent[]) => balls.filter((b) => isLegal(rules, b.extra)).length;
+
 /**
- * Add a ball at the end of an over: one the over was short of, after a ball in it was fixed into a wide or no-ball.
- * The wide or no-ball stops taking up a ball of the over and the new one takes its place, so no over after it moves.
- * A wide or no-ball can be added to any over; a fair ball only to an over that is short, or the one being bowled.
+ * Rewrite a bowled over: change, add or remove its deliveries and who bowled them. Every over has six fair balls, so a
+ * finished over must still have six (the last over of an innings as many as it needs), and the overs after it don't
+ * move. Batters coming in stay after the wicket they followed. The new match, or why it can't be done.
  */
-export function addBallToOver(match: Match, inningsIndex: number, overIndex: number, ball: BallEvent): Match {
+export function replaceOver(match: Match, inningsIndex: number, overIndex: number, draft: OverBall[]): Match | string {
   const s = inningsState(match, inningsIndex, null);
   const over = s.overs[overIndex];
-  if (!over?.length) return match;
-  const events = [...match.innings[inningsIndex].events];
+  if (!over?.length || !draft.length) return 'That over has no balls to change.';
+  const events = match.innings[inningsIndex].events;
+  const first = over[0].event!;
   const last = over[over.length - 1].event!;
-  const ends = overEnds(match, inningsIndex);
-  // After any batter coming in at the end of the over, before the next over's bowler (or the innings' end).
-  let at = events.findIndex((e, k) => k > last && ((e.type === 'bowler' && startsAnOver(events, ends, k)) || e.type === 'endInnings'));
-  if (at === -1) at = events.length;
-  const fresh: BallEvent = { ...ball };
-  delete fresh.counts;
-  const complete = legalBallsTo(match, inningsIndex, last) % 6 === 0;
-  if (complete && isLegal(match.rules, fresh.extra)) {
-    const owed = s.owed[overIndex]?.[0];
-    if (owed === undefined) return match;
-    const { counts: _, ...plain } = events[owed] as BallEvent;
-    events[owed] = plain;
-  } else if (complete) {
-    // A wide or no-ball in a whole over: before its last ball, which is the one that ended it.
-    at = last;
+  const final = overIndex === s.overs.length - 1 || s.overs.slice(overIndex + 1).every((o) => o.length === 0);
+  const fair = fairBalls(match.rules, draft.map((d) => d.ball));
+  if (!final && fair !== 6) return `An over has 6 fair balls: this one has ${fair}. ${fair < 6 ? `Add ${6 - fair}.` : `Take ${fair - 6} away, or make ${fair - 6 === 1 ? 'one' : 'them'} a wide or no-ball.`}`;
+  if (final && fair > 6) return `An over has 6 fair balls: this one has ${fair}. Take ${fair - 6} away.`;
+  // The over's own pick of bowler, just before its first ball.
+  let pick = -1;
+  for (let k = first - 1; k >= 0 && events[k].type !== 'ball'; k--) if (events[k].type === 'bowler') pick = k;
+  // Batters coming in (and anything else) stay after the delivery they followed; bowler picks are made afresh.
+  const attached = new Map<number, InningsEvent[]>();
+  let owner = -1;
+  for (let k = first; k <= last; k++) {
+    const e = events[k];
+    if (e.type === 'ball') owner = k;
+    else if (e.type !== 'bowler') attached.set(owner, [...(attached.get(owner) ?? []), e]);
   }
-  events.splice(at, 0, fresh);
-  const next: Match = { ...match, innings: match.innings.map((x, i) => (i === inningsIndex ? { ...x, events } : x)) };
-  return fitsTogether(next) ? next : match;
+  // A removed ball's followers go with the ball before it.
+  const kept = new Set(draft.map((d) => d.from));
+  const rebuilt: InningsEvent[] = [];
+  // Followers of removed balls at the start of the over go after the new first ball.
+  const lead: InningsEvent[] = [];
+  for (let k = first; k <= last && !kept.has(k); k++) if (events[k].type === 'ball') lead.push(...(attached.get(k) ?? []));
+  let on: string | null = null;
+  for (const [n, d] of draft.entries()) {
+    if (d.bowler !== on) rebuilt.push({ type: 'bowler', bowler: d.bowler });
+    on = d.bowler;
+    const ball: BallEvent = { ...d.ball };
+    delete ball.counts;
+    rebuilt.push(ball);
+    if (n === 0) rebuilt.push(...lead);
+    if (d.from === undefined) continue;
+    rebuilt.push(...(attached.get(d.from) ?? []));
+    // Followers of removed balls straight after this one.
+    for (let k = d.from + 1; k <= last && !kept.has(k); k++) if (events[k].type === 'ball') rebuilt.push(...(attached.get(k) ?? []));
+  }
+  const before = events.slice(0, first).filter((_, k) => k !== pick);
+  const next: Match = {
+    ...match,
+    innings: match.innings.map((x, i) => (i === inningsIndex ? { ...x, events: [...before, ...rebuilt, ...events.slice(last + 1)] } : x)),
+  };
+  // The over still ends where it did: the next over's first ball is still the first ball of over overIndex + 2.
+  const after = inningsState(next, inningsIndex, null);
+  if (after.overs[overIndex]?.length !== draft.length) return 'A wide or no-ball can’t come after the over’s sixth fair ball. Move it earlier.';
+  if (!final && after.overs.length !== s.overs.length) return 'That would move the overs after it.';
+  if (!fitsTogether(next)) return 'That doesn’t fit with the balls after it (a wicket or a batter coming in no longer lines up).';
+  return next;
 }
 
 /** Every delivery in an innings came while the innings was live (a bowler on, the over and innings not over). */
