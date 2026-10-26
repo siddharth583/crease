@@ -100,45 +100,53 @@ function scopedStyles(doc: Document, scope: string): string {
 }
 
 /**
+ * The report laid out for drawing on the app's own page: its content in a box of the page's width, with its styles
+ * scoped to that box, and its fonts loaded.
+ */
+async function reportBox(html: string): Promise<HTMLDivElement> {
+  // Read the report's styles and content from a frame of its own.
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: `${PAGE_WIDTH}px`, height: '100px', border: '0' });
+  document.body.appendChild(frame);
+  const box = document.createElement('div');
+  try {
+    const doc = frame.contentDocument!;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    box.className = 'crease-pdf';
+    Object.assign(box.style, { width: `${PAGE_WIDTH}px`, background: '#fff' });
+    box.innerHTML = `<style>${scopedStyles(doc, '.crease-pdf')}</style>${doc.body.innerHTML}`;
+  } finally {
+    frame.remove();
+  }
+  // The report's fonts, on the app's page where it's drawn.
+  if (!document.getElementById('crease-pdf-fonts')) {
+    const link = document.createElement('link');
+    link.id = 'crease-pdf-fonts';
+    link.rel = 'stylesheet';
+    link.href = REPORT_FONTS;
+    document.head.appendChild(link);
+    await new Promise((r) => {
+      link.onload = r;
+      link.onerror = r;
+      setTimeout(r, 3000);
+    });
+  }
+  await Promise.all(
+    ['500 12px Inter', '700 12px Inter', '800 12px Inter', '700 12px "Bricolage Grotesque"', '800 12px "Bricolage Grotesque"'].map((f) => document.fonts.load(f).catch(() => null)),
+  );
+  return box;
+}
+
+/**
  * Turns an HTML report into a PDF file and saves it: shared on phones with the app, downloaded straight away on the
  * web. On the web the report is laid out off screen and drawn into A4 pages; the PDF maker only loads when needed.
  */
 export async function savePdf(name: string, html: string): Promise<SaveResult> {
   if (Platform.OS === 'web') {
-    // Read the report's styles and content from a frame of its own.
-    const frame = document.createElement('iframe');
-    frame.setAttribute('aria-hidden', 'true');
-    Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: `${PAGE_WIDTH}px`, height: '100px', border: '0' });
-    document.body.appendChild(frame);
-    let box: HTMLDivElement;
-    try {
-      const doc = frame.contentDocument!;
-      doc.open();
-      doc.write(html);
-      doc.close();
-      box = document.createElement('div');
-      box.className = 'crease-pdf';
-      Object.assign(box.style, { width: `${PAGE_WIDTH}px`, background: '#fff' });
-      box.innerHTML = `<style>${scopedStyles(doc, '.crease-pdf')}</style>${doc.body.innerHTML}`;
-    } finally {
-      frame.remove();
-    }
-    // The report's fonts, on the app's page where it's drawn.
-    if (!document.getElementById('crease-pdf-fonts')) {
-      const link = document.createElement('link');
-      link.id = 'crease-pdf-fonts';
-      link.rel = 'stylesheet';
-      link.href = REPORT_FONTS;
-      document.head.appendChild(link);
-      await new Promise((r) => {
-        link.onload = r;
-        link.onerror = r;
-        setTimeout(r, 3000);
-      });
-    }
-    await Promise.all(
-      ['500 12px Inter', '700 12px Inter', '800 12px Inter', '700 12px "Bricolage Grotesque"', '800 12px "Bricolage Grotesque"'].map((f) => document.fonts.load(f).catch(() => null)),
-    );
+    const box = await reportBox(html);
     const { default: html2pdf } = await import('html2pdf.js');
     // `pagebreak` is the library's page-break plugin; its type file leaves it out.
     const options = {
@@ -161,6 +169,36 @@ export async function savePdf(name: string, html: string): Promise<SaveResult> {
   if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing isn’t available on this phone.');
   await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: 'Share scorecard' });
   return 'shared';
+}
+
+/** Phones' browsers refuse canvases past about 16 million pixels, so a long report is drawn a little smaller. */
+const MAX_PIXELS = 16_000_000;
+
+/**
+ * Saves an HTML report as one PNG picture, the whole report top to bottom, downloaded under its name. Web only: the
+ * phone app shares its PDF instead.
+ */
+export async function saveReportImage(name: string, html: string): Promise<SaveResult> {
+  if (Platform.OS !== 'web') return savePdf(name.replace(/\.png$/i, '.pdf'), html);
+  const box = await reportBox(html);
+  box.style.padding = '24px';
+  box.style.boxSizing = 'content-box';
+  const holder = document.createElement('div');
+  holder.setAttribute('aria-hidden', 'true');
+  Object.assign(holder.style, { position: 'fixed', left: '-10000px', top: '0' });
+  holder.appendChild(box);
+  document.body.appendChild(holder);
+  try {
+    const { default: html2canvas } = await import('html2canvas-pro');
+    const area = box.offsetWidth * box.offsetHeight;
+    const scale = Math.min(2, Math.sqrt(MAX_PIXELS / Math.max(area, 1)));
+    const canvas = await html2canvas(box, { scale, backgroundColor: '#ffffff', useCORS: true });
+    const blob = await new Promise<Blob>((ok, fail) => canvas.toBlob((b) => (b ? ok(b) : fail(new Error('No picture'))), 'image/png'));
+    download(blob, name);
+    return 'downloaded';
+  } finally {
+    holder.remove();
+  }
 }
 
 /** Shares a picture (a PNG file on phones, a data: URI on the web), or downloads it where sharing isn't possible. */

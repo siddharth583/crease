@@ -34,7 +34,7 @@ const clean = (s: string) => s.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' 
  * What an exported file is called. One match: its teams and the day it was played, with the series and match number
  * when it's part of one ("Copan Cup - Match 3 - Copan A vs Copan B - 26 Oct 2026"). Several: how many, and when.
  */
-export function backupFileName(matches: Match[], when = new Date(), ext: 'json' | 'pdf' = 'json') {
+export function backupFileName(matches: Match[], when = new Date(), ext: 'json' | 'pdf' | 'png' = 'json') {
   if (matches.length === 1) {
     const m = matches[0];
     const [a, b] = m.teams;
@@ -45,8 +45,8 @@ export function backupFileName(matches: Match[], when = new Date(), ext: 'json' 
   return `${clean(`${series ?? 'Crease'} - ${matches.length} matches - ${fileDate(when)}`)}.${ext}`;
 }
 
-/** The record book, as a PDF to read or a file to load on another phone. */
-export const recordBookFileName = (when = new Date(), ext: 'json' | 'pdf' = 'pdf') => `Crease Record Book - ${fileDate(when)}.${ext}`;
+/** The record book, as a PDF or picture to read, or a file to load on another phone. */
+export const recordBookFileName = (when = new Date(), ext: 'json' | 'pdf' | 'png' = 'pdf') => `Crease Record Book - ${fileDate(when)}.${ext}`;
 
 /** The result picture of a match. */
 export const pictureFileName = (m: Match) => `${clean(`${m.teams[0].name} vs ${m.teams[1].name} - Result - ${fileDate(m.createdAt)}`)}.png`;

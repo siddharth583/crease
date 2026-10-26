@@ -84,7 +84,7 @@ export default function SeriesScreen() {
   const { matches } = useMatches();
   const insets = useSafeAreaInsets();
   const toast = useToast();
-  const { exportMatches, exportPdf } = useMatchFiles(toast.show);
+  const { exportAs } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
   const inSeries = matches.filter((m) => m.series?.id === id);
 
@@ -245,8 +245,7 @@ export default function SeriesScreen() {
         onClose={() => setExporting(null)}
         onExport={(format, chosen) => {
           setExporting(null);
-          if (format === 'pdf') exportPdf(chosen);
-          else exportMatches(chosen);
+          exportAs(format, chosen);
         }}
       />
       {toast.element}

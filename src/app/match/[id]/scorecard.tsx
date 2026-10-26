@@ -213,7 +213,7 @@ export default function Scorecard() {
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<string | null>(null);
   const toast = useToast();
-  const { exportMatches, exportPdf } = useMatchFiles(toast.show);
+  const { exportAs } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
 
   if (!match) return <Screen>{null}</Screen>;
@@ -306,8 +306,7 @@ export default function Scorecard() {
         onClose={() => setExporting(null)}
         onExport={(format, chosen) => {
           setExporting(null);
-          if (format === 'pdf') exportPdf(chosen);
-          else exportMatches(chosen);
+          exportAs(format, chosen);
         }}
       />
       <OverEditSheet

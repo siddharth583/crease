@@ -231,7 +231,7 @@ function ResultRow({ match, onDelete }: { match: Match; onDelete: () => void }) 
 export default function Home() {
   const { matches, deleteMatch, ready, importMatches } = useMatches();
   const toast = useToast();
-  const { importFile, exportMatches, exportPdf } = useMatchFiles(toast.show);
+  const { importFile, exportAs, exportMatches } = useMatchFiles(toast.show);
   const { prefs, setPrefs } = usePrefs();
   // Remind once a week that a lost phone shouldn't mean lost matches.
   const backupDue = matches.length >= 2 && (!prefs.lastBackup || Date.now() - prefs.lastBackup > 7 * 86_400_000);
@@ -370,8 +370,7 @@ export default function Home() {
         onClose={() => setExporting(null)}
         onExport={(format, chosen) => {
           setExporting(null);
-          if (format === 'pdf') exportPdf(chosen);
-          else exportMatches(chosen);
+          exportAs(format, chosen);
         }}
       />
       {toast.element}

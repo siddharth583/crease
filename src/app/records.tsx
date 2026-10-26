@@ -128,7 +128,7 @@ export default function Records() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const { exportRecordBook, importFile } = useMatchFiles(toast.show);
-  const exportBook = async (format: 'pdf' | 'file') => {
+  const exportBook = async (format: 'pdf' | 'image' | 'file') => {
     if (saving) return;
     setExporting(false);
     setSaving(true);
@@ -371,8 +371,9 @@ export default function Records() {
           {(
             [
               { format: 'pdf', icon: 'document-text', title: 'PDF', body: 'Every record, to read, print or send to anyone' },
+              { format: 'image', icon: 'image', title: 'Image', body: 'The whole record book as one picture, to post in the group' },
               { format: 'file', icon: 'swap-horizontal', title: 'Record book file', body: `All ${plural(matches.length, 'match', 'matches')}, to import into Crease on another phone` },
-            ] as { format: 'pdf' | 'file'; icon: IconName; title: string; body: string }[]
+            ] as { format: 'pdf' | 'image' | 'file'; icon: IconName; title: string; body: string }[]
           ).map((o) => (
             <PressableScale key={o.format} scaleTo={0.98} onPress={() => exportBook(o.format)} style={styles.option}>
               <View style={styles.optionIcon}>

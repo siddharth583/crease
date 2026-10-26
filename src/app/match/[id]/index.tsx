@@ -814,7 +814,7 @@ export default function LiveMatch() {
   const [menu, setMenu] = useState(false);
   // At the top here: the bottom of this screen is the scoring pad.
   const toast = useToast('top');
-  const { exportMatches, exportPdf } = useMatchFiles(toast.show);
+  const { exportAs } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
   const [sharing, setSharing] = useState(false);
   // Nobody wants the screen going dark between balls.
@@ -1183,8 +1183,7 @@ export default function LiveMatch() {
         onClose={() => setExporting(null)}
         onExport={(format, chosen) => {
           setExporting(null);
-          if (format === 'pdf') exportPdf(chosen);
-          else exportMatches(chosen);
+          exportAs(format, chosen);
         }}
       />
       {state.result && <ShareCardSheet match={match} all={matches} visible={sharing} onClose={() => setSharing(false)} notify={toast.show} />}

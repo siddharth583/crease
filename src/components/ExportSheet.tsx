@@ -6,11 +6,12 @@ import type { Match } from '../engine/types.ts';
 import { colors, font, radius, space, type, edge } from '../theme.ts';
 import { Button, PressableScale, Sheet, type IconName } from './ui.tsx';
 
-type Format = 'pdf' | 'file';
+type Format = 'pdf' | 'image' | 'file';
 
 const FORMATS: { value: Format; icon: IconName; title: string; body: string }[] = [
-  { value: 'pdf', icon: 'document-text', title: 'PDF scorecard', body: 'To print, or send to anyone' },
-  { value: 'file', icon: 'swap-horizontal', title: 'Match file', body: 'To import into Crease on another phone' },
+  { value: 'pdf', icon: 'document-text', title: 'PDF', body: 'The scorecard, to print or send' },
+  { value: 'image', icon: 'image', title: 'Image', body: 'A picture to post in the group' },
+  { value: 'file', icon: 'swap-horizontal', title: 'Match file', body: 'To import on another phone' },
 ];
 
 /** Pick a format, then the matches: all of them, a few, or the one you're looking at. */
@@ -115,14 +116,15 @@ export function ExportSheet({
         label={
           n === 0
             ? 'Pick a match'
-            : `Export ${n === 1 ? (matches.length === 1 ? 'this match' : '1 match') : `${n} matches`} as ${format === 'pdf' ? 'PDF' : 'file'}`
+            : `Export ${n === 1 ? (matches.length === 1 ? 'this match' : '1 match') : `${n} matches`} as ${format === 'pdf' ? 'PDF' : format === 'image' ? n > 1 ? 'images' : 'an image' : 'file'}`
         }
-        icon={format === 'pdf' ? 'document-text-outline' : 'download-outline'}
+        icon={format === 'pdf' ? 'document-text-outline' : format === 'image' ? 'image-outline' : 'download-outline'}
         disabled={n === 0}
         onPress={() => onExport(format, picked)}
         style={{ marginTop: space.lg }}
       />
       {format === 'pdf' && n > 1 && <Text style={styles.hint}>One PDF, a page per match.</Text>}
+      {format === 'image' && n > 1 && <Text style={styles.hint}>One picture per match.</Text>}
     </Sheet>
   );
 }

@@ -136,7 +136,7 @@ export default function Players() {
   // The squad decides who counts as one person across teams.
   const careers = useMemo(() => careerStats(matches), [matches, squad]);
   const toast = useToast();
-  const { exportMatches, exportPdf } = useMatchFiles(toast.show);
+  const { exportAs } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
 
   const q = query.trim().toLowerCase();
@@ -217,8 +217,7 @@ export default function Players() {
         onClose={() => setExporting(null)}
         onExport={(format, chosen) => {
           setExporting(null);
-          if (format === 'pdf') exportPdf(chosen);
-          else exportMatches(chosen);
+          exportAs(format, chosen);
         }}
       />
       {toast.element}

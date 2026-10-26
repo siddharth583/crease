@@ -4,7 +4,7 @@ import { recordBookHtml } from '../engine/recordBook.ts';
 import type { Match } from '../engine/types.ts';
 import type { ToastTone } from '../components/ui.tsx';
 import { matchReportHtml } from '../engine/report.ts';
-import { pickTextFile, savePdf, saveTextFile } from './files.ts';
+import { pickTextFile, savePdf, saveReportImage, saveTextFile } from './files.ts';
 import { useMatches } from './matches.tsx';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 'es'}`;
@@ -44,12 +44,40 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
     [notify, matches],
   );
 
-  /** The record book: a PDF to read, or a file of every match that loads the whole book on another phone. */
+  /** Each match as a picture of its scorecard: one image a match, named like its PDF. */
+  const exportImage = useCallback(
+    async (which: Match[]) => {
+      if (!which.length) return notify('Pick at least one match.', 'info');
+      try {
+        notify(which.length === 1 ? 'Making the picture…' : `Making ${which.length} pictures…`, 'info');
+        let result: Awaited<ReturnType<typeof saveReportImage>> = 'cancelled';
+        for (const m of which) result = await saveReportImage(backupFileName([m], new Date(), 'png'), matchReportHtml([m], matches));
+        if (result === 'downloaded') notify(which.length === 1 ? 'Picture saved to your downloads' : `${which.length} pictures saved to your downloads`);
+        if (result === 'shared') notify('Scorecard ready to send');
+      } catch {
+        notify('Couldn’t make the picture. Try again.', 'error');
+      }
+    },
+    [notify, matches],
+  );
+
+  /** Export chosen matches in the format picked in the export sheet. */
+  const exportAs = useCallback(
+    (format: 'pdf' | 'image' | 'file', which: Match[]) => (format === 'pdf' ? exportPdf(which) : format === 'image' ? exportImage(which) : exportMatches(which)),
+    [exportPdf, exportImage, exportMatches],
+  );
+
+  /** The record book: a PDF or picture to read, or a file of every match that loads the whole book on another phone. */
   const exportRecordBook = useCallback(
-    async (format: 'pdf' | 'file') => {
+    async (format: 'pdf' | 'image' | 'file') => {
       if (!matches.length) return notify('No matches yet: the record book fills up as you play.', 'info');
       try {
-        if (format === 'pdf') {
+        if (format === 'image') {
+          notify('Making the picture…', 'info');
+          const result = await saveReportImage(recordBookFileName(new Date(), 'png'), recordBookHtml(matches));
+          if (result === 'downloaded') notify('Record book picture saved to your downloads');
+          if (result === 'shared') notify('Record book ready to send');
+        } else if (format === 'pdf') {
           notify('Making the PDF…', 'info');
           const result = await savePdf(recordBookFileName(new Date(), 'pdf'), recordBookHtml(matches));
           if (result === 'downloaded') notify('Record book PDF saved to your downloads');
@@ -60,7 +88,7 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
           if (result === 'shared') notify('Record book file ready to send');
         }
       } catch {
-        notify(format === 'pdf' ? 'Couldn’t make the PDF. Try again.' : 'Couldn’t export. Try again.', 'error');
+        notify(format === 'pdf' ? 'Couldn’t make the PDF. Try again.' : format === 'image' ? 'Couldn’t make the picture. Try again.' : 'Couldn’t export. Try again.', 'error');
       }
     },
     [matches, savedTeams, notify],
@@ -81,5 +109,5 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
     }
   }, [importMatches, notify]);
 
-  return { exportMatches, exportPdf, exportAll: () => exportMatches(matches), exportRecordBook, importFile };
+  return { exportMatches, exportPdf, exportImage, exportAs, exportAll: () => exportMatches(matches), exportRecordBook, importFile };
 }
