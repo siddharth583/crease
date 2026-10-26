@@ -47,38 +47,110 @@ export async function pickTextFile(): Promise<string | null> {
   return new File(asset.uri).text();
 }
 
+/** Downloads a file the browser made, under its name. */
+function download(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** A4 less 12mm either side, in CSS pixels: the width the report is laid out at on the page. */
+const PAGE_WIDTH = 703;
+const REPORT_FONTS = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600;700;800&display=swap';
+
 /**
- * Turns an HTML report into a PDF and shares it. On the web there's no PDF engine, so the report opens in the
- * print dialog, where "Save as PDF" is one of the printers.
+ * The report's styles, scoped to the box it's drawn in: the PDF maker draws it inside the app's own page, where the
+ * report's rules for the page itself (and for tables, headings…) mustn't touch the app. Screen-only padding and the
+ * print page size are left out: the PDF sets its own margins.
+ */
+function scopedStyles(doc: Document, scope: string): string {
+  const prefix = (list: string) =>
+    list
+      .split(',')
+      .map((sel) => {
+        const t = sel.trim();
+        if (/^(html|body|:root)$/.test(t)) return scope;
+        return `${scope} ${t.replace(/^(html|body|:root)\s+/, '')}`;
+      })
+      .join(', ');
+  const rules = (list: CSSRuleList): string =>
+    [...list]
+      .map((rule) => {
+        if (rule.type === 1) return `${prefix((rule as CSSStyleRule).selectorText)} { ${(rule as CSSStyleRule).style.cssText} }`;
+        if (rule.type === 4) {
+          const media = (rule as CSSMediaRule).media.mediaText;
+          if (media.includes('print')) return rules((rule as CSSMediaRule).cssRules);
+          return media.includes('screen') ? '' : `@media ${media} { ${rules((rule as CSSMediaRule).cssRules)} }`;
+        }
+        return rule.type === 6 ? '' : rule.cssText;
+      })
+      .join('\n');
+  return [...doc.styleSheets]
+    .map((sheet) => {
+      try {
+        return rules(sheet.cssRules);
+      } catch {
+        return ''; // the font sheet from Google can't be read here; the app's page loads it instead
+      }
+    })
+    .join('\n');
+}
+
+/**
+ * Turns an HTML report into a PDF file and saves it: shared on phones with the app, downloaded straight away on the
+ * web. On the web the report is laid out off screen and drawn into A4 pages; the PDF maker only loads when needed.
  */
 export async function savePdf(name: string, html: string): Promise<SaveResult> {
   if (Platform.OS === 'web') {
+    // Read the report's styles and content from a frame of its own.
     const frame = document.createElement('iframe');
-    frame.style.position = 'fixed';
-    frame.style.width = '0';
-    frame.style.height = '0';
-    frame.style.border = '0';
     frame.setAttribute('aria-hidden', 'true');
+    Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: `${PAGE_WIDTH}px`, height: '100px', border: '0' });
     document.body.appendChild(frame);
-    const doc = frame.contentDocument!;
-    doc.open();
-    doc.write(html);
-    doc.close();
-    // "Save as PDF" names the file after the page's title, so both carry the file's name while the dialog is open.
-    const title = name.replace(/\.pdf$/i, '');
-    const was = document.title;
-    doc.title = title;
-    document.title = title;
-    const restore = () => {
-      document.title = was;
+    let box: HTMLDivElement;
+    try {
+      const doc = frame.contentDocument!;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      box = document.createElement('div');
+      box.className = 'crease-pdf';
+      Object.assign(box.style, { width: `${PAGE_WIDTH}px`, background: '#fff' });
+      box.innerHTML = `<style>${scopedStyles(doc, '.crease-pdf')}</style>${doc.body.innerHTML}`;
+    } finally {
       frame.remove();
+    }
+    // The report's fonts, on the app's page where it's drawn.
+    if (!document.getElementById('crease-pdf-fonts')) {
+      const link = document.createElement('link');
+      link.id = 'crease-pdf-fonts';
+      link.rel = 'stylesheet';
+      link.href = REPORT_FONTS;
+      document.head.appendChild(link);
+      await new Promise((r) => {
+        link.onload = r;
+        link.onerror = r;
+        setTimeout(r, 3000);
+      });
+    }
+    await Promise.all(
+      ['500 12px Inter', '700 12px Inter', '800 12px Inter', '700 12px "Bricolage Grotesque"', '800 12px "Bricolage Grotesque"'].map((f) => document.fonts.load(f).catch(() => null)),
+    );
+    const { default: html2pdf } = await import('html2pdf.js');
+    // `pagebreak` is the library's page-break plugin; its type file leaves it out.
+    const options = {
+      margin: [12, 12, 14, 12] as [number, number, number, number],
+      filename: name,
+      image: { type: 'jpeg' as const, quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h2', 'h3', '.b-row', '.tile', 'svg', '.avoid-break'] },
     };
-    frame.contentWindow!.addEventListener('afterprint', () => setTimeout(restore, 500), { once: true });
-    // Let the fonts load, then print; the frame goes once the dialog closes (or after a minute, if no one says).
-    await new Promise((r) => setTimeout(r, 600));
-    frame.contentWindow!.focus();
-    frame.contentWindow!.print();
-    setTimeout(restore, 60_000);
+    const blob: Blob = await html2pdf().set(options).from(box).outputPdf('blob');
+    download(blob, name);
     return 'downloaded';
   }
 

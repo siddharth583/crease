@@ -4,7 +4,7 @@ import type { Match } from './types.ts';
 
 // A printable match report, like a matchday programme: a black scoreboard cover with both totals, the
 // highlights on cards, the run race, then each innings as a clean scorecard on white. Turned into a PDF on
-// the phone, or printed (Save as PDF) from the browser.
+// the phone, or made into a PDF file in the browser.
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 

@@ -33,8 +33,9 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
     async (which: Match[]) => {
       if (!which.length) return notify('Pick at least one match.', 'info');
       try {
+        notify('Making the PDF…', 'info');
         const result = await savePdf(backupFileName(which, new Date(), 'pdf'), matchReportHtml(which, matches));
-        if (result === 'downloaded') notify('Choose “Save as PDF” in the print window');
+        if (result === 'downloaded') notify('PDF saved to your downloads');
         if (result === 'shared') notify('Scorecard PDF ready to send');
       } catch {
         notify('Couldn’t make the PDF. Try again.', 'error');
@@ -49,8 +50,9 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
       if (!matches.length) return notify('No matches yet: the record book fills up as you play.', 'info');
       try {
         if (format === 'pdf') {
+          notify('Making the PDF…', 'info');
           const result = await savePdf(recordBookFileName(new Date(), 'pdf'), recordBookHtml(matches));
-          if (result === 'downloaded') notify('Choose “Save as PDF” in the print window');
+          if (result === 'downloaded') notify('Record book PDF saved to your downloads');
           if (result === 'shared') notify('Record book PDF ready to send');
         } else {
           const result = await saveTextFile(recordBookFileName(new Date(), 'json'), JSON.stringify(makeBackup(matches, savedTeams)));
