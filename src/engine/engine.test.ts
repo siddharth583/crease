@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addEvent, addPlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, setOvers, startSuperOver, undo } from './engine.ts';
+import { addBallToOver, addEvent, addPlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, setOvers, startSuperOver, undo } from './engine.ts';
 import { playerOfTheMatch } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Rules, Team } from './types.ts';
 
@@ -433,6 +433,30 @@ test('a ball in a finished over can become a wide or stop being one, and the ove
   const s = matchState(fixed).innings[0];
   assert.equal(s.legalBalls, 8);
   assert.equal(s.bowlers.reduce((n, b) => n + b.balls, 0), s.legalBalls);
+});
+
+test('an over fixed to have wides gets its missing balls added, and nothing after it moves', () => {
+  let m = start(setup({ overs: 3 }));
+  m = play(m, ...Array.from({ length: 6 }, () => ball(0)));
+  m = play(m, { type: 'bowler', bowler: 'b2' }, ball(1), ball(1));
+  const balls = m.innings[0].events.flatMap((e, i) => (e.type === 'ball' ? [i] : []));
+  m = replaceBall(replaceBall(m, 0, balls[0], ball(0, 'wide')), 0, balls[2], ball(0, 'wide'));
+  let s = matchState(m).innings[0];
+  assert.equal(s.owed[0].length, 2, 'two balls short');
+  // The over being bowled now can simply take another ball.
+  assert.equal(matchState(addBallToOver(m, 0, 1, ball(4))).innings[0].legalBalls, 9);
+  m = addBallToOver(m, 0, 0, ball(6));
+  m = addBallToOver(m, 0, 0, ball(4));
+  s = matchState(m).innings[0];
+  assert.equal(s.owed[0].length, 0);
+  assert.equal(s.overs[0].length, 8);
+  assert.equal(s.legalBalls, 8);
+  assert.equal(s.runs, 1 + 1 + 6 + 4 + 2);
+  assert.deepEqual(s.overBowlers.slice(0, 2), [['b1'], ['b2']]);
+  assert.equal(s.bowlers.find((b) => b.id === 'b1')!.balls, 6);
+  // No more room once it's whole; a wide can still go on.
+  assert.equal(addBallToOver(m, 0, 0, ball(1)), m);
+  assert.notEqual(addBallToOver(m, 0, 0, ball(0, 'wide')), m);
 });
 
 test('last man standing: the lone batter is credited with every run, after singles and over ends too', () => {

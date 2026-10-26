@@ -7,7 +7,7 @@ import { BallEditSheet, fixBall } from '../../../components/BallEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
 import { BallChip, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../../../components/ui.tsx';
-import { dismissal, matchState, oversText, playerName, type BallView, type InningsState, type MatchState } from '../../../engine/engine.ts';
+import { addBallToOver, dismissal, matchState, oversText, playerName, type BallView, type InningsState, type MatchState } from '../../../engine/engine.ts';
 import { isPlaceholder, keyFor, playerOfTheMatch } from '../../../engine/stats.ts';
 import type { BallEvent, Match, Team } from '../../../engine/types.ts';
 import { plural } from '../../../engine/text.ts';
@@ -172,7 +172,10 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
 }
 
 /** Every over with its bowlers and balls, each ball open to fixing. */
-function OversEditor({ match, s, onFix }: { match: Match; s: InningsState; onFix: (b: BallView) => void }) {
+/** A fresh ball to add: a dot until it's changed. */
+const BLANK: BallEvent = { type: 'ball', runs: 0 };
+
+function OversEditor({ match, s, onFix, onAdd }: { match: Match; s: InningsState; onFix: (b: BallView) => void; onAdd: (over: number) => void }) {
   return (
     <>
       <SectionLabel>Overs · tap a ball to fix it</SectionLabel>
@@ -189,7 +192,17 @@ function OversEditor({ match, s, onFix }: { match: Match; s: InningsState; onFix
                     <BallChip ball={b} />
                   </PressableScale>
                 ))}
+                {(s.owed[o] ?? []).map((_, i) => (
+                  <PressableScale key={`add${i}`} scaleTo={0.85} accessibilityLabel={`Add a ball to over ${o + 1}`} onPress={() => onAdd(o)} style={styles.addBall}>
+                    <Ionicons name="add" size={18} color={colors.accentInk} />
+                  </PressableScale>
+                ))}
               </View>
+              {(s.owed[o]?.length ?? 0) > 0 && (
+                <Text style={styles.owedNote}>
+                  The extras mean this over needs {s.owed[o].length === 1 ? 'one more ball' : `${s.owed[o].length} more balls`}: tap + to add what was bowled
+                </Text>
+              )}
             </View>
           ),
         )}
@@ -203,6 +216,7 @@ export default function Scorecard() {
   const { match, saveMatch } = useMatch(id);
   const [editMode, setEditMode] = useState(false);
   const [fixing, setFixing] = useState<BallView | null>(null);
+  const [adding, setAdding] = useState<number | null>(null);
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<string | null>(null);
   const toast = useToast();
@@ -280,7 +294,7 @@ export default function Scorecard() {
         {started && editMode ? (
           <>
             <InningsCard match={match} s={s} />
-            <OversEditor match={match} s={s} onFix={setFixing} />
+            <OversEditor match={match} s={s} onFix={setFixing} onAdd={setAdding} />
           </>
         ) : started ? (
           <>
@@ -320,6 +334,25 @@ export default function Scorecard() {
           else toast.show(next ? 'Fixed. The scorecard is updated.' : 'Ball deleted', 'success');
         }}
       />
+      {adding !== null && (
+        <BallEditSheet
+          adding={adding}
+          ball={{ label: '•', tone: 'dot', bowler: s.overs[adding]?.[s.overs[adding].length - 1]?.bowler ?? null }}
+          event={BLANK}
+          match={match}
+          s={s}
+          onClose={() => setAdding(null)}
+          onSave={(next) => {
+            if (!next) return;
+            const added = addBallToOver(match, Number(shown), adding, next);
+            if (added === match) return 'That ball can’t go on this over: it already has its six balls.';
+            saveMatch(added);
+            setAdding(null);
+            const now = matchState(added).result;
+            toast.show(now !== state.result ? (now ? `Ball added. Result now: ${now}` : 'Ball added. The match isn’t finished any more.') : 'Ball added', 'success');
+          }}
+        />
+      )}
       {toast.element}
     </Screen>
   );
@@ -392,5 +425,16 @@ const styles = StyleSheet.create({
   editOver: { paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: 1, borderTopColor: colors.border, gap: space.sm },
   editOverTitle: { ...type.label, fontSize: 10, color: colors.muted },
   editBalls: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  addBall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.accentInk,
+  },
+  owedNote: { color: colors.accentInk, fontSize: 12, fontFamily: font.semibold },
   empty: { color: colors.muted, textAlign: 'center', marginTop: space.xxl },
 });
