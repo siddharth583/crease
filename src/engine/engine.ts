@@ -25,7 +25,7 @@ export type BowlerLine = {
 
 export type BallTone = 'dot' | 'run' | 'four' | 'six' | 'wicket' | 'extra';
 /** `event` is the delivery's index in its innings' events, so the ball can be edited later. */
-export type BallView = { label: string; tone: BallTone; event?: number; wicket?: boolean };
+export type BallView = { label: string; tone: BallTone; event?: number; wicket?: boolean; bowler?: string | null };
 
 export type DeliveryLog = {
   /** e.g. "3.4": the over and the ball of it. */
@@ -53,12 +53,16 @@ export type InningsState = {
   nonStriker: string | null;
   bowler: string | null;
   lastOverBowler: string | null;
+  /** Who bowled the last finished over, all of them if it was split: none of them may bowl the next one. */
+  barred: string[];
   batters: BatterLine[];
   bowlers: BowlerLine[];
   fallOfWickets: { wicket: number; runs: number; over: string; player: string }[];
   overs: BallView[][];
   /** Runs and wickets in each over, in step with `overs`. */
   overTotals: { runs: number; wickets: number }[];
+  /** The bowlers of each over in the order they bowled in it (two when one couldn't finish it), in step with `overs`. */
+  overBowlers: string[][];
   partnership: { runs: number; balls: number };
   /** Every partnership in order; the last one is still going while the innings is. */
   partnerships: { batters: [string | null, string | null]; runs: number; balls: number }[];
@@ -140,11 +144,13 @@ export function inningsState(match: Match, index: number, target: number | null)
     nonStriker: null,
     bowler: null,
     lastOverBowler: null,
+    barred: [],
     batters: [],
     bowlers: [],
     fallOfWickets: [],
     overs: [[]],
     overTotals: [{ runs: 0, wickets: 0 }],
+    overBowlers: [[]],
     partnership: { runs: 0, balls: 0 },
     partnerships: [],
     log: [],
@@ -265,6 +271,8 @@ export function inningsState(match: Match, index: number, target: number | null)
       if (legal) line.balls += 1;
       if (e.extra === 'wide') line.wides += 1;
       if (e.extra === 'noball') line.noballs += 1;
+      const these = s.overBowlers[s.overBowlers.length - 1];
+      if (!these.includes(bowlerId)) these.push(bowlerId);
     }
 
     const view =
@@ -279,7 +287,7 @@ export function inningsState(match: Match, index: number, target: number | null)
       total,
       label: view.label,
     });
-    s.overs[s.overs.length - 1].push({ ...view, event: eventIndex, wicket: Boolean(e.wicket) });
+    s.overs[s.overs.length - 1].push({ ...view, event: eventIndex, wicket: Boolean(e.wicket), bowler: bowlerId });
     s.freeHit = Boolean(rules.freeHit) && (e.extra === 'noball' || (s.freeHit && e.extra === 'wide'));
     const overTotal = s.overTotals[s.overTotals.length - 1];
     overTotal.runs += total;
@@ -317,10 +325,14 @@ export function inningsState(match: Match, index: number, target: number | null)
     if (legal) {
       s.legalBalls += 1;
       if (s.legalBalls % 6 === 0) {
-        if (bowlerId && overConceded === 0) bowler(bowlerId).maidens += 1;
+        // A maiden is one bowler's whole over: an over split between two isn't anyone's maiden.
+        const these = s.overBowlers[s.overBowlers.length - 1];
+        if (bowlerId && overConceded === 0 && these.length === 1) bowler(bowlerId).maidens += 1;
         overConceded = 0;
         swap();
         s.lastOverBowler = bowlerId;
+        s.barred = these;
+        s.overBowlers.push([]);
         s.bowler = null;
         s.overs.push([]);
         bouncersThisOver = 0;
@@ -365,6 +377,7 @@ export function inningsState(match: Match, index: number, target: number | null)
   if (s.overs.length > 1 && s.overs[s.overs.length - 1].length === 0 && s.status === 'done') {
     s.overs.pop();
     s.overTotals.pop();
+    s.overBowlers.pop();
   }
   return s;
 }
@@ -537,11 +550,22 @@ export function undo(match: Match): Match {
   };
 }
 
-/** Fix or remove one delivery that has no wicket. Everything after it is worked out again. */
 /** Legal balls in an innings up to and including one event. */
 function legalBallsTo(match: Match, inningsIndex: number, eventIndex: number): number {
   const cut = { ...match, innings: match.innings.map((inn, i) => (i === inningsIndex ? { ...inn, events: inn.events.slice(0, eventIndex + 1) } : i > inningsIndex ? { ...inn, events: [] } : inn)) };
   return inningsState(cut, inningsIndex, null).legalBalls;
+}
+
+/** The deliveries that finished an over (not the one being bowled). */
+function overEnds(match: Match, inningsIndex: number): Set<number | undefined> {
+  const s = inningsState(match, inningsIndex, null);
+  return new Set(s.overs.slice(0, -1).map((o) => o[o.length - 1]?.event));
+}
+
+/** The event that picked the bowler for an over, rather than one taking over partway through it. */
+function startsAnOver(events: InningsEvent[], ends: Set<number | undefined>, k: number): boolean {
+  for (let d = k - 1; d >= 0; d--) if (events[d].type === 'ball') return ends.has(d);
+  return true;
 }
 
 /**
@@ -549,11 +573,13 @@ function legalBallsTo(match: Match, inningsIndex: number, eventIndex: number): n
  * deleted): only in the over being bowled now. In a finished over it would move every over after it by a ball.
  */
 export function canChangeLegality(match: Match, inningsIndex: number, eventIndex: number): boolean {
-  const later = match.innings[inningsIndex]?.events.slice(eventIndex + 1) ?? [];
+  const events = match.innings[inningsIndex]?.events ?? [];
   const laterInnings = match.innings.slice(inningsIndex + 1).some((inn) => inn.events.length > 0);
-  return !laterInnings && !later.some((e) => e.type === 'bowler');
+  const ends = overEnds(match, inningsIndex);
+  return !laterInnings && !events.some((e, k) => k > eventIndex && e.type === 'bowler' && startsAnOver(events, ends, k));
 }
 
+/** Fix or remove one delivery. Everything after it is worked out again. */
 export function replaceBall(match: Match, inningsIndex: number, eventIndex: number, ball: BallEvent | null): Match {
   const old = match.innings[inningsIndex]?.events[eventIndex];
   if (!old || old.type !== 'ball') return match;
@@ -575,23 +601,81 @@ export function replaceBall(match: Match, inningsIndex: number, eventIndex: numb
     ),
   };
   // Over by over the balls must still line up with the bowlers who bowled them: a change to whether a ball counts
-  // is only for the over being bowled, and only if no later ball would then fall outside its over.
+  // is only for the over being bowled.
   const before = legalBallsTo(match, inningsIndex, eventIndex);
   const after = ball ? legalBallsTo(next, inningsIndex, eventIndex) : legalBallsTo(match, inningsIndex, eventIndex - 1);
-  if (before !== after && (!canChangeLegality(match, inningsIndex, eventIndex) || !inPlayThroughout(next, inningsIndex))) return match;
-  return next;
+  if (before !== after && !canChangeLegality(match, inningsIndex, eventIndex)) return match;
+  // And every later ball must still have been bowled while its innings was on (a chase can't pass its target early).
+  return fitsTogether(next) ? next : match;
 }
 
 /** Every delivery in an innings came while the innings was live (a bowler on, the over and innings not over). */
-function inPlayThroughout(match: Match, inningsIndex: number): boolean {
+function inPlayThroughout(match: Match, inningsIndex: number, target: number | null): boolean {
   const events = match.innings[inningsIndex].events;
-  const target = inningsIndex === 1 ? chaseTarget(match, inningsState(match, 0, null).runs) : null;
   for (let k = 0; k < events.length; k++) {
     if (events[k].type !== 'ball') continue;
     const cut = { ...match, innings: match.innings.map((inn, i) => (i === inningsIndex ? { ...inn, events: events.slice(0, k) } : inn)) };
-    if (inningsState(cut, inningsIndex, inningsIndex === 1 ? target : null).status !== 'live') return false;
+    if (inningsState(cut, inningsIndex, target).status !== 'live') return false;
   }
   return true;
+}
+
+/** The whole match still holds together: each innings played only while it was on, a super over only after a tie. */
+function fitsTogether(match: Match): boolean {
+  const first = inningsState(match, 0, null);
+  const target = chaseTarget(match, first.runs);
+  if (!inPlayThroughout(match, 0, null)) return false;
+  if (match.innings[1].events.length && (first.status !== 'done' || !inPlayThroughout(match, 1, target))) return false;
+  if (match.innings.slice(2).some((inn) => inn.events.length)) {
+    if (matchState({ ...match, innings: match.innings.slice(0, 2) }).result !== 'Match tied') return false;
+    const so1 = inningsState(match, 2, null);
+    if (!inPlayThroughout(match, 2, null)) return false;
+    if (match.innings[3].events.length && (so1.status !== 'done' || !inPlayThroughout(match, 3, so1.runs + 1))) return false;
+  }
+  return true;
+}
+
+/** Overs bowled straight after one another by the same bowler (any part of each). */
+function backToBack(s: InningsState): number {
+  return s.overBowlers.filter((o, i) => i > 0 && o.some((b) => s.overBowlers[i - 1].includes(b))).length;
+}
+
+/**
+ * Who bowled from one delivery on, up to the next change of bowler. At the first ball of an over that is the over's
+ * bowler; later in an over it's a new bowler taking over (the one bowling it couldn't finish). Picking the bowler
+ * who was already on takes a change away. Refused when it would have someone bowl two overs in a row.
+ */
+export function setBowlerFrom(match: Match, inningsIndex: number, eventIndex: number, bowlerId: string): Match {
+  const inn = match.innings[inningsIndex];
+  if (inn?.events[eventIndex]?.type !== 'ball') return match;
+  if (!teamById(match, inn.bowlingTeam).players.some((p) => p.id === bowlerId)) return match;
+  const events = [...inn.events];
+  const ends = overEnds(match, inningsIndex);
+  // The last pick of a bowler before this ball, and the ball before it.
+  let pick = -1;
+  for (let k = eventIndex - 1; k >= 0; k--) if (events[k].type === 'bowler') { pick = k; break; }
+  let prev = -1;
+  for (let k = eventIndex - 1; k >= 0; k--) if (events[k].type === 'ball') { prev = k; break; }
+  const overStart = prev === -1 || ends.has(prev);
+  // The over's own pick, or a change already made at this ball: change it. Otherwise someone takes over here.
+  if (pick !== -1 && (overStart || pick > prev)) events[pick] = { type: 'bowler', bowler: bowlerId };
+  else if (!overStart) events.splice(eventIndex, 0, { type: 'bowler', bowler: bowlerId });
+  else return match;
+  // A change to the bowler who was already on is no change. (A pick moves no ball between overs, but it can shift
+  // the events' places, so the over ends are found again.)
+  const placed = overEnds({ ...match, innings: match.innings.map((x, i) => (i === inningsIndex ? { ...x, events } : x)) }, inningsIndex);
+  let on: string | null = null;
+  const tidy = events.filter((e, k) => {
+    if (e.type === 'bowler') {
+      if (e.bowler === on && !startsAnOver(events, placed, k)) return false;
+      on = e.bowler;
+    }
+    if (placed.has(k)) on = null;
+    return true;
+  });
+  const next: Match = { ...match, innings: match.innings.map((x, i) => (i === inningsIndex ? { ...x, events: tidy } : x)) };
+  if (backToBack(inningsState(next, inningsIndex, null)) > backToBack(inningsState(match, inningsIndex, null))) return match;
+  return next;
 }
 
 /** Change the overs mid-match (rain, light). Never below what has already been bowled. */

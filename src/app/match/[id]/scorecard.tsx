@@ -3,12 +3,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BallEditSheet, fixBall } from '../../../components/BallEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
-import { Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../../../components/ui.tsx';
-import { dismissal, matchState, oversText, playerName, type InningsState, type MatchState } from '../../../engine/engine.ts';
+import { BallChip, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../../../components/ui.tsx';
+import { dismissal, matchState, oversText, playerName, type BallView, type InningsState, type MatchState } from '../../../engine/engine.ts';
 import { isPlaceholder, keyFor, playerOfTheMatch } from '../../../engine/stats.ts';
-import type { Match, Team } from '../../../engine/types.ts';
+import type { BallEvent, Match, Team } from '../../../engine/types.ts';
 import { plural } from '../../../engine/text.ts';
 import { useMatch } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
@@ -170,9 +171,38 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
   );
 }
 
+/** Every over with its bowlers and balls, each ball open to fixing. */
+function OversEditor({ match, s, onFix }: { match: Match; s: InningsState; onFix: (b: BallView) => void }) {
+  return (
+    <>
+      <SectionLabel>Overs · tap a ball to fix it</SectionLabel>
+      <Card style={{ padding: 0 }}>
+        {s.overs.map((balls, o) =>
+          balls.length === 0 ? null : (
+            <View key={o} style={styles.editOver}>
+              <Text style={styles.editOverTitle} numberOfLines={1}>
+                OVER {o + 1} · {(s.overBowlers[o] ?? []).map((id) => playerName(match, id)).join(' → ') || 'no bowler'} · {s.overTotals[o]?.runs ?? 0} runs
+              </Text>
+              <View style={styles.editBalls}>
+                {balls.map((b, i) => (
+                  <PressableScale key={i} scaleTo={0.85} accessibilityLabel={`Fix over ${o + 1} ball ${i + 1}`} onPress={() => onFix(b)}>
+                    <BallChip ball={b} />
+                  </PressableScale>
+                ))}
+              </View>
+            </View>
+          ),
+        )}
+      </Card>
+    </>
+  );
+}
+
 export default function Scorecard() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { match } = useMatch(id);
+  const { match, saveMatch } = useMatch(id);
+  const [editMode, setEditMode] = useState(false);
+  const [fixing, setFixing] = useState<BallView | null>(null);
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<string | null>(null);
   const toast = useToast();
@@ -192,6 +222,11 @@ export default function Scorecard() {
         <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
         <Text style={styles.headerTitle}>Scorecard</Text>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
+          <IconButton
+            icon={editMode ? 'checkmark' : 'create-outline'}
+            label={editMode ? 'Done editing' : 'Edit scorecard'}
+            onPress={() => setEditMode(!editMode)}
+          />
           <IconButton icon="download-outline" label="Export match" onPress={() => setExporting([match])} />
           <IconButton icon="share-outline" label="Share summary" onPress={() => Share.share({ message: shareText(match, state) }).catch(() => {})} />
         </View>
@@ -233,7 +268,21 @@ export default function Scorecard() {
           onChange={setTab}
           options={state.innings.map((inn, i) => ({ value: String(i), label: i >= 2 ? `SO · ${inn.battingTeam.name}` : inn.battingTeam.name }))}
         />
-        {started ? (
+        {editMode && (
+          <View style={styles.editHint}>
+            <Ionicons name="create-outline" size={16} color={colors.accentInk} />
+            <Text style={styles.editHintText}>
+              Editing. Tap any ball below to fix its runs, extras, wicket or bowler; a bowler who couldn’t finish an over is
+              changed from the ball the new one started. Everything updates as you go.
+            </Text>
+          </View>
+        )}
+        {started && editMode ? (
+          <>
+            <InningsCard match={match} s={s} />
+            <OversEditor match={match} s={s} onFix={setFixing} />
+          </>
+        ) : started ? (
           <>
             <InningsCard match={match} s={s} />
             <Partnerships match={match} s={s} />
@@ -252,6 +301,26 @@ export default function Scorecard() {
           setExporting(null);
           if (format === 'pdf') exportPdf(chosen);
           else exportMatches(chosen);
+        }}
+      />
+      <BallEditSheet
+        ball={fixing}
+        event={fixing?.event !== undefined ? (match.innings[Number(shown)].events[fixing.event] as BallEvent) : null}
+        match={match}
+        s={s}
+        onClose={() => setFixing(null)}
+        onSave={(next, bowler) => {
+          if (fixing?.event === undefined) return;
+          const fixed = fixBall(match, Number(shown), fixing.event, next, bowler);
+          if (typeof fixed === 'string') {
+            toast.show(fixed, 'error');
+            return;
+          }
+          saveMatch(fixed);
+          setFixing(null);
+          const now = matchState(fixed).result;
+          if (now !== state.result) toast.show(now ? `Result now: ${now}` : 'The match isn’t finished any more: carry on scoring it.', 'info');
+          else toast.show(next ? 'Fixed. The scorecard is updated.' : 'Ball deleted', 'success');
         }}
       />
       {toast.element}
@@ -311,5 +380,20 @@ const styles = StyleSheet.create({
   td: { width: 32, textAlign: 'right', color: colors.muted, fontSize: 18, fontFamily: font.poster, ...type.num },
   strong: { color: colors.text, fontFamily: font.posterBlack, fontSize: 16 },
   fow: { color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 20 },
+  editHint: {
+    flexDirection: 'row',
+    gap: space.sm,
+    alignItems: 'flex-start',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accentInk,
+    borderRadius: radius.lg,
+    padding: space.md,
+    marginBottom: space.md,
+  },
+  editHintText: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 19, fontFamily: font.medium },
+  editOver: { paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: 1, borderTopColor: colors.border, gap: space.sm },
+  editOverTitle: { ...type.label, fontSize: 10, color: colors.muted },
+  editBalls: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   empty: { color: colors.muted, textAlign: 'center', marginTop: space.xxl },
 });

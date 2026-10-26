@@ -18,6 +18,7 @@ function useScreenAwake() {
 }
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BallEditSheet, fixBall } from '../../../components/BallEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { ShareCardSheet } from '../../../components/ShareCard.tsx';
 import {
@@ -49,7 +50,6 @@ import {
   oversLeft,
   oversText,
   playerName,
-  replaceBall,
   setOvers,
   startSuperOver,
   undo,
@@ -230,123 +230,6 @@ function ThisOver({ s, onEdit }: { s: InningsState; onEdit: (b: BallView) => voi
   );
 }
 
-const EDIT_KINDS: { value: 'none' | Extra; label: string }[] = [
-  { value: 'none', label: 'Runs' },
-  { value: 'wide', label: 'Wide' },
-  { value: 'noball', label: 'No ball' },
-  { value: 'bye', label: 'Bye' },
-  { value: 'legbye', label: 'LB' },
-];
-
-const WICKET_EDIT_KINDS: { value: WicketKind; label: string }[] = [
-  { value: 'bowled', label: 'Bowled' },
-  { value: 'caught', label: 'Caught' },
-  { value: 'lbw', label: 'LBW' },
-  { value: 'runout', label: 'Run out' },
-  { value: 'stumped', label: 'Stumped' },
-  { value: 'hitwicket', label: 'Hit wicket' },
-];
-
-/** Fix a ball scored wrongly. Runs and extras can change, or the ball can go; a wicket can be corrected in place. */
-function BallEditSheet({
-  ball,
-  event,
-  match,
-  s,
-  onClose,
-  onSave,
-}: {
-  ball: BallView | null;
-  event: BallEvent | null;
-  match: Match;
-  s: InningsState;
-  onClose: () => void;
-  onSave: (next: BallEvent | null) => void;
-}) {
-  const [kind, setKind] = useState<'none' | Extra>('none');
-  const [runs, setRuns] = useState(0);
-  const [how, setHow] = useState<WicketKind>('bowled');
-  const [fielder, setFielder] = useState<string | undefined>();
-  useEffect(() => {
-    if (!event) return;
-    setKind(event.extra ?? 'none');
-    setRuns(event.runs);
-    if (event.wicket) {
-      setHow(event.wicket.kind);
-      setFielder(event.wicket.fielder);
-    }
-  }, [event]);
-  if (!ball || !event) return null;
-  const byes = kind === 'bye' || kind === 'legbye';
-  const keeper = match.keepers?.[s.bowlingTeam.id];
-
-  return (
-    <Sheet visible onClose={onClose} title="Fix this ball">
-      <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
-        <View style={styles.editNow}>
-          <BallChip ball={ball} size={44} />
-          <Text style={styles.editNowText}>Scored as {ball.label === '•' ? 'a dot ball' : ball.label}</Text>
-        </View>
-        {event.wicket ? (
-          <>
-            <Text style={styles.editNote}>
-              {playerName(match, event.wicket.playerOut)} stays out (everything after was scored without them). Fix how,
-              or who took it. To take the wicket away, undo back to it.
-            </Text>
-            <View style={styles.wrap}>
-              {WICKET_EDIT_KINDS.map((k) => (
-                <Chip key={k.value} tone="danger" label={k.label} selected={how === k.value} onPress={() => setHow(k.value)} />
-              ))}
-            </View>
-            {(how === 'caught' || how === 'runout' || how === 'stumped') && (
-              <View style={styles.wrap}>
-                {s.bowlingTeam.players.map((p) => (
-                  <Chip
-                    key={p.id}
-                    label={p.id === keeper ? `${p.name} †` : p.name}
-                    selected={fielder === p.id}
-                    onPress={() => setFielder(fielder === p.id ? undefined : p.id)}
-                  />
-                ))}
-              </View>
-            )}
-            {how === 'runout' && (
-              <Segmented value={String(runs)} onChange={(v) => setRuns(Number(v))} options={['0', '1', '2', '3'].map((v) => ({ value: v, label: `${v} run${v === '1' ? '' : 's'}` }))} />
-            )}
-            <Button
-              label="Save wicket"
-              icon="checkmark"
-              onPress={() =>
-                onSave({
-                  ...event,
-                  runs: how === 'runout' ? runs : 0,
-                  wicket: { kind: how, playerOut: event.wicket!.playerOut, fielder: how === 'caught' || how === 'runout' || how === 'stumped' ? fielder : undefined },
-                })
-              }
-            />
-          </>
-        ) : (
-          <>
-            <Segmented value={kind} onChange={setKind} options={EDIT_KINDS} />
-            <View style={styles.editRuns}>
-              {[0, 1, 2, 3, 4, 5, 6].map((r) => (
-                <Chip key={r} label={String(r)} selected={runs === r} disabled={byes && r === 0} onPress={() => setRuns(r)} />
-              ))}
-            </View>
-            <Button
-              label="Save ball"
-              icon="checkmark"
-              disabled={byes && runs === 0}
-              onPress={() => onSave({ type: 'ball', runs, extra: kind === 'none' ? undefined : kind })}
-            />
-            <Button variant="ghost" label="Delete this ball" icon="trash-outline" onPress={() => onSave(null)} />
-          </>
-        )}
-      </ScrollView>
-    </Sheet>
-  );
-}
-
 /** Things that happen to the match rather than to a ball: rain, a declaration, a late arrival, penalties. */
 function MatchMenu({
   visible,
@@ -360,6 +243,7 @@ function MatchMenu({
   onPenalty,
   onDeadBall,
   onEndInnings,
+  onBowlerChange,
   inningsLabel,
   dlsG,
 }: {
@@ -375,6 +259,8 @@ function MatchMenu({
   onPenalty: (runs: number) => void;
   onDeadBall: () => void;
   onEndInnings: () => void;
+  /** A new bowler finishes the over (the one bowling it is hurt or taken off). */
+  onBowlerChange: (bowler: string) => void;
   inningsLabel: string;
   /** Average first-innings score at this length, for DLS. */
   dlsG?: number;
@@ -385,6 +271,7 @@ function MatchMenu({
   const [lateTeam, setLateTeam] = useState(match.teams[0].id);
   const [lateName, setLateName] = useState('');
   const original = match.originalOvers ?? match.rules.overs;
+  const midOver = s.status === 'live' && s.bowler !== null && (s.overs[s.overs.length - 1]?.length ?? 0) > 0;
   // What DLS would set if the overs changed to the draft value, and what stands now.
   const preview = overs !== match.rules.overs ? setOvers(match, overs, dlsG) : match;
   const firstRuns = matchState(preview).innings[0];
@@ -403,6 +290,26 @@ function MatchMenu({
   return (
     <Sheet visible={visible} onClose={onClose} title="Match">
       <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
+        {midOver && (
+          <>
+            <Text style={styles.sheetLabel}>Bowler can’t finish the over</Text>
+            <Card style={{ gap: space.sm }}>
+              <Text style={styles.editNote}>
+                {playerName(match, s.bowler)} has bowled {plural(s.legalBalls % 6, 'ball')} of this over. Who bowls the rest?
+              </Text>
+              <View style={styles.wrap}>
+                {s.bowlingTeam.players
+                  .filter((p) => p.id !== s.bowler)
+                  .map((p) => (
+                    <Chip key={p.id} label={p.name} disabled={s.barred.includes(p.id)} onPress={() => onBowlerChange(p.id)} />
+                  ))}
+              </View>
+              {s.barred.length > 0 && (
+                <Text style={styles.editNote}>{s.barred.map((id) => playerName(match, id)).join(' and ')} bowled the last over, so can’t.</Text>
+              )}
+            </Card>
+          </>
+        )}
         <Text style={styles.sheetLabel}>Rain or bad light</Text>
         <Card style={{ paddingVertical: space.sm }}>
           <Stepper label="Overs per innings" hint={`Started at ${original}`} value={overs} min={1} max={50} onChange={setOversDraft} />
@@ -1134,12 +1041,12 @@ export default function LiveMatch() {
     );
   } else if (s.status === 'bowler') {
     // Bowlers usually swap ends: whoever bowled the over before last is the natural pick, so they go first.
-    const history = match.innings[index].events.flatMap((e) => (e.type === 'bowler' ? [e.bowler] : []));
-    const fromThisEnd = history.length >= 2 ? history[history.length - 2] : null;
-    const withinLimit = (id: string) => id !== s.lastOverBowler && oversLeft(match, s, id) !== 0;
+    // Whoever bowled any of the last over (two of them if it was split) sits this one out.
+    const fromThisEnd = s.overBowlers[s.overBowlers.length - 3]?.[0] ?? null;
+    const withinLimit = (id: string) => !s.barred.includes(id) && oversLeft(match, s, id) !== 0;
     // Everyone has bowled their overs (a short side, a long innings): the limit gives way rather than stop the game.
     const limitOff = !s.bowlingTeam.players.some((p) => withinLimit(p.id));
-    const usable = (id: string) => (limitOff ? id !== s.lastOverBowler : withinLimit(id));
+    const usable = (id: string) => (limitOff ? !s.barred.includes(id) : withinLimit(id));
     const rank = (id: string) => (id === fromThisEnd && usable(id) ? 0 : !usable(id) ? 3 : s.bowlers.some((b) => b.id === id && b.balls) ? 1 : 2);
     const ids = s.bowlingTeam.players.map((p) => p.id).sort((a, b) => rank(a) - rank(b));
     const limit = match.rules.maxOversPerBowler;
@@ -1159,7 +1066,7 @@ export default function LiveMatch() {
         ids={ids}
         disabled={ids.filter((id) => !usable(id))}
         note={(pid) => {
-          if (pid === s.lastOverBowler) return 'Bowled the last over';
+          if (s.barred.includes(pid)) return s.barred.length > 1 ? 'Bowled part of the last over' : 'Bowled the last over';
           const left = oversLeft(match, s, pid);
           if (left === 0 && !limitOff) return `Bowled their ${plural(Number(oversText(s.bowlers.find((x) => x.id === pid)?.balls ?? 0).split('.')[0]), 'over')}`;
           const b = s.bowlers.find((x) => x.id === pid);
@@ -1214,16 +1121,11 @@ export default function LiveMatch() {
         match={match}
         s={s}
         onClose={() => setEditing(null)}
-        onSave={(next) => {
+        onSave={(next, bowler) => {
           if (editing?.event === undefined) return;
-          const fixed = replaceBall(match, index, editing.event, next);
-          if (fixed === match) {
-            toast.show(
-              next
-                ? 'That over is finished: a ball in it can’t become a wide or no-ball, or stop being one. Change the runs instead.'
-                : 'That over is finished, so its balls can’t be deleted. Change the runs instead.',
-              'error',
-            );
+          const fixed = fixBall(match, index, editing.event, next, bowler);
+          if (typeof fixed === 'string') {
+            toast.show(fixed, 'error');
             return;
           }
           saveMatch(fixed);
@@ -1271,6 +1173,11 @@ export default function LiveMatch() {
         onEndInnings={() => {
           setMenu(false);
           push({ type: 'endInnings' });
+        }}
+        onBowlerChange={(bowler) => {
+          toast.show(`${playerName(match, bowler)} takes over from ${playerName(match, s.bowler)}`, 'info');
+          setMenu(false);
+          push({ type: 'bowler', bowler });
         }}
       />
       <ExportSheet
