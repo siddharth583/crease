@@ -38,7 +38,7 @@ const stridesFor = (spot: Spot) => Math.max(1, Math.round(Math.abs(spot.cx - spo
 const COIN = 26;
 const PATH = {
   t: [0, 0.42, 0.78, 0.84, 0.9, 0.94, 1],
-  x: [122, 166, 184, 186, 188, 189, 190],
+  x: [111, 160, 184, 186, 188, 189, 190],
   y: [168, 6, 366, 350, 366, 362, 366],
 };
 const LANDED = { x: 190, y: 366 };
@@ -323,9 +323,9 @@ export function TossScene({
   const winnerSpot = winner === null ? null : winner === '0' ? SPOTS.home : SPOTS.away;
   const look = useMemo(
     () => ({
-      home: { kind: 'captain', shirt: '#B8E22A', cap: '#8DB116', skin: '#C38E68', hair: '#2A1D16' } as Look,
-      away: { kind: 'captain', shirt: '#4FC3E8', cap: '#2286AB', skin: '#A8714E', hair: '#16100C' } as Look,
-      umpire: { kind: 'umpire', shirt: '#FFFFFF', cap: '#FFFFFF', skin: '#D3A685', hair: '#9A9790' } as Look,
+      home: { kind: 'captain', shirt: '#B8E22A', trim: '#1F3A12', cap: '#8DB116', skin: '#C38E68', hair: '#2A1D16', face: 'stubble', number: '7' } satisfies Look,
+      away: { kind: 'captain', shirt: '#4FC3E8', trim: '#0E2F4A', cap: '#2286AB', skin: '#A8714E', hair: '#16100C', face: 'beard', number: '18' } satisfies Look,
+      umpire: { kind: 'umpire', shirt: '#FFFFFF', trim: '#1B1E1C', cap: '#FFFFFF', skin: '#D3A685', hair: '#9A9790', face: 'moustache' } satisfies Look,
     }),
     [],
   );
@@ -398,7 +398,7 @@ export function TossScene({
 
             {/* Before the flick the coin rests on the home captain's thumb. */}
             {phase === 'ready' && (
-              <View pointerEvents="none" style={[styles.coin, { left: 150 - COIN / 2, top: 226 - COIN / 2, transform: [{ scale: 0.55 }] }]}>
+              <View pointerEvents="none" style={[styles.coin, { left: 139 - COIN / 2, top: 226 - COIN / 2, transform: [{ scale: 0.55 }] }]}>
                 <Coin face="heads" />
               </View>
             )}
