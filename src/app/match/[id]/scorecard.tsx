@@ -1,39 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OverEditSheet } from '../../../components/OverEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
-import { BallChip, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../../../components/ui.tsx';
-import { dismissal, fairBalls, matchState, oversText, playerName, replaceOver, type InningsState, type MatchState } from '../../../engine/engine.ts';
+import { BallChip, Button, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../../../components/ui.tsx';
+import { dismissal, fairBalls, matchState, oversText, playerName, replaceOver, type InningsState } from '../../../engine/engine.ts';
 import { isPlaceholder, keyFor, momChoices, playerOfTheMatch } from '../../../engine/stats.ts';
 import type { BallEvent, Match, Team } from '../../../engine/types.ts';
-import { plural } from '../../../engine/text.ts';
-import { useMatch } from '../../../store/matches.tsx';
+import { useMatch, useMatches } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
 import { colors, radius, space, type, font, edge } from '../../../theme.ts';
 
 const econ = (runs: number, balls: number) => (balls ? ((runs * 6) / balls).toFixed(1) : '–');
 const sr = (runs: number, balls: number) => (balls ? ((runs * 100) / balls).toFixed(1) : '–');
-
-function shareText(match: Match, state: MatchState) {
-  const lines = [`🏏 ${match.teams[0].name} vs ${match.teams[1].name} (${plural(match.rules.overs, 'over')})`, ''];
-  state.innings.forEach((inn, i) => {
-    if (!match.innings[i].events.length) return;
-    lines.push(`${inn.battingTeam.name}: ${inn.runs}/${inn.wickets} (${oversText(inn.legalBalls)} ov)`);
-    const top = [...inn.batters].sort((a, b) => b.runs - a.runs).slice(0, 3);
-    top.forEach((b) => lines.push(`  ${playerName(match, b.id)} ${b.runs}${b.out ? '' : '*'} (${b.balls})`));
-    const best = [...inn.bowlers].sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, 2);
-    best.forEach((b) => lines.push(`  ${playerName(match, b.id)} ${b.wickets}/${b.runs} (${oversText(b.balls)})`));
-    lines.push('');
-  });
-  lines.push(state.result ?? 'Match in progress');
-  const mom = state.result ? playerOfTheMatch(match) : null;
-  if (mom) lines.push(`⭐ Man of the Match: ${mom.name} (${mom.summary})`);
-  return lines.join('\n');
-}
 
 /** A player's name that opens their career profile, unless they were never named. */
 function PlayerLink({ match, team, id, style }: { match: Match; team: Team; id: string; style: StyleProp<TextStyle> }) {
@@ -249,6 +231,8 @@ function MomSheet({ match, visible, onClose, onPick }: { match: Match; visible: 
 export default function Scorecard() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { match, saveMatch } = useMatch(id);
+  const { deleteMatch } = useMatches();
+  const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editingOver, setEditingOver] = useState<number | null>(null);
   const [pickingMom, setPickingMom] = useState(false);
@@ -277,7 +261,7 @@ export default function Scorecard() {
             onPress={() => setEditMode(!editMode)}
           />
           <IconButton icon="download-outline" label="Export match" onPress={() => setExporting([match])} />
-          <IconButton icon="share-outline" label="Share summary" onPress={() => Share.share({ message: shareText(match, state) }).catch(() => {})} />
+          <IconButton icon="trash-outline" label="Delete this match" onPress={() => setDeleting(true)} />
         </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, paddingBottom: insets.bottom + space.xxl }}>
@@ -290,13 +274,16 @@ export default function Scorecard() {
           <Text style={[styles.bannerText, state.result ? { color: colors.onAccent } : null]}>{state.result ?? 'Live · match in progress'}</Text>
         </View>
         {mom && (
-          <PressableScale
-            scaleTo={0.98}
-            disabled={isPlaceholder(mom.name)}
-            dimWhenDisabled={false}
-            onPress={() => router.push({ pathname: '/player/[key]', params: { key: mom.key } })}
-            style={styles.mom}
-          >
+          <View style={styles.mom}>
+            {/* The player opens their profile; Change sits beside it (a button can't hold another). */}
+            <PressableScale
+              scaleTo={0.98}
+              disabled={isPlaceholder(mom.name)}
+              dimWhenDisabled={false}
+              onPress={() => router.push({ pathname: '/player/[key]', params: { key: mom.key } })}
+              wrapStyle={{ flex: 1, minWidth: 0 }}
+              style={styles.momPlayer}
+            >
             <View style={styles.momIcon}>
               <Ionicons name="star" size={18} color={colors.gold} />
             </View>
@@ -309,10 +296,11 @@ export default function Scorecard() {
                 {mom.team} · {mom.summary}
               </Text>
             </View>
+            </PressableScale>
             <PressableScale accessibilityLabel="Change the Man of the Match" onPress={() => setPickingMom(true)} style={styles.momChange}>
               <Text style={styles.momChangeText}>Change</Text>
             </PressableScale>
-          </PressableScale>
+          </View>
         )}
         <Segmented
           value={shown}
@@ -380,6 +368,25 @@ export default function Scorecard() {
           toast.show(id ? `${playerName(match, id)} is Man of the Match` : 'Crease picks the Man of the Match', 'success');
         }}
       />
+      <Sheet visible={deleting} onClose={() => setDeleting(false)} title="Delete this match?">
+        <View style={{ gap: space.md }}>
+          <Text style={styles.deleteText}>
+            {match.teams[0].name} v {match.teams[1].name}, {new Date(match.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+            {state.result ? ` · ${state.result}` : ''}. Its runs and wickets leave everyone’s stats and the record book. This can’t be undone.
+          </Text>
+          <Button
+            variant="danger"
+            icon="trash-outline"
+            label="Delete the match"
+            onPress={() => {
+              setDeleting(false);
+              router.replace('/');
+              deleteMatch(match.id);
+            }}
+          />
+          <Button variant="ghost" label="Keep it" onPress={() => setDeleting(false)} />
+        </View>
+      </Sheet>
       {toast.element}
     </Screen>
   );
@@ -412,6 +419,7 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
     ...edge,
   },
+  momPlayer: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   momChange: { paddingHorizontal: space.md, height: 32, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.border },
   momChangeText: { color: colors.text, fontSize: 12, fontFamily: font.bold },
   momPick: {
@@ -469,5 +477,6 @@ const styles = StyleSheet.create({
   editOverTitle: { ...type.label, fontSize: 10, color: colors.muted },
   editBalls: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   offNote: { color: colors.danger, fontSize: 12, fontFamily: font.semibold },
+  deleteText: { color: colors.muted, fontSize: 14, lineHeight: 21, fontFamily: font.medium },
   empty: { color: colors.muted, textAlign: 'center', marginTop: space.xxl },
 });
