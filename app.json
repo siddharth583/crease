@@ -11,7 +11,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#070B14",
+        "backgroundColor": "#090C0A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -23,8 +23,8 @@
       "favicon": "./assets/favicon.png",
       "name": "Crease",
       "shortName": "Crease",
-      "themeColor": "#070B14",
-      "backgroundColor": "#070B14"
+      "themeColor": "#090C0A",
+      "backgroundColor": "#090C0A"
     },
     "plugins": [
       "expo-router",
@@ -32,14 +32,14 @@
       "expo-sharing"
     ],
     "scheme": "crease",
-    "backgroundColor": "#070B14",
+    "backgroundColor": "#090C0A",
     "experiments": {
       "typedRoutes": true
     },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#070B14"
+      "backgroundColor": "#090C0A"
     }
   }
 }

@@ -1,3 +1,4 @@
+import { appIconSvg } from './mark.ts';
 import { dismissal, matchState, oversText, playerName, type InningsState, type MatchState } from './engine.ts';
 import { playerOfTheMatch, seriesState } from './stats.ts';
 import type { Match } from './types.ts';
@@ -200,7 +201,7 @@ function matchHtml(match: Match, all: Match[]) {
   return `<article class="match">
     <section class="cover">
       <div class="cover-top">
-        <div class="brand"><span class="logo">C</span>Crease</div>
+        <div class="brand"><span class="logo">${appIconSvg(24, { id: 'hm' })}</span>Crease</div>
         <div class="cover-date">${esc(date)}</div>
       </div>
       ${series ? `<div class="series">${esc(series.name)} · Match ${match.series!.number} of ${series.of} · ${esc(series.status)}</div>` : '<div class="series">Match report</div>'}
@@ -212,7 +213,7 @@ function matchHtml(match: Match, all: Match[]) {
     ${highlights(match, state)}
     ${played.map(({ s, i, label }) => inningsHtml(match, s, label, INNINGS_TINT[i % 2], i === 1)).join('')}
     ${runRace(state)}
-    <footer><span class="logo sm">C</span> Scored ball by ball with Crease</footer>
+    <footer><span class="logo sm">${appIconSvg(15, { id: 'fm' })}</span> Scored ball by ball with Crease</footer>
   </article>`;
 }
 
@@ -235,8 +236,9 @@ export const REPORT_HEAD = `<link rel="preconnect" href="https://fonts.googleapi
     background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.028) 0 44px, transparent 44px 88px), radial-gradient(120% 90% at 50% -20%, rgba(215,255,58,.20), transparent 60%); }
   .cover-top { display: flex; align-items: center; justify-content: space-between; }
   .brand { display: flex; align-items: center; gap: 7px; font-weight: 900; font-size: 18px; letter-spacing: .4px; }
-  .logo { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: var(--volt); color: #0A0A0A; font-weight: 900; font-size: 15px; }
-  .logo.sm { width: 14px; height: 14px; font-size: 10px; border-radius: 4px; margin-right: 5px; }
+  .logo { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-right: 8px; vertical-align: middle; }
+  .logo svg { display: block; }
+  .logo.sm { width: 15px; height: 15px; margin-right: 5px; }
   .cover-date { font-size: 10px; color: #9C9C94; font-weight: 500; }
   .cover .series { color: var(--volt); margin-top: 12px; }
   .board { display: flex; align-items: flex-end; gap: 16px; margin-top: 6px; position: relative; z-index: 1; }

@@ -1,3 +1,4 @@
+import { appIconSvg } from './mark.ts';
 import { matchState, oversText } from './engine.ts';
 import { headToHead, matchups, records, teamNames, verdict } from './records.ts';
 import { REPORT_HEAD } from './report.ts';
@@ -41,7 +42,7 @@ export function recordBookHtml(matches: Match[]): string {
   const s = r.summary;
 
   const cover = `<section class="cover">
-    <div class="cover-top"><div class="brand"><span class="logo">C</span>Crease</div><div class="cover-date">${esc(span)}</div></div>
+    <div class="cover-top"><div class="brand"><span class="logo">${appIconSvg(24, { id: 'hm' })}</span>Crease</div><div class="cover-date">${esc(span)}</div></div>
     <div class="series">${esc(teams.slice(0, 4).join(' · '))}</div>
     <div class="rb-title">Record book</div>
     <div class="rb-cells">
@@ -204,6 +205,6 @@ ${REPORT_HEAD}
   ${section('Every player · bowling & fielding', bowlers.length ? bowlingTable : '')}
   ${section('Rivalries · batter v bowler (6+ balls)', rivalries)}
   ${section('Every result', finished.length ? results : '')}
-  <footer><span class="logo sm">C</span> Scored ball by ball with Crease</footer>
+  <footer><span class="logo sm">${appIconSvg(15, { id: 'fm' })}</span> Scored ball by ball with Crease</footer>
 </article></body></html>`;
 }

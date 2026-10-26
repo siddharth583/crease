@@ -15,6 +15,7 @@ import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
 import { usePrefs } from '../../store/prefs.ts';
 import { colors, font, gradients, radius, space, type, hero, edge } from '../../theme.ts';
+import { AppMark } from '../../components/AppMark.tsx';
 
 function confirmDelete(onYes: () => void) {
   if (Platform.OS === 'web') {
@@ -90,9 +91,7 @@ function PosterHero() {
     <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.poster}>
       <PitchStripes opacity={0.035} tint="255,255,255" />
       <Sheen every={6500} />
-      <View style={styles.posterBall}>
-        <MaterialCommunityIcons name="cricket" size={26} color={colors.onAccent} />
-      </View>
+      <AppMark size={52} />
       <Text style={styles.posterTitle}>Ready for{'\n'}the toss?</Text>
       <Text style={styles.posterBody}>Score every ball. Every player’s numbers add up, match after match.</Text>
       <Button label="Start a match" icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
@@ -244,9 +243,7 @@ export default function Home() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.brandRow}>
-          <View style={styles.logo}>
-            <MaterialCommunityIcons name="cricket" size={18} color={colors.onAccent} />
-          </View>
+          <AppMark size={34} />
           <Text style={styles.brand}>crease</Text>
           <View style={{ flex: 1 }} />
           <PressableScale accessibilityLabel="Auction: pick the teams" onPress={() => router.push('/auction/new')} style={styles.auctionPill}>
@@ -381,14 +378,6 @@ export default function Home() {
 const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: 130 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  logo: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   brand: { fontFamily: font.posterBlack, fontSize: 22, color: colors.text, letterSpacing: -0.6 },
   dateLine: { color: colors.muted, fontSize: 13, fontFamily: font.medium, marginTop: space.xl },
   greeting: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.2, marginBottom: space.lg },
@@ -435,7 +424,6 @@ const styles = StyleSheet.create({
   backupButtonText: { color: colors.bg, fontSize: 13, fontFamily: font.bold },
 
   poster: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden' },
-  posterBall: { width: 48, height: 48, borderRadius: 24, backgroundColor: hero.accent, alignItems: 'center', justifyContent: 'center' },
   posterTitle: { fontFamily: font.posterBlack, fontSize: 46, lineHeight: 51, color: hero.text, letterSpacing: -1.6, marginTop: space.xl },
   posterBody: { color: hero.muted, fontSize: 15, fontFamily: font.medium, lineHeight: 22, marginTop: space.md, maxWidth: 290 },
 

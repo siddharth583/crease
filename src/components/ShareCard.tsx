@@ -1,4 +1,3 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRef, useState, type ComponentRef } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
@@ -9,6 +8,7 @@ import { shareImage } from '../store/files.ts';
 import { font } from '../theme.ts';
 import { Button, GhostWord, PitchStripes, Sheet, type ToastTone } from './ui.tsx';
 import { pictureFileName } from '../engine/backup.ts';
+import { AppMark } from './AppMark.tsx';
 
 // The poster people actually send round the group: always in the night colours, whatever the app theme, so
 // every card looks the same in the chat.
@@ -43,9 +43,7 @@ function Card({ match, all }: { match: Match; all: Match[] }) {
         {winner ? 'WIN' : 'TIE'}
       </GhostWord>
       <View style={styles.top}>
-        <View style={styles.logo}>
-          <MaterialCommunityIcons name="cricket" size={14} color={C.ink} />
-        </View>
+        <AppMark size={24} />
         <Text style={styles.brand}>CREASE</Text>
         <Text style={styles.date}>{date}</Text>
       </View>
@@ -151,7 +149,6 @@ export function ShareCardSheet({
 const styles = StyleSheet.create({
   card: { width: 320, height: 400, backgroundColor: C.bg, borderRadius: 18, padding: 22, overflow: 'hidden' },
   top: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  logo: { width: 22, height: 22, borderRadius: 5, backgroundColor: C.volt, alignItems: 'center', justifyContent: 'center' },
   brand: { fontFamily: font.posterBlack, fontSize: 18, color: C.text },
   date: { marginLeft: 'auto', color: C.muted, fontFamily: font.semibold, fontSize: 11 },
   series: { color: C.volt, fontFamily: font.bold, fontSize: 10, letterSpacing: 1.2, marginTop: 16 },
