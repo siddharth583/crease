@@ -33,7 +33,6 @@ import {
   PopText,
   PressableScale,
   Screen,
-  SectionLabel,
   Segmented,
   Sheet,
   Stepper,
@@ -59,6 +58,7 @@ import {
   type BallView,
   type InningsState,
 } from '../../../engine/engine.ts';
+import { plural } from '../../../engine/text.ts';
 import { isPlaceholder, playerOfTheMatch, seriesState } from '../../../engine/stats.ts';
 import type { BallEvent, Extra, InningsEvent, Match, WicketKind } from '../../../engine/types.ts';
 import { newId, useMatch, useMatches } from '../../../store/matches.tsx';
@@ -996,8 +996,9 @@ export default function LiveMatch() {
               scaleTo={0.97}
               onPress={() => router.push({ pathname: '/player/[key]', params: { key: potm.key } })}
               style={styles.potm}
+              accessibilityLabel={`Man of the Match: ${potm.name}, ${potm.summary}`}
             >
-              <MaterialCommunityIcons name="star-four-points" size={18} color={colors.accentInk} />
+              <MaterialCommunityIcons name="star-four-points" size={18} color={hero.accent} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.potmLabel}>MAN OF THE MATCH</Text>
                 <Text style={styles.potmName} numberOfLines={1}>
@@ -1019,10 +1020,11 @@ export default function LiveMatch() {
             </PressableScale>
           )}
           <View style={styles.resultScores}>
-            {state.innings.map((inn) => (
-              <View key={inn.battingTeam.id} style={styles.resultScore}>
+            {state.innings.map((inn, i) => (
+              <View key={i} style={styles.resultScore}>
                 <Text style={styles.resultTeam} numberOfLines={1}>
                   {inn.battingTeam.name}
+                  {i >= 2 ? ' · super over' : ''}
                 </Text>
                 <Text style={styles.resultRuns}>
                   {inn.runs}/{inn.wickets}
@@ -1136,19 +1138,24 @@ export default function LiveMatch() {
     // Bowlers usually swap ends: whoever bowled the over before last is the natural pick, so they go first.
     const history = match.innings[index].events.flatMap((e) => (e.type === 'bowler' ? [e.bowler] : []));
     const fromThisEnd = history.length >= 2 ? history[history.length - 2] : null;
-    const usable = (id: string) => id !== s.lastOverBowler && oversLeft(match, s, id) !== 0;
+    const withinLimit = (id: string) => id !== s.lastOverBowler && oversLeft(match, s, id) !== 0;
+    // Everyone has bowled their overs (a short side, a long innings): the limit gives way rather than stop the game.
+    const limitOff = !s.bowlingTeam.players.some((p) => withinLimit(p.id));
+    const usable = (id: string) => (limitOff ? id !== s.lastOverBowler : withinLimit(id));
     const rank = (id: string) => (id === fromThisEnd && usable(id) ? 0 : !usable(id) ? 3 : s.bowlers.some((b) => b.id === id && b.balls) ? 1 : 2);
     const ids = s.bowlingTeam.players.map((p) => p.id).sort((a, b) => rank(a) - rank(b));
     const limit = match.rules.maxOversPerBowler;
     const extra = match.rules.extraOverBowlers ?? 0;
-    const limitText = limit ? (extra ? ` · ${extra} can bowl ${limit + 1}, the rest ${limit}` : ` · ${limit} overs each`) : '';
+    const limitText = limit ? (extra ? ` · ${extra} can bowl ${limit + 1}, the rest ${limit}` : ` · ${limit} over${limit === 1 ? '' : 's'} each`) : '';
     body = (
       <PlayerPicker
         title={s.legalBalls === 0 ? 'Opening bowler' : `Over ${Math.floor(s.legalBalls / 6) + 1}`}
         subtitle={
           s.legalBalls === 0
             ? `${s.bowlingTeam.name} with the new ball${limitText}`
-            : `Who’s bowling it?${limitText}`
+            : limitOff
+              ? 'Everyone has bowled their overs, so anyone can bowl this one.'
+              : `Who’s bowling it?${limitText}`
         }
         match={match}
         ids={ids}
@@ -1156,7 +1163,7 @@ export default function LiveMatch() {
         note={(pid) => {
           if (pid === s.lastOverBowler) return 'Bowled the last over';
           const left = oversLeft(match, s, pid);
-          if (left === 0) return `Bowled their ${oversText(s.bowlers.find((x) => x.id === pid)?.balls ?? 0).split('.')[0]} overs`;
+          if (left === 0 && !limitOff) return `Bowled their ${plural(Number(oversText(s.bowlers.find((x) => x.id === pid)?.balls ?? 0).split('.')[0]), 'over')}`;
           const b = s.bowlers.find((x) => x.id === pid);
           const figures = b && b.balls ? `${oversText(b.balls)}-${b.maidens}-${b.runs}-${b.wickets}` : '';
           const parts = [pid === fromThisEnd ? 'From this end' : '', figures, left !== null ? `${left} left` : ''].filter(Boolean);
@@ -1211,7 +1218,17 @@ export default function LiveMatch() {
         onClose={() => setEditing(null)}
         onSave={(next) => {
           if (editing?.event === undefined) return;
-          saveMatch(replaceBall(match, index, editing.event, next));
+          const fixed = replaceBall(match, index, editing.event, next);
+          if (fixed === match) {
+            toast.show(
+              next
+                ? 'That over is finished: a ball in it can’t become a wide or no-ball, or stop being one. Change the runs instead.'
+                : 'That over is finished, so its balls can’t be deleted. Change the runs instead.',
+              'error',
+            );
+            return;
+          }
+          saveMatch(fixed);
           toast.show(next ? 'Ball fixed. Everything after it is updated.' : 'Ball deleted', 'success');
           setEditing(null);
         }}
@@ -1229,7 +1246,7 @@ export default function LiveMatch() {
           saveMatch(next);
           const st = matchState(next);
           toast.show(
-            st.innings[0].status === 'done' && !superOver ? `Now ${o} overs · DLS target ${st.innings[1].target}` : `Now ${o} overs an innings`,
+            st.innings[0].status === 'done' && !superOver ? `Now ${plural(o, 'over')} · DLS target ${st.innings[1].target}` : `Now ${plural(o, 'over')} an innings`,
             'success',
           );
         }}
@@ -1523,9 +1540,9 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
   },
   seriesLineText: { fontFamily: font.poster, fontSize: 20, color: colors.onAccent, textTransform: 'uppercase' },
-  potmLabel: { ...type.label, fontSize: 9, color: colors.accentInk },
-  potmName: { fontFamily: font.poster, fontSize: 24, color: colors.text, textTransform: 'uppercase' },
-  potmLine: { fontFamily: font.poster, fontSize: 18, color: colors.text, ...type.num },
+  potmLabel: { ...type.label, fontSize: 9, color: hero.accent },
+  potmName: { fontFamily: font.poster, fontSize: 24, color: hero.text, textTransform: 'uppercase' },
+  potmLine: { fontFamily: font.poster, fontSize: 18, color: hero.text, ...type.num },
   exportHint: { color: colors.faint, fontSize: 12, fontFamily: font.regular, textAlign: 'center', marginTop: -4 },
 
   breakCard: {

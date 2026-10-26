@@ -406,3 +406,32 @@ test('a first bounce is the umpire’s call (fair or wide); the second in the ov
   assert.equal(s.legalBalls, 1);
   assert.equal(s.overs[0][0].label, '4');
 });
+
+test('a ball in a finished over can’t change whether it counts, so the overs never shift', () => {
+  let m = start(setup({ overs: 3 }));
+  m = play(m, ball(0, 'wide'), ...Array.from({ length: 6 }, () => ball(1)));
+  m = play(m, { type: 'bowler', bowler: 'b2' }, ball(1), ball(0, 'noball'));
+  const wideAt = m.innings[0].events.findIndex((e) => e.type === 'ball' && e.extra === 'wide');
+  // The wide is in the first (finished) over: it can't become a fair ball, and a fair ball there can't be deleted.
+  assert.equal(replaceBall(m, 0, wideAt, ball(0)), m);
+  assert.equal(replaceBall(m, 0, wideAt + 1, null), m);
+  // Its runs can still change, and so can the over being bowled now.
+  assert.notEqual(replaceBall(m, 0, wideAt, ball(2, 'wide')), m);
+  const fixed = replaceBall(m, 0, m.innings[0].events.length - 1, ball(0));
+  const s = matchState(fixed).innings[0];
+  assert.equal(s.legalBalls, 8);
+  assert.equal(s.bowlers.reduce((n, b) => n + b.balls, 0), s.legalBalls);
+});
+
+test('last man standing: the lone batter is credited with every run, after singles and over ends too', () => {
+  let m = start(setup({ lastManStands: true, overs: 3 }, 3));
+  m = play(m, ball(0, undefined, { kind: 'bowled', playerOut: 'a1' }), { type: 'batter', batter: 'a3' });
+  m = play(m, ball(0, undefined, { kind: 'bowled', playerOut: 'a3' }));
+  // a2 is on their own now: a single, then a four, then the over ends and another ball comes.
+  m = play(m, ball(1), ball(4), ball(0), ball(0), { type: 'bowler', bowler: 'b2' }, ball(6));
+  const s = matchState(m).innings[0];
+  const a2 = s.batters.find((b) => b.id === 'a2')!;
+  assert.equal(a2.runs, 11);
+  assert.equal(s.runs, 11);
+  assert.equal(s.striker, 'a2');
+});

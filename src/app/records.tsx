@@ -10,6 +10,7 @@ import { headToHead, matchups, records, teamNames, verdict } from '../engine/rec
 import { useMatches } from '../store/matches.tsx';
 import { savePdf } from '../store/files.ts';
 import { useSquad } from '../store/squad.ts';
+import { plural } from '../engine/text.ts';
 import { colors, edge, font, hero, radius, space, type } from '../theme.ts';
 
 const HERO_BG = '#101010';
@@ -175,7 +176,7 @@ export default function Records() {
             <Board
               label="Highest scores"
               icon="flame"
-              items={r.highScores.map((x) => ({ title: x.name, sub: `${x.balls} balls v ${x.vs} · ${day(x.date)}`, value: x.runs, display: `${x.runs}${x.notOut ? '*' : ''}`, onPress: openPlayer(x.key) }))}
+              items={r.highScores.map((x) => ({ title: x.name, sub: `${plural(x.balls, 'ball')} v ${x.vs} · ${day(x.date)}`, value: x.runs, display: `${x.runs}${x.notOut ? '*' : ''}`, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Fastest innings (15+ balls)"
@@ -192,7 +193,7 @@ export default function Records() {
             <Board
               label="Biggest partnerships"
               icon="people"
-              items={r.partnerships.map((x) => ({ title: x.names, sub: `${x.balls} balls · ${x.team} v ${x.vs} · ${day(x.date)}`, value: x.runs, display: String(x.runs), onPress: openMatch(x.matchId) }))}
+              items={r.partnerships.map((x) => ({ title: x.names, sub: `${plural(x.balls, 'ball')} · ${x.team} v ${x.vs} · ${day(x.date)}`, value: x.runs, display: String(x.runs), onPress: openMatch(x.matchId) }))}
             />
             <Board label="Most Man of the Match awards" icon="star" items={r.mostMoM.map((x) => ({ title: x.name, sub: x.team, value: x.count, display: String(x.count), unit: '×', onPress: openPlayer(x.key) }))} />
           </>

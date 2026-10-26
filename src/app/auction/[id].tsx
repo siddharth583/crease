@@ -8,13 +8,13 @@ import { Button, Card, FadeIn, GhostWord, IconButton, PitchStripes, PopText, Pre
 import { auctionState, money, nextBid, passPlayer, rosterPlayer, sell, undoAuction, type Auction, type AuctionState } from '../../engine/auction.ts';
 import { CATEGORY_LABEL, categoryOf, overall, ROLE_LABEL } from '../../engine/squad.ts';
 import { careerStats, playerKey } from '../../engine/stats.ts';
+import { plural } from '../../engine/text.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { colors, edge, font, hero, radius, space, type } from '../../theme.ts';
 
 const HERO_BG = '#101010';
 const SIDE_TINT = [colors.accent, colors.violet];
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** A captain's purse and side so far. */
 function SidePanel({ s, i, leading }: { s: AuctionState['sides'][number]; i: 0 | 1; leading: boolean }) {

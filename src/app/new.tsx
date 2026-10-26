@@ -416,7 +416,7 @@ export default function NewMatch() {
 
           <SectionLabel>Format</SectionLabel>
           <Card style={{ paddingVertical: space.sm }}>
-            <Stepper label="Overs" hint="Per innings" value={rules.overs} min={1} max={50} onChange={(overs) => setRules({ ...rules, overs })} />
+            <Stepper label="Overs" hint="Per innings" value={rules.overs} min={1} max={50} onChange={(overs) => setRules((r) => ({ ...r, overs }))} />
             <View style={styles.divider} />
             <Stepper label="Players" hint="Per side" value={size} min={2} max={11} onChange={setSizeAll} />
             <View style={styles.divider} />
@@ -426,7 +426,7 @@ export default function NewMatch() {
               value={rules.maxOversPerBowler ?? 0}
               min={0}
               max={rules.overs}
-              onChange={(maxOversPerBowler) => setRules({ ...rules, maxOversPerBowler })}
+              onChange={(maxOversPerBowler) => setRules((r) => ({ ...r, maxOversPerBowler }))}
             />
             {Boolean(rules.maxOversPerBowler) && (
               <>
@@ -441,10 +441,21 @@ export default function NewMatch() {
                   value={rules.extraOverBowlers ?? 0}
                   min={0}
                   max={size}
-                  onChange={(extraOverBowlers) => setRules({ ...rules, extraOverBowlers })}
+                  onChange={(extraOverBowlers) => setRules((r) => ({ ...r, extraOverBowlers }))}
                 />
               </>
             )}
+            {(() => {
+              // Can the side bowl the whole innings under the limit?
+              const limit = rules.maxOversPerBowler ?? 0;
+              const room = limit ? size * limit + Math.min(rules.extraOverBowlers ?? 0, size) : Infinity;
+              return room < rules.overs ? (
+                <Text style={[styles.help, { marginLeft: 0, paddingBottom: space.sm, color: colors.gold }]}>
+                  {size} bowlers can only bowl {room} of the {rules.overs} overs under this limit. When everyone has bowled their share,
+                  anyone can bowl the rest.
+                </Text>
+              ) : null;
+            })()}
           </Card>
 
           <SectionLabel>House rules</SectionLabel>
@@ -453,21 +464,21 @@ export default function NewMatch() {
               label="Run for wides & no-balls"
               hint="Adds 1 extra run to the score"
               value={rules.extraRun === 1}
-              onChange={(v) => setRules({ ...rules, extraRun: v ? 1 : 0 })}
+              onChange={(v) => setRules((r) => ({ ...r, extraRun: v ? 1 : 0 }))}
             />
             <View style={styles.divider} />
             <ToggleRow
               label="Re-bowl wides & no-balls"
               hint="Off: they count as a ball of the over"
               value={rules.reball}
-              onChange={(reball) => setRules({ ...rules, reball })}
+              onChange={(reball) => setRules((r) => ({ ...r, reball }))}
             />
             <View style={styles.divider} />
             <ToggleRow
               label="Free hit after a no-ball"
               hint="Only a run out counts on the next ball"
               value={Boolean(rules.freeHit)}
-              onChange={(freeHit) => setRules({ ...rules, freeHit })}
+              onChange={(freeHit) => setRules((r) => ({ ...r, freeHit }))}
             />
             <View style={styles.divider} />
             <Stepper
@@ -480,14 +491,14 @@ export default function NewMatch() {
               value={rules.bouncer?.fair ?? 1}
               min={0}
               max={3}
-              onChange={(fair) => setRules({ ...rules, bouncer: { calledAs: rules.bouncer?.calledAs ?? 'noball', fair } })}
+              onChange={(fair) => setRules((r) => ({ ...r, bouncer: { calledAs: r.bouncer?.calledAs ?? 'noball', fair } }))}
             />
             <View style={styles.bounceRow}>
               <Text style={styles.question}>After that, a bounce is a</Text>
               <View style={{ flex: 1 }}>
                 <Segmented
                   value={rules.bouncer?.calledAs ?? 'noball'}
-                  onChange={(calledAs) => setRules({ ...rules, bouncer: { fair: rules.bouncer?.fair ?? 1, calledAs } })}
+                  onChange={(calledAs) => setRules((r) => ({ ...r, bouncer: { fair: r.bouncer?.fair ?? 1, calledAs } }))}
                   options={[
                     { value: 'wide', label: 'Wide' },
                     { value: 'noball', label: 'No ball' },
@@ -500,7 +511,7 @@ export default function NewMatch() {
               label="Last man stands"
               hint="The last batter can bat on alone"
               value={rules.lastManStands}
-              onChange={(lastManStands) => setRules({ ...rules, lastManStands })}
+              onChange={(lastManStands) => setRules((r) => ({ ...r, lastManStands }))}
             />
           </Card>
 

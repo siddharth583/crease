@@ -111,6 +111,15 @@ export function ballView(rules: Rules, ball: BallEvent): BallView {
   return { label: String(ball.runs), tone: 'run' };
 }
 
+/**
+ * The overs an innings is played over. A cut made during the chase doesn't reach back: the first innings keeps the
+ * overs it had when the chase began.
+ */
+function oversFor(match: Match, index: number): number {
+  const chaseCut = index === 0 ? (match.interruptions ?? []).find((c) => c.innings === 1) : undefined;
+  return chaseCut ? chaseCut.before : match.rules.overs;
+}
+
 export function inningsState(match: Match, index: number, target: number | null): InningsState {
   const { rules } = match;
   const innings = match.innings[index];
@@ -125,7 +134,7 @@ export function inningsState(match: Match, index: number, target: number | null)
     runs: 0,
     wickets: 0,
     legalBalls: 0,
-    maxBalls: index >= 2 ? 6 : rules.overs * 6,
+    maxBalls: index >= 2 ? 6 : oversFor(match, index) * 6,
     extras: { wide: 0, noball: 0, bye: 0, legbye: 0, penalty: 0 },
     striker: null,
     nonStriker: null,
@@ -207,6 +216,9 @@ export function inningsState(match: Match, index: number, target: number | null)
       else s.nonStriker = e.batter;
       continue;
     }
+
+    // Last man standing: the lone batter faces every ball, however the runs or the over end left the ends.
+    if (rules.lastManStands && s.striker === null && s.nonStriker !== null) [s.striker, s.nonStriker] = [s.nonStriker, null];
 
     // A delivery. Within the over's allowance a bounce is the umpire's call (fair or wide); past it, it's
     // called by the rule (usually a no-ball).
@@ -526,6 +538,22 @@ export function undo(match: Match): Match {
 }
 
 /** Fix or remove one delivery that has no wicket. Everything after it is worked out again. */
+/** Legal balls in an innings up to and including one event. */
+function legalBallsTo(match: Match, inningsIndex: number, eventIndex: number): number {
+  const cut = { ...match, innings: match.innings.map((inn, i) => (i === inningsIndex ? { ...inn, events: inn.events.slice(0, eventIndex + 1) } : i > inningsIndex ? { ...inn, events: [] } : inn)) };
+  return inningsState(cut, inningsIndex, null).legalBalls;
+}
+
+/**
+ * Whether a ball can stop or start counting as a ball of the over (become or stop being a wide or no-ball, or be
+ * deleted): only in the over being bowled now. In a finished over it would move every over after it by a ball.
+ */
+export function canChangeLegality(match: Match, inningsIndex: number, eventIndex: number): boolean {
+  const later = match.innings[inningsIndex]?.events.slice(eventIndex + 1) ?? [];
+  const laterInnings = match.innings.slice(inningsIndex + 1).some((inn) => inn.events.length > 0);
+  return !laterInnings && !later.some((e) => e.type === 'bowler');
+}
+
 export function replaceBall(match: Match, inningsIndex: number, eventIndex: number, ball: BallEvent | null): Match {
   const old = match.innings[inningsIndex]?.events[eventIndex];
   if (!old || old.type !== 'ball') return match;
@@ -533,7 +561,7 @@ export function replaceBall(match: Match, inningsIndex: number, eventIndex: numb
   // everything after it was scored with that batter gone.
   if (Boolean(old.wicket) !== Boolean(ball?.wicket)) return match;
   if (old.wicket && ball?.wicket && old.wicket.playerOut !== ball.wicket.playerOut) return match;
-  return {
+  const next: Match = {
     ...match,
     innings: match.innings.map((inn, i) =>
       i !== inningsIndex
@@ -546,6 +574,24 @@ export function replaceBall(match: Match, inningsIndex: number, eventIndex: numb
           },
     ),
   };
+  // Over by over the balls must still line up with the bowlers who bowled them: a change to whether a ball counts
+  // is only for the over being bowled, and only if no later ball would then fall outside its over.
+  const before = legalBallsTo(match, inningsIndex, eventIndex);
+  const after = ball ? legalBallsTo(next, inningsIndex, eventIndex) : legalBallsTo(match, inningsIndex, eventIndex - 1);
+  if (before !== after && (!canChangeLegality(match, inningsIndex, eventIndex) || !inPlayThroughout(next, inningsIndex))) return match;
+  return next;
+}
+
+/** Every delivery in an innings came while the innings was live (a bowler on, the over and innings not over). */
+function inPlayThroughout(match: Match, inningsIndex: number): boolean {
+  const events = match.innings[inningsIndex].events;
+  const target = inningsIndex === 1 ? chaseTarget(match, inningsState(match, 0, null).runs) : null;
+  for (let k = 0; k < events.length; k++) {
+    if (events[k].type !== 'ball') continue;
+    const cut = { ...match, innings: match.innings.map((inn, i) => (i === inningsIndex ? { ...inn, events: events.slice(0, k) } : inn)) };
+    if (inningsState(cut, inningsIndex, inningsIndex === 1 ? target : null).status !== 'live') return false;
+  }
+  return true;
 }
 
 /** Change the overs mid-match (rain, light). Never below what has already been bowled. */

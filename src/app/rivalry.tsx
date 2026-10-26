@@ -9,6 +9,7 @@ import { rivalry, verdict } from '../engine/records.ts';
 import type { WicketKind } from '../engine/types.ts';
 import { useMatches } from '../store/matches.tsx';
 import { useSquad } from '../store/squad.ts';
+import { plural } from '../engine/text.ts';
 import { colors, font, hero, radius, space, type } from '../theme.ts';
 
 const HERO_BG = '#101010';
@@ -110,12 +111,12 @@ export default function RivalryScreen() {
         </FadeIn>
 
         <View style={styles.grid}>
-          <Stat label="Runs" value={String(r.runs)} sub={`off ${r.balls} balls`} />
+          <Stat label="Runs" value={String(r.runs)} sub={`off ${plural(r.balls, 'ball')}`} />
           <Stat label="Strike rate" value={sr.toFixed(0)} sub="runs per 100 balls" tone={sr >= 130 ? colors.accentInk : undefined} />
           <Stat label="Dismissals" value={String(r.outs)} sub={r.outs ? `one every ${perOut} balls` : 'never out'} tone={r.outs ? colors.danger : undefined} />
           <Stat label="Average" value={avg} sub="runs a dismissal" />
           <Stat label="Dot balls" value={`${Math.round((r.dots / Math.max(1, r.balls)) * 100)}%`} sub={`${r.dots} of ${r.balls}`} />
-          <Stat label="Boundaries" value={String(r.fours + r.sixes)} sub={`${r.fours} fours · ${r.sixes} sixes`} />
+          <Stat label="Boundaries" value={String(r.fours + r.sixes)} sub={`${plural(r.fours, 'four')} · ${plural(r.sixes, 'six', 'sixes')}`} />
         </View>
 
         <SectionLabel>Every ball, added up</SectionLabel>

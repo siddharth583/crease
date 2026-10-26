@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -206,8 +206,8 @@ export default function SeriesScreen() {
                   <Text style={styles.matchNoText}>{m.series!.number}</Text>
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
-                  {st.innings.map((inn) => (
-                    <View key={inn.battingTeam.id} style={styles.matchLine}>
+                  {st.innings.slice(0, 2).map((inn, i) => (
+                    <View key={i} style={styles.matchLine}>
                       <Text style={[styles.matchTeam, st.winner === inn.battingTeam.id && { color: colors.text }]} numberOfLines={1}>
                         {inn.battingTeam.name}
                       </Text>

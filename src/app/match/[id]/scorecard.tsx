@@ -9,6 +9,7 @@ import { Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, useT
 import { dismissal, matchState, oversText, playerName, type InningsState, type MatchState } from '../../../engine/engine.ts';
 import { isPlaceholder, keyFor, playerOfTheMatch } from '../../../engine/stats.ts';
 import type { Match, Team } from '../../../engine/types.ts';
+import { plural } from '../../../engine/text.ts';
 import { useMatch } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
 import { colors, radius, space, type, font, edge } from '../../../theme.ts';
@@ -17,7 +18,7 @@ const econ = (runs: number, balls: number) => (balls ? ((runs * 6) / balls).toFi
 const sr = (runs: number, balls: number) => (balls ? ((runs * 100) / balls).toFixed(1) : '–');
 
 function shareText(match: Match, state: MatchState) {
-  const lines = [`🏏 ${match.teams[0].name} vs ${match.teams[1].name} (${match.rules.overs} overs)`, ''];
+  const lines = [`🏏 ${match.teams[0].name} vs ${match.teams[1].name} (${plural(match.rules.overs, 'over')})`, ''];
   state.innings.forEach((inn, i) => {
     if (!match.innings[i].events.length) return;
     lines.push(`${inn.battingTeam.name}: ${inn.runs}/${inn.wickets} (${oversText(inn.legalBalls)} ov)`);

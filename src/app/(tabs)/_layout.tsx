@@ -10,7 +10,6 @@ import { colors, font, radius, space, edge } from '../../theme.ts';
 const TABS: Record<string, { label: string; icon: IconName; iconOn: IconName }> = {
   index: { label: 'Matches', icon: 'albums-outline', iconOn: 'albums' },
   players: { label: 'Players', icon: 'podium-outline', iconOn: 'podium' },
-  club: { label: 'Club', icon: 'people-outline', iconOn: 'people' },
 };
 
 /** A floating capsule of tabs, with the one thing you come here to do (start a match) beside it in volt. */
@@ -61,7 +60,6 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="players" />
-      <Tabs.Screen name="club" />
     </Tabs>
   );
 }

@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addEvent, matchState, newMatch } from './engine.ts';
+import { addEvent, newMatch } from './engine.ts';
 import { battingAverage, bestFigures, careerStats, economy, playerKey, seriesState, setRegulars } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Team } from './types.ts';
 

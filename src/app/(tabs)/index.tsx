@@ -169,10 +169,11 @@ function ResultRow({ match, onDelete }: { match: Match; onDelete: () => void }) 
         <Text style={styles.dateMonth}>{d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}</Text>
       </View>
       <View style={{ flex: 1, gap: 4 }}>
-        {state.innings.map((inn) => {
+        {/* The match itself; a super over shows in the result line. */}
+        {state.innings.slice(0, 2).map((inn, i) => {
           const won = state.winner === inn.battingTeam.id;
           return (
-            <View key={inn.battingTeam.id} style={styles.resultLine}>
+            <View key={i} style={styles.resultLine}>
               <View style={[styles.winBar, won && { backgroundColor: colors.accent }]} />
               <Text numberOfLines={1} style={[styles.resultTeam, won && { color: colors.text }]}>
                 {inn.battingTeam.name}
@@ -201,7 +202,7 @@ function ResultRow({ match, onDelete }: { match: Match; onDelete: () => void }) 
 }
 
 export default function Home() {
-  const { matches, deleteMatch, ready, club, sync, importMatches } = useMatches();
+  const { matches, deleteMatch, ready, importMatches } = useMatches();
   const toast = useToast();
   const { importFile, exportMatches, exportPdf } = useMatchFiles(toast.show);
   const { prefs, setPrefs } = usePrefs();
@@ -221,20 +222,13 @@ export default function Home() {
           </View>
           <Text style={styles.brand}>CREASE</Text>
           <View style={{ flex: 1 }} />
-          <PressableScale accessibilityLabel="Auction: pick the teams" onPress={() => router.push('/auction/new')} style={styles.gear}>
-            <Ionicons name="hammer-outline" size={18} color={colors.text} />
-          </PressableScale>
           <PressableScale accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={styles.gear}>
             <Ionicons name="settings-outline" size={18} color={colors.text} />
           </PressableScale>
-          <PressableScale onPress={() => router.navigate('/club')} style={styles.clubPill}>
-            <Ionicons
-              name={club ? (sync.status === 'offline' ? 'cloud-offline' : 'cloud-done') : 'people'}
-              size={15}
-              color={club ? (sync.status === 'error' ? colors.danger : colors.accent) : colors.muted}
-            />
-            <Text numberOfLines={1} style={styles.clubText}>
-              {club ? club.name : 'Club'}
+          <PressableScale accessibilityLabel="Auction: pick the teams" onPress={() => router.push('/auction/new')} style={styles.auctionPill}>
+            <Ionicons name="hammer" size={15} color={colors.accentInk} />
+            <Text numberOfLines={1} style={styles.auctionText}>
+              Auction
             </Text>
           </PressableScale>
         </View>
@@ -361,7 +355,7 @@ const styles = StyleSheet.create({
     transform: [{ skewX: '-8deg' }],
   },
   brand: { fontFamily: font.posterBlack, fontSize: 28, color: colors.text, letterSpacing: 0.5 },
-  clubPill: {
+  auctionPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -401,7 +395,7 @@ const styles = StyleSheet.create({
   backupBody: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 1 },
   backupButton: { backgroundColor: isDay ? colors.text : colors.gold, borderRadius: isDay ? radius.pill : radius.sm, paddingHorizontal: space.md, height: 34, justifyContent: 'center' },
   backupButtonText: { color: isDay ? colors.surface : colors.onAccent, fontSize: 13, fontFamily: font.heavy },
-  clubText: { color: colors.text, fontSize: 13, fontFamily: font.bold, flexShrink: 1 },
+  auctionText: { color: colors.text, fontSize: 13, fontFamily: font.bold, flexShrink: 1 },
 
   poster: {
     borderRadius: radius.xl,

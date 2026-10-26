@@ -327,6 +327,7 @@ export function Chip({
   }[tone];
   return (
     <PressableScale
+      accessibilityLabel={label}
       accessibilityState={{ selected }}
       disabled={disabled}
       scaleTo={0.92}
@@ -355,6 +356,7 @@ export function Segmented<T extends string>({
         return (
           <PressableScale
             key={o.value}
+            accessibilityLabel={o.label}
             accessibilityState={{ selected: on }}
             scaleTo={0.95}
             onPress={() => onChange(o.value)}
