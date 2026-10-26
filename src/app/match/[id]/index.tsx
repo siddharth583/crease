@@ -1124,10 +1124,7 @@ export default function LiveMatch() {
         onSave={(next, bowler) => {
           if (editing?.event === undefined) return;
           const fixed = fixBall(match, index, editing.event, next, bowler);
-          if (typeof fixed === 'string') {
-            toast.show(fixed, 'error');
-            return;
-          }
+          if (typeof fixed === 'string') return fixed;
           saveMatch(fixed);
           toast.show(next ? 'Ball fixed. Everything after it is updated.' : 'Ball deleted', 'success');
           setEditing(null);

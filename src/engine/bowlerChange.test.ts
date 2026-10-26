@@ -63,12 +63,11 @@ test('setBowlerFrom at the first ball of an over changes who bowled the over', (
   assert.equal(s.bowlers.find((b) => b.id === 'b4')!.runs, 4);
 });
 
-test('setBowlerFrom refuses a bowler who would bowl two overs in a row', () => {
+test('setBowlerFrom records a bowler who bowled the over next to it: the fix says what happened', () => {
   let m = start(setup());
   m = play(m, ball(0), ball(0), ball(0), ball(0), ball(0), ball(0), bowler('b3'), ball(0), ball(0), ball(0), ball(0), ball(0), ball(0));
-  assert.equal(setBowlerFrom(m, 0, nth(m, 9), 'b1'), m, 'b1 bowled the over before');
-  assert.equal(setBowlerFrom(m, 0, nth(m, 4), 'b3'), m, 'b3 bowls the over after');
-  assert.notEqual(setBowlerFrom(m, 0, nth(m, 4), 'b2'), m);
+  const s = matchState(setBowlerFrom(m, 0, nth(m, 9), 'b1')).innings[0];
+  assert.deepEqual(s.overBowlers.slice(0, 2), [['b1'], ['b3', 'b1']]);
 });
 
 test('a mid-over change doesn’t stop the over being bowled from taking a wide', () => {
@@ -80,7 +79,7 @@ test('a mid-over change doesn’t stop the over being bowled from taking a wide'
   assert.equal(matchState(wide).innings[0].legalBalls, 2);
 });
 
-test('an edit is refused if the chase would have been won before its last balls', () => {
+test('a first-innings fix stands even when the chase would have been won sooner', () => {
   let m = start(setup());
   // First innings: 6 runs in 3 overs.
   m = play(m, ball(1), ball(1), ball(1), ball(1), ball(1), ball(1), bowler('b2'));
@@ -89,12 +88,13 @@ test('an edit is refused if the chase would have been won before its last balls'
   for (let i = 0; i < 6; i++) m = play(m, ball(0));
   // The chase: 7 to win, got with a six and a single.
   m = play(m, { type: 'openers', striker: 'b1', nonStriker: 'b2' }, bowler('a1'), ball(6), ball(1));
-  assert.ok(matchState(m).result?.startsWith('B won'));
-  // Making the first innings 1 run smaller means the six alone won it: the single after can't stand.
   const first = m.innings[0].events.findIndex((e) => e.type === 'ball');
-  assert.equal(replaceBall(m, 0, first, ball(0)), m);
-  // A run more is fine: the chase still needs its second ball, and simply ends level.
+  // A run less: the six alone would have won it, but the single was scored too and stays.
+  const less = replaceBall(m, 0, first, ball(0));
+  assert.notEqual(less, m);
+  assert.equal(matchState(less).innings[1].runs, 7);
+  assert.ok(matchState(less).result?.startsWith('B won'));
+  // A run more: the chase is back on, B need one more.
   const more = replaceBall(m, 0, first, ball(2));
-  assert.notEqual(more, m);
-  assert.equal(matchState(more).result, null, 'the chase is back on: B need one more');
+  assert.equal(matchState(more).result, null);
 });

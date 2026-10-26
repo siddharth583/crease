@@ -34,7 +34,7 @@ export function fixBall(match: Match, inningsIndex: number, eventIndex: number, 
   if (fixed === match && next && JSON.stringify(next) !== JSON.stringify(old)) {
     if (reballed(next) !== reballed(old) && !canChangeLegality(match, inningsIndex, eventIndex))
       return 'That over is finished: a ball in it can’t become a wide or no-ball, or stop being one. Change the runs instead.';
-    return 'That doesn’t fit with the balls after it (the chase would have ended sooner). Fix the later balls first.';
+    return 'That doesn’t fit with the balls after it (more balls than the overs allow, or the innings would have ended sooner). Fix the later balls first.';
   }
   if (!next) {
     if (fixed !== match) return fixed;
@@ -44,7 +44,7 @@ export function fixBall(match: Match, inningsIndex: number, eventIndex: number, 
   }
   if (bowler && bowler !== currentBowler(fixed, inningsIndex, eventIndex)) {
     const changed = setBowlerFrom(fixed, inningsIndex, eventIndex, bowler);
-    if (changed === fixed) return `${playerName(match, bowler)} bowled the over before or after this one, so can’t bowl here.`;
+    if (changed === fixed) return `${playerName(match, bowler)} can’t be put on for this ball.`;
     fixed = changed;
   }
   return fixed;
@@ -77,8 +77,10 @@ export function BallEditSheet({
   match: Match;
   s: InningsState;
   onClose: () => void;
-  onSave: (next: BallEvent | null, bowler: string | null) => void;
+  /** Returns why the fix can't be made, shown in the sheet, or nothing when it was made. */
+  onSave: (next: BallEvent | null, bowler: string | null) => string | void;
 }) {
+  const [error, setError] = useState<string | null>(null);
   const [kind, setKind] = useState<'none' | Extra>('none');
   const [runs, setRuns] = useState(0);
   const [how, setHow] = useState<WicketKind>('bowled');
@@ -89,6 +91,7 @@ export function BallEditSheet({
     setKind(event.extra ?? 'none');
     setRuns(event.runs);
     setBowler(ball?.bowler ?? null);
+    setError(null);
     if (event.wicket) {
       setHow(event.wicket.kind);
       setFielder(event.wicket.fielder);
@@ -102,8 +105,9 @@ export function BallEditSheet({
   const o = s.overs.findIndex((ov) => ov.some((b) => b.event === ball.event));
   const position = o === -1 ? 0 : s.overs[o].findIndex((b) => b.event === ball.event);
   const opensOver = position === 0;
-  const nextDoor = [...(s.overBowlers[o - 1] ?? []), ...(s.overBowlers[o + 1] ?? [])];
   const changed = bowler !== (ball.bowler ?? null);
+  const save = (next: BallEvent | null, who: string | null) => setError(onSave(next, who) || null);
+  const nextDoorOvers = [o - 1, o + 1].filter((i) => bowler && s.overBowlers[i]?.includes(bowler)).map((i) => i + 1);
 
   const bowlerPart = (
     <>
@@ -115,8 +119,7 @@ export function BallEditSheet({
       </Text>
       <View style={styles.wrap}>
         {s.bowlingTeam.players.map((p) => {
-          const blocked = nextDoor.includes(p.id) && p.id !== ball.bowler;
-          return <Chip key={p.id} label={p.name} selected={bowler === p.id} disabled={blocked} onPress={() => setBowler(p.id)} />;
+          return <Chip key={p.id} label={p.name} selected={bowler === p.id} onPress={() => setBowler(p.id)} />;
         })}
       </View>
       {changed && !opensOver && (
@@ -124,6 +127,13 @@ export function BallEditSheet({
           {playerName(match, bowler)} bowls ball {position + 1} onwards of over {o + 1}.
         </Text>
       )}
+      {changed && nextDoorOvers.length > 0 && (
+        <Text style={styles.note}>
+          {playerName(match, bowler)} also bowled over {nextDoorOvers.join(' and ')}. The laws don’t allow it, but it’s saved if
+          that’s what happened.
+        </Text>
+      )}
+      {error && <Text style={styles.error}>{error}</Text>}
     </>
   );
 
@@ -167,7 +177,7 @@ export function BallEditSheet({
               label="Save"
               icon="checkmark"
               onPress={() =>
-                onSave(
+                save(
                   {
                     ...event,
                     runs: how === 'runout' ? runs : 0,
@@ -193,10 +203,10 @@ export function BallEditSheet({
               disabled={byes && runs === 0}
               onPress={() => {
                 const same = (event.extra ?? 'none') === kind && event.runs === runs;
-                onSave(same ? event : { type: 'ball', runs, extra: kind === 'none' ? undefined : kind }, bowler);
+                save(same ? event : { type: 'ball', runs, extra: kind === 'none' ? undefined : kind }, bowler);
               }}
             />
-            <Button variant="ghost" label="Delete this ball" icon="trash-outline" onPress={() => onSave(null, null)} />
+            <Button variant="ghost" label="Delete this ball" icon="trash-outline" onPress={() => save(null, null)} />
           </>
         )}
       </ScrollView>
@@ -210,4 +220,5 @@ const styles = StyleSheet.create({
   nowText: { flex: 1, color: colors.text, fontSize: 16, fontFamily: font.bold },
   note: { color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 19 },
   label: { ...type.label, color: colors.muted, marginTop: space.xs },
+  error: { color: colors.danger, fontSize: 13, fontFamily: font.semibold, lineHeight: 19 },
 });

@@ -312,10 +312,7 @@ export default function Scorecard() {
         onSave={(next, bowler) => {
           if (fixing?.event === undefined) return;
           const fixed = fixBall(match, Number(shown), fixing.event, next, bowler);
-          if (typeof fixed === 'string') {
-            toast.show(fixed, 'error');
-            return;
-          }
+          if (typeof fixed === 'string') return fixed;
           saveMatch(fixed);
           setFixing(null);
           const now = matchState(fixed).result;

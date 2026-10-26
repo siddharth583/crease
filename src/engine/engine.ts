@@ -605,7 +605,8 @@ export function replaceBall(match: Match, inningsIndex: number, eventIndex: numb
   const before = legalBallsTo(match, inningsIndex, eventIndex);
   const after = ball ? legalBallsTo(next, inningsIndex, eventIndex) : legalBallsTo(match, inningsIndex, eventIndex - 1);
   if (before !== after && !canChangeLegality(match, inningsIndex, eventIndex)) return match;
-  // And every later ball must still have been bowled while its innings was on (a chase can't pass its target early).
+  // And every later ball must still fall inside its innings' overs and wickets. A chase that now passes its target
+  // sooner keeps the balls it was scored with: the scorecard says what happened.
   return fitsTogether(next) ? next : match;
 }
 
@@ -620,30 +621,25 @@ function inPlayThroughout(match: Match, inningsIndex: number, target: number | n
   return true;
 }
 
-/** The whole match still holds together: each innings played only while it was on, a super over only after a tie. */
+/**
+ * The whole match still holds together: each innings' balls inside its overs and wickets, the chase after the first
+ * innings, a super over only after a tie. Targets aren't checked: a fix to the first innings doesn't undo the chase.
+ */
 function fitsTogether(match: Match): boolean {
-  const first = inningsState(match, 0, null);
-  const target = chaseTarget(match, first.runs);
   if (!inPlayThroughout(match, 0, null)) return false;
-  if (match.innings[1].events.length && (first.status !== 'done' || !inPlayThroughout(match, 1, target))) return false;
+  if (match.innings[1].events.length && (inningsState(match, 0, null).status !== 'done' || !inPlayThroughout(match, 1, null))) return false;
   if (match.innings.slice(2).some((inn) => inn.events.length)) {
     if (matchState({ ...match, innings: match.innings.slice(0, 2) }).result !== 'Match tied') return false;
-    const so1 = inningsState(match, 2, null);
     if (!inPlayThroughout(match, 2, null)) return false;
-    if (match.innings[3].events.length && (so1.status !== 'done' || !inPlayThroughout(match, 3, so1.runs + 1))) return false;
+    if (match.innings[3].events.length && (inningsState(match, 2, null).status !== 'done' || !inPlayThroughout(match, 3, null))) return false;
   }
   return true;
-}
-
-/** Overs bowled straight after one another by the same bowler (any part of each). */
-function backToBack(s: InningsState): number {
-  return s.overBowlers.filter((o, i) => i > 0 && o.some((b) => s.overBowlers[i - 1].includes(b))).length;
 }
 
 /**
  * Who bowled from one delivery on, up to the next change of bowler. At the first ball of an over that is the over's
  * bowler; later in an over it's a new bowler taking over (the one bowling it couldn't finish). Picking the bowler
- * who was already on takes a change away. Refused when it would have someone bowl two overs in a row.
+ * who was already on takes a change away. A fix says what happened, so it may leave someone bowling two overs in a row.
  */
 export function setBowlerFrom(match: Match, inningsIndex: number, eventIndex: number, bowlerId: string): Match {
   const inn = match.innings[inningsIndex];
@@ -673,9 +669,7 @@ export function setBowlerFrom(match: Match, inningsIndex: number, eventIndex: nu
     if (placed.has(k)) on = null;
     return true;
   });
-  const next: Match = { ...match, innings: match.innings.map((x, i) => (i === inningsIndex ? { ...x, events: tidy } : x)) };
-  if (backToBack(inningsState(next, inningsIndex, null)) > backToBack(inningsState(match, inningsIndex, null))) return match;
-  return next;
+  return { ...match, innings: match.innings.map((x, i) => (i === inningsIndex ? { ...x, events: tidy } : x)) };
 }
 
 /** Change the overs mid-match (rain, light). Never below what has already been bowled. */
