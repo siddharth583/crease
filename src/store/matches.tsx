@@ -25,12 +25,30 @@ const MatchesContext = createContext<Store | null>(null);
 
 export const newId = () => Math.random().toString(36).slice(2, 8) + Date.now().toString(36);
 
-async function load<T>(key: string, fallback: T): Promise<T> {
+/**
+ * Reads a saved value. `writable` says whether it's safe to save over it later: a value that can't be read is first
+ * copied aside (under `<key>.unreadable.<time>`) so saving again never loses it; when storage can't be reached at all,
+ * or the copy can't be made, nothing is saved over it this session.
+ */
+async function load<T>(key: string, fallback: T, valid: (v: unknown) => boolean): Promise<{ value: T; writable: boolean }> {
+  let raw: string | null;
   try {
-    const raw = await AsyncStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    raw = await AsyncStorage.getItem(key);
   } catch {
-    return fallback;
+    return { value: fallback, writable: false };
+  }
+  if (!raw) return { value: fallback, writable: true };
+  try {
+    const value = JSON.parse(raw);
+    if (valid(value)) return { value: value as T, writable: true };
+  } catch {
+    // Falls through to keeping a copy.
+  }
+  try {
+    await AsyncStorage.setItem(`${key}.unreadable.${Date.now()}`, raw);
+    return { value: fallback, writable: true };
+  } catch {
+    return { value: fallback, writable: false };
   }
 }
 
@@ -48,10 +66,20 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [savedTeams, setSavedTeams] = useState<Team[]>([]);
   const latest = useRef(matches);
+  // Whether each saved list may be saved over: not when it couldn't be read and couldn't be kept aside.
+  const writable = useRef({ matches: false, teams: false });
   latest.current = matches;
 
   useEffect(() => {
-    Promise.all([load<Match[]>(MATCHES_KEY, []), load<Team[]>(TEAMS_KEY, []), load<number>(TEAMS_REVISION_KEY, 1)]).then(([m, t, revision]) => {
+    Promise.all([
+      load<Match[]>(MATCHES_KEY, [], Array.isArray),
+      load<Team[]>(TEAMS_KEY, [], Array.isArray),
+      load<number>(TEAMS_REVISION_KEY, 1, (v) => typeof v === 'number'),
+    ]).then(([loadedMatches, loadedTeams, loadedRevision]) => {
+      writable.current = { matches: loadedMatches.writable, teams: loadedTeams.writable };
+      const m = loadedMatches.value;
+      const t = loadedTeams.value;
+      const revision = loadedRevision.value;
       setMatches(m);
       // A phone with no saved teams (a new phone, or a new web address) starts with the club's two usual sides; one
       // that has them gets the new line-ups of those two once, when the sides change. Other saved teams stay.
@@ -64,14 +92,15 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
     AsyncStorage.multiRemove(OLD_KEYS).catch(() => {});
   }, []);
 
-  const persist = (key: string, value: unknown) => {
-    if (ready) AsyncStorage.setItem(key, JSON.stringify(value)).catch(() => {});
+  const persist = (key: string, value: unknown, ok: boolean) => {
+    if (ready && ok) AsyncStorage.setItem(key, JSON.stringify(value)).catch(() => {});
   };
-  useEffect(() => persist(MATCHES_KEY, matches), [ready, matches]);
-  useEffect(() => persist(TEAMS_KEY, savedTeams), [ready, savedTeams]);
+  useEffect(() => persist(MATCHES_KEY, matches, writable.current.matches), [ready, matches]);
+  useEffect(() => persist(TEAMS_KEY, savedTeams, writable.current.teams), [ready, savedTeams]);
 
   const saveMatch = useCallback((match: Match) => {
-    setMatches((all) => [match, ...all.filter((m) => m.id !== match.id)].sort(byNewest));
+    const saved = { ...match, updatedAt: Date.now() };
+    setMatches((all) => [saved, ...all.filter((m) => m.id !== match.id)].sort(byNewest));
   }, []);
 
   const deleteMatch = useCallback((id: string) => {
@@ -82,15 +111,14 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
     setSavedTeams((all) => mergeTeams(all, teams));
   }, []);
 
-  const importMatches = useCallback(
-    (incoming: Match[], teams: Team[]) => {
-      const result = mergeMatches(latest.current, incoming);
-      if (result.changed.length) setMatches(result.matches);
-      if (teams.length) rememberTeams(teams);
-      return { added: result.added, updated: result.updated, unchanged: result.unchanged };
-    },
-    [rememberTeams],
-  );
+  const importMatches = useCallback((incoming: Match[], teams: Team[]) => {
+    const result = mergeMatches(latest.current, incoming);
+    // Merged against whatever is there when it lands, so two imports in a row both count.
+    if (result.changed.length) setMatches((all) => mergeMatches(all, incoming).matches);
+    // A file's sides only join the saved teams under new names: your own line-ups (captain, keeper) stay as they are.
+    if (teams.length) setSavedTeams((all) => [...all, ...teams.filter((t) => !all.some((x) => teamName(x) === teamName(t)))].slice(0, 50));
+    return { added: result.added, updated: result.updated, unchanged: result.unchanged };
+  }, []);
 
   const value = useMemo<Store>(
     () => ({ ready, matches, savedTeams, saveMatch, deleteMatch, rememberTeams, importMatches }),

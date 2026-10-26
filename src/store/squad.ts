@@ -14,9 +14,13 @@ type Saved = { squad: SquadPlayer[]; auctions: Auction[]; revision?: number };
 const KEY = 'crease.squad.v1';
 const fileFor = () => new File(Paths.document, 'crease-squad.json');
 
+/** False when the saved squad couldn't be read or kept aside: nothing is saved over it this session. */
+let writable = true;
+
 function read(): Saved {
+  let raw: string | null = null;
   try {
-    const raw =
+    raw =
       Platform.OS === 'web'
         ? typeof localStorage !== 'undefined'
           ? localStorage.getItem(KEY)
@@ -34,11 +38,25 @@ function read(): Saved {
     }
     return { squad, auctions: saved.auctions ?? [], revision: TEAMS_REVISION };
   } catch {
-    return { squad: DEFAULT_SQUAD, auctions: [] };
+    // An unreadable squad is kept aside before the defaults are ever saved over it.
+    try {
+      if (raw !== null) {
+        if (Platform.OS === 'web') localStorage.setItem(`${KEY}.unreadable.${Date.now()}`, raw);
+        else {
+          const spare = new File(Paths.document, `crease-squad.unreadable.${Date.now()}.json`);
+          spare.create();
+          spare.writeSync(raw);
+        }
+      }
+    } catch {
+      writable = false;
+    }
+    return { squad: DEFAULT_SQUAD, auctions: [], revision: TEAMS_REVISION };
   }
 }
 
 function write(s: Saved) {
+  if (!writable) return;
   try {
     const raw = JSON.stringify(s);
     if (Platform.OS === 'web') localStorage.setItem(KEY, raw);

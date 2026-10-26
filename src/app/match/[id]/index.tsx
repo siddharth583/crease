@@ -246,6 +246,7 @@ function MatchMenu({
   onBowlerChange,
   inningsLabel,
   dlsG,
+  superOver,
 }: {
   visible: boolean;
   match: Match;
@@ -264,6 +265,8 @@ function MatchMenu({
   inningsLabel: string;
   /** Average first-innings score at this length, for DLS. */
   dlsG?: number;
+  /** In a super over the overs and target are fixed: those parts of the menu go. */
+  superOver: boolean;
 }) {
   const [overs, setOversDraft] = useState(match.rules.overs);
   const [target, setTargetDraft] = useState(0);
@@ -310,7 +313,9 @@ function MatchMenu({
             </Card>
           </>
         )}
-        <Text style={styles.sheetLabel}>Rain or bad light</Text>
+        {!superOver && (
+          <>
+            <Text style={styles.sheetLabel}>Rain or bad light</Text>
         <Card style={{ paddingVertical: space.sm }}>
           <Stepper label="Overs per innings" hint={`Started at ${original}`} value={overs} min={1} max={50} onChange={setOversDraft} />
         </Card>
@@ -347,6 +352,9 @@ function MatchMenu({
               onPress={() => onTarget(target)}
             />
           </Card>
+        )}
+
+          </>
         )}
 
         <Text style={styles.sheetLabel}>Late arrival</Text>
@@ -1136,14 +1144,20 @@ export default function LiveMatch() {
         s={s}
         firstInningsRuns={firstDone && !superOver ? state.innings[0].runs : null}
         inningsLabel={inningsLabel}
+        superOver={superOver}
         onClose={() => setMenu(false)}
         dlsG={dlsG}
         onOvers={(o) => {
           const next = setOvers(match, o, dlsG);
+          if (next === match) return;
           saveMatch(next);
           const st = matchState(next);
+          // The overs actually set: never fewer than have been bowled.
+          const now = next.rules.overs;
+          const set = now === o ? '' : ` (${plural(Math.ceil(state.innings[index].legalBalls / 6), 'over')} already bowled)`;
+          const how = chaseTargetInfo(next, st.innings[0].runs).method === 'dls' ? 'DLS target' : 'Target';
           toast.show(
-            st.innings[0].status === 'done' && !superOver ? `Now ${plural(o, 'over')} · DLS target ${st.innings[1].target}` : `Now ${plural(o, 'over')} an innings`,
+            st.innings[0].status === 'done' ? `Now ${plural(now, 'over')}${set} · ${how} ${st.innings[1].target}` : `Now ${plural(now, 'over')} an innings${set}`,
             'success',
           );
         }}

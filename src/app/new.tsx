@@ -223,11 +223,10 @@ export default function NewMatch() {
       (source?.rules.playersPerSide ?? last?.rules.playersPerSide ?? 8),
   );
   const [teams, setTeams] = useState<[Draft, Draft]>(() =>
+    // An auction's sides keep their own sizes: an odd squad leaves one side a player short, not padded with a blank
+    // who'd count as a batter.
     auctionDrafts
-      ? [
-          { ...auctionDrafts[0], players: resize(auctionDrafts[0].players, size) },
-          { ...auctionDrafts[1], players: resize(auctionDrafts[1].players, size) },
-        ]
+      ? [auctionDrafts[0], auctionDrafts[1]]
       : source
       ? [draftFrom(source.teams[0], source), draftFrom(source.teams[1], source)]
       : [

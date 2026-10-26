@@ -66,7 +66,8 @@ export const playerKey = (team: Team, name: string) =>
 /** A common player (plays for both sides) is one person, whichever side they turned out for. */
 export const COMMON_TEAM = 'Both teams';
 export const keyFor = (team: Team, p: { name: string; common?: boolean }) =>
-  p.common ? `common|${norm(p.name)}` : playerKey(team, p.name);
+  // A regular is the same person whether they played for one side or as the common player.
+  p.common && !regulars.has(norm(p.name)) ? `common|${norm(p.name)}` : playerKey(team, p.name);
 
 export const battingAverage = (c: Career) => {
   const outs = c.batting.innings - c.batting.notOuts;
@@ -115,7 +116,8 @@ export function careerStats(matches: Match[]): Career[] {
           matchId: match.id,
           date: match.createdAt,
           opponent: opponent.name,
-          won: state.result ? state.winner === team.id : null,
+          // A tie is neither, and the common player played for both sides.
+          won: state.result && state.winner && !p.common ? state.winner === team.id : null,
         });
       }
     }
@@ -240,7 +242,8 @@ function impacts(match: Match): Impact[] {
       Object.assign(l, { wickets: bw.wickets, conceded: bw.runs, bowled: true });
     }
   }
-  return [...lines.values()];
+  // Blank names ("Player 3") could be anyone: they can't win an award.
+  return [...lines.values()].filter((l) => !isPlaceholder(l.name));
 }
 
 /** How far ahead a player on the losing side must be to take the award from the winners. */
@@ -263,7 +266,7 @@ export function momChoices(match: Match): (PlayerOfMatch & { score: number })[] 
   const played = impacts(match);
   const ids = new Set(played.map((i) => i.id));
   const rest = match.teams.flatMap((t) =>
-    t.players.filter((p) => !ids.has(p.id)).map((p) => ({ id: p.id, key: keyFor(t, p), name: p.name, team: p.common ? COMMON_TEAM : t.name, summary: 'did not bat or bowl', score: -Infinity })),
+    t.players.filter((p) => !ids.has(p.id) && !isPlaceholder(p.name)).map((p) => ({ id: p.id, key: keyFor(t, p), name: p.name, team: p.common ? COMMON_TEAM : t.name, summary: 'did not bat or bowl', score: -Infinity })),
   );
   return [...played.sort((a, b) => b.score - a.score).map((i) => ({ ...asAward(i), score: i.score })), ...rest];
 }
@@ -354,7 +357,9 @@ export function seriesState(seriesMatches: Match[]): SeriesState {
 
   const needed = Math.floor(info.of / 2) + 1;
   const leaderIdx = wins[0] > wins[1] ? 0 : wins[1] > wins[0] ? 1 : null;
-  const winner = leaderIdx !== null && wins[leaderIdx] >= needed ? teams[leaderIdx] : null;
+  // Won once the lead can't be caught in the matches left (ties use matches up without a winner).
+  const remaining = Math.max(0, info.of - played);
+  const winner = leaderIdx !== null && wins[leaderIdx] - wins[1 - leaderIdx] > remaining ? teams[leaderIdx] : null;
   const over = winner !== null || played >= info.of;
   const [hi, lo] = [Math.max(...wins), Math.min(...wins)];
   const status = winner

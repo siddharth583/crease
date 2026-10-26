@@ -742,6 +742,8 @@ export function setBowlerFrom(match: Match, inningsIndex: number, eventIndex: nu
 /** Change the overs mid-match (rain, light). Never below what has already been bowled. */
 export function setOvers(match: Match, overs: number, g?: number): Match {
   const state = matchState(match);
+  // A super over is one over whatever the match was: changing the match's overs then would reopen its innings.
+  if (state.current >= 2) return match;
   // Never below what the innings in play has already bowled; a finished first innings doesn't limit the chase.
   const bowled = Math.max(Math.ceil(state.innings[Math.min(state.current, 1)].legalBalls / 6), 1);
   const after = Math.max(overs, bowled);
@@ -755,6 +757,8 @@ export function setOvers(match: Match, overs: number, g?: number): Match {
     originalOvers: match.originalOvers ?? match.rules.overs,
     interruptions: cut ? [...(match.interruptions ?? []), cut] : match.interruptions,
     dlsG: match.dlsG ?? g,
+    // A target agreed by hand was for the old length: DLS sets the new one (it can be agreed again after).
+    revisedTarget: undefined,
     rules: { ...match.rules, overs: after },
   };
 }

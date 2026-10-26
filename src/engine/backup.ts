@@ -60,7 +60,8 @@ function looksLikeTeam(t: unknown): t is Team {
 function looksLikeMatch(m: unknown): m is Match {
   if (!isObject(m) || typeof m.id !== 'string' || typeof m.createdAt !== 'number') return false;
   if (!Array.isArray(m.teams) || m.teams.length !== 2 || !m.teams.every(looksLikeTeam)) return false;
-  if (!Array.isArray(m.innings) || m.innings.length !== 2) return false;
+  // Two innings, or four once a tie went to a super over.
+  if (!Array.isArray(m.innings) || (m.innings.length !== 2 && m.innings.length !== 4)) return false;
   if (!m.innings.every((i) => isObject(i) && Array.isArray(i.events))) return false;
   try {
     matchState(m as Match); // the real test: can it be scored?
@@ -90,10 +91,13 @@ export function parseBackup(text: string): { matches: Match[]; teams: Team[]; sk
 }
 
 const ballsIn = (m: Match) => m.innings.reduce((n, i) => n + i.events.length, 0);
+const newer = (a: Match, b: Match) =>
+  a.updatedAt !== undefined && b.updatedAt !== undefined ? a.updatedAt > b.updatedAt : ballsIn(a) > ballsIn(b) || (a.updatedAt ?? 0) > (b.updatedAt ?? 0);
 
 /**
- * Adds imported matches to what's on the phone. The same match (same id) is only replaced by a copy that has got
- * further, so importing an old file never rolls a match back, and importing the same file twice changes nothing.
+ * Adds imported matches to what's on the phone. The same match (same id) is only replaced by a newer copy: one saved
+ * later (a fix, a picked Man of the Match, a changed target all count), or for copies from before saves were dated,
+ * one that has got further. Importing an old file never rolls a match back, and importing a file twice changes nothing.
  */
 export function mergeMatches(existing: Match[], incoming: Match[]) {
   const byId = new Map(existing.map((m) => [m.id, m]));
@@ -105,7 +109,7 @@ export function mergeMatches(existing: Match[], incoming: Match[]) {
     const mine = byId.get(m.id);
     if (!mine) {
       added++;
-    } else if (ballsIn(m) > ballsIn(mine)) {
+    } else if (newer(m, mine)) {
       updated++;
     } else {
       unchanged++;

@@ -86,6 +86,8 @@ export type Match = {
   dlsG?: number;
   /** Man of the Match picked by hand (a player id); without it Crease picks. */
   mom?: string;
+  /** When this phone last saved it: an imported copy only replaces it if it's newer. */
+  updatedAt?: number;
 };
 
 import type { Interruption } from './dls.ts';
