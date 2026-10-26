@@ -12,7 +12,7 @@ test('the Copan Cup: six of seven played, level 3–3, decider to come', () => {
   assert.equal(s.name, 'Copan Cup');
   assert.deepEqual(s.wins, [3, 3]);
   assert.equal(s.next, 7);
-  assert.ok(['Nihal Walia', 'Siddharth Singh'].includes(s.best!.name));
+  assert.ok(['Nihal Walia', 'Siddharth Singh', 'Ashwani Singh'].includes(s.best!.name));
 });
 
 test('six finished matches, 10 overs, 8 a side, on Sundays', () => {
@@ -54,4 +54,9 @@ test('the order inside each team follows the squad notes', () => {
   const dismissals = (c: (typeof careers)[number]) => c.fielding.catches + c.fielding.runOuts + c.fielding.stumpings;
   assert.equal(top('Copan B', dismissals, 1)[0], 'Nihal Walia');
   assert.ok(season.matches.every((m) => playerOfTheMatch(m)));
+  // Nobody on a losing side did half as much again as the winners' best, so every award went to the winners.
+  for (const m of season.matches) {
+    const winner = m.teams.find((t) => t.id === matchState(m).winner)!;
+    assert.equal(playerOfTheMatch(m)!.team, winner.name, m.id);
+  }
 });

@@ -6,9 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OverEditSheet } from '../../../components/OverEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
-import { BallChip, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../../../components/ui.tsx';
+import { BallChip, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../../../components/ui.tsx';
 import { dismissal, fairBalls, matchState, oversText, playerName, replaceOver, type InningsState, type MatchState } from '../../../engine/engine.ts';
-import { isPlaceholder, keyFor, playerOfTheMatch } from '../../../engine/stats.ts';
+import { isPlaceholder, keyFor, momChoices, playerOfTheMatch } from '../../../engine/stats.ts';
 import type { BallEvent, Match, Team } from '../../../engine/types.ts';
 import { plural } from '../../../engine/text.ts';
 import { useMatch } from '../../../store/matches.tsx';
@@ -205,11 +205,53 @@ function OversEditor({ match, s, inningsIndex, onOpen }: { match: Match; s: Inni
   );
 }
 
+/** Pick the Man of the Match by hand, or leave it to Crease. Everyone who played, biggest impact first. */
+function MomSheet({ match, visible, onClose, onPick }: { match: Match; visible: boolean; onClose: () => void; onPick: (id: string | undefined) => void }) {
+  if (!visible) return null;
+  const auto = playerOfTheMatch({ ...match, mom: undefined });
+  const choices = momChoices(match);
+  return (
+    <Sheet visible onClose={onClose} title="Man of the Match">
+      <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ gap: space.sm, paddingBottom: space.md }}>
+        <PressableScale scaleTo={0.98} onPress={() => onPick(undefined)} style={[styles.momPick, !match.mom && styles.momPickOn]}>
+          <Ionicons name="sparkles" size={18} color={colors.accentInk} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.momPickName}>Let Crease pick</Text>
+            <Text style={styles.momLine} numberOfLines={1}>
+              {auto ? `${auto.name} · ${auto.team}` : 'Nobody yet'}
+            </Text>
+          </View>
+          {!match.mom && <Ionicons name="checkmark-circle" size={20} color={colors.accentInk} />}
+        </PressableScale>
+        <Text style={styles.momHint}>
+          Crease picks the biggest impact on the winning side: runs (more for scoring fast), 20 a wicket, 5 a maiden, 8 a
+          catch or run out, and runs saved or given away against the match’s scoring rate. Someone on the losing side gets
+          it only for half as much again.
+        </Text>
+        {choices.map((c) => (
+          <PressableScale key={c.id} scaleTo={0.98} onPress={() => onPick(c.id)} style={[styles.momPick, match.mom === c.id && styles.momPickOn]}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.momPickName} numberOfLines={1}>
+                {c.name}
+              </Text>
+              <Text style={styles.momLine} numberOfLines={1}>
+                {c.team} · {c.summary}
+              </Text>
+            </View>
+            {match.mom === c.id && <Ionicons name="checkmark-circle" size={20} color={colors.accentInk} />}
+          </PressableScale>
+        ))}
+      </ScrollView>
+    </Sheet>
+  );
+}
+
 export default function Scorecard() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { match, saveMatch } = useMatch(id);
   const [editMode, setEditMode] = useState(false);
   const [editingOver, setEditingOver] = useState<number | null>(null);
+  const [pickingMom, setPickingMom] = useState(false);
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<string | null>(null);
   const toast = useToast();
@@ -259,7 +301,7 @@ export default function Scorecard() {
               <Ionicons name="star" size={18} color={colors.gold} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.momLabel}>Man of the Match</Text>
+              <Text style={styles.momLabel}>Man of the Match{match.mom ? ' · picked by you' : ''}</Text>
               <Text style={styles.momName} numberOfLines={1}>
                 {mom.name}
               </Text>
@@ -267,7 +309,9 @@ export default function Scorecard() {
                 {mom.team} · {mom.summary}
               </Text>
             </View>
-            {!isPlaceholder(mom.name) && <Ionicons name="chevron-forward" size={18} color={colors.faint} />}
+            <PressableScale accessibilityLabel="Change the Man of the Match" onPress={() => setPickingMom(true)} style={styles.momChange}>
+              <Text style={styles.momChangeText}>Change</Text>
+            </PressableScale>
           </PressableScale>
         )}
         <Segmented
@@ -326,6 +370,16 @@ export default function Scorecard() {
           else toast.show(`Over ${editingOver + 1} saved`, 'success');
         }}
       />
+      <MomSheet
+        match={match}
+        visible={pickingMom}
+        onClose={() => setPickingMom(false)}
+        onPick={(id) => {
+          saveMatch({ ...match, mom: id });
+          setPickingMom(false);
+          toast.show(id ? `${playerName(match, id)} is Man of the Match` : 'Crease picks the Man of the Match', 'success');
+        }}
+      />
       {toast.element}
     </Screen>
   );
@@ -358,6 +412,21 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
     ...edge,
   },
+  momChange: { paddingHorizontal: space.md, height: 32, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.border },
+  momChangeText: { color: colors.text, fontSize: 12, fontFamily: font.bold },
+  momPick: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: colors.surfaceHi,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: space.md,
+  },
+  momPickOn: { borderColor: colors.accentInk },
+  momPickName: { fontFamily: font.bold, fontSize: 15, color: colors.text },
+  momHint: { color: colors.muted, fontSize: 12, fontFamily: font.medium, lineHeight: 18 },
   momIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldDim },
   momLabel: { ...type.label, fontSize: 9, color: colors.muted },
   momName: { fontFamily: font.poster, fontSize: 20, color: colors.text },

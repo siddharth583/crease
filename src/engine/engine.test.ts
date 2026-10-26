@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addEvent, addPlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, replaceOver, setOvers, startSuperOver, undo, type OverBall } from './engine.ts';
-import { playerOfTheMatch } from './stats.ts';
+import { momChoices, playerOfTheMatch } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Rules, Team } from './types.ts';
 
 const team = (id: string, n: number): Team => ({
@@ -273,6 +273,35 @@ test('player of the match', () => {
   const potm = playerOfTheMatch(m)!;
   assert.equal(potm.name, 'a3');
   assert.equal(potm.summary, '3/0');
+});
+
+test('man of the match goes to the winners unless a loser did half as much again, and can be picked by hand', () => {
+  // A: 12 off the first over, then 12 more. B chase 25 and fall short, but b1 hits 20.
+  let m = start(setup({ overs: 2 }));
+  m = play(m, ball(2), ball(2), ball(2), ball(2), ball(2), ball(2), { type: 'bowler', bowler: 'b2' }, ball(2), ball(2), ball(2), ball(2), ball(2), ball(2));
+  m = start(m, 'b1', 'b2', 'a1');
+  m = play(m, ball(4), ball(4), ball(4), ball(4), ball(4), ball(0), { type: 'bowler', bowler: 'a2' }, ball(1), ball(0), ball(0), ball(0), ball(0), ball(0));
+  assert.ok(matchState(m).result?.startsWith('A won'));
+  // The losers' best takes it only with half as much again as the winners' best.
+  const choices = momChoices(m);
+  const bestA = choices.find((c) => c.team === 'A')!;
+  const bestB = choices.find((c) => c.team === 'B')!;
+  const pick = playerOfTheMatch(m)!;
+  assert.equal(pick.team, bestB.score >= bestA.score * 1.5 ? 'B' : 'A');
+  // Picked by hand, the choice stands, even for someone who did little.
+  const chosen = playerOfTheMatch({ ...m, mom: 'a4' })!;
+  assert.equal(chosen.name, 'a4');
+  assert.equal(chosen.summary, 'did not bat or bowl');
+});
+
+test('a tight spell earns its bowler more than an expensive one', () => {
+  let m = start(setup({ overs: 2 }));
+  m = play(m, ball(0), ball(1), ball(0), ball(1), ball(0), ball(0), { type: 'bowler', bowler: 'b2' }, ball(6), ball(6), ball(6), ball(4), ball(4), ball(4));
+  m = start(m, 'b1', 'b2', 'a1');
+  m = play(m, ball(1), ball(1), ball(1), ball(1), ball(1), ball(1), { type: 'bowler', bowler: 'a2' }, ball(1), ball(1), ball(1), ball(1), ball(1), ball(1));
+  const score = (name: string) => momChoices(m).find((c) => c.name === name)!.score;
+  assert.ok(score('b1') > 0, 'two runs in a 3-a-ball match');
+  assert.ok(score('b2') < 0, '30 in an over');
 });
 
 test('two bowlers may bowl an extra over, the rest stop at the limit', () => {

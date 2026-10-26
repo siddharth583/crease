@@ -171,6 +171,8 @@ type Impact = {
   key: string;
   name: string;
   team: string;
+  /** The side they played for in this match. */
+  teamId: string;
   score: number;
   runs: number;
   balls: number;
@@ -184,7 +186,8 @@ type Impact = {
 
 /**
  * How much each player did in one finished match: runs (with a nudge for scoring fast), 20 a wicket, 5 a maiden,
- * 8 a catch, run out or stumping, and a tenth more for the winning side.
+ * 8 a catch, run out or stumping, and for a bowler of an over or more, the runs they gave away fewer (or more) than
+ * the match's own scoring rate would have.
  */
 function impacts(match: Match): Impact[] {
   const state = matchState(match);
@@ -196,12 +199,15 @@ function impacts(match: Match): Impact[] {
       const team = match.teams.find((t) => t.players.some((p) => p.id === id))!;
       const name = team.players.find((p) => p.id === id)!.name;
       const p = team.players.find((x) => x.id === id)!;
-      l = { id, key: keyFor(team, p), name, team: p.common ? COMMON_TEAM : team.name, score: 0, runs: 0, balls: 0, notOut: false, batted: false, wickets: 0, conceded: 0, bowled: false, field: 0 };
+      l = { id, key: keyFor(team, p), name, team: p.common ? COMMON_TEAM : team.name, teamId: team.id, score: 0, runs: 0, balls: 0, notOut: false, batted: false, wickets: 0, conceded: 0, bowled: false, field: 0 };
       lines.set(id, l);
     }
     return l;
   };
-  for (const inn of state.innings.slice(0, 2)) {
+  const main = state.innings.slice(0, 2);
+  const balls = main.reduce((n, inn) => n + inn.legalBalls, 0);
+  const perBall = balls ? main.reduce((n, inn) => n + inn.runs, 0) / balls : 0;
+  for (const inn of main) {
     for (const b of inn.batters) {
       const l = line(b.id);
       const sr = b.balls ? (b.runs * 100) / b.balls : 0;
@@ -217,24 +223,57 @@ function impacts(match: Match): Impact[] {
       if (!bw.balls && !bw.runs) continue;
       const l = line(bw.id);
       l.score += bw.wickets * 20 + bw.maidens * 5;
+      // A tight spell saves runs and an expensive one gives them away, against how fast this match was scored.
+      if (bw.balls >= 6) l.score += perBall * bw.balls - bw.runs;
       Object.assign(l, { wickets: bw.wickets, conceded: bw.runs, bowled: true });
     }
   }
-  const winner = match.teams.find((t) => t.id === state.winner);
-  for (const l of lines.values()) if (winner && l.team === winner.name) l.score *= 1.1;
   return [...lines.values()];
 }
 
-/** Man of the Match: the biggest impact in a finished match. */
-export function playerOfTheMatch(match: Match): PlayerOfMatch | null {
-  const best = impacts(match).sort((a, b) => b.score - a.score)[0];
-  if (!best || best.score <= 0) return null;
+/** How far ahead a player on the losing side must be to take the award from the winners. */
+export const LOSER_MARGIN = 1.5;
+
+/** One player's match in a line: "34* (20) · 2/18 · 1 in the field". */
+function summaryOf(best: Impact): string {
   const parts = [
     best.batted ? `${best.runs}${best.notOut ? '*' : ''} (${best.balls})` : '',
     best.bowled ? `${best.wickets}/${best.conceded}` : '',
     best.field ? `${best.field} in the field` : '',
   ].filter(Boolean);
-  return { id: best.id, key: best.key, name: best.name, team: best.team, summary: parts.join('  ·  ') };
+  return parts.join('  ·  ');
+}
+
+const asAward = (i: Impact): PlayerOfMatch => ({ id: i.id, key: i.key, name: i.name, team: i.team, summary: summaryOf(i) });
+
+/** Everyone who played a finished match, biggest impact first, with their line: the choices for Man of the Match. */
+export function momChoices(match: Match): (PlayerOfMatch & { score: number })[] {
+  const played = impacts(match);
+  const ids = new Set(played.map((i) => i.id));
+  const rest = match.teams.flatMap((t) =>
+    t.players.filter((p) => !ids.has(p.id)).map((p) => ({ id: p.id, key: keyFor(t, p), name: p.name, team: p.common ? COMMON_TEAM : t.name, summary: 'did not bat or bowl', score: -Infinity })),
+  );
+  return [...played.sort((a, b) => b.score - a.score).map((i) => ({ ...asAward(i), score: i.score })), ...rest];
+}
+
+/**
+ * Man of the Match. One picked by hand stands; otherwise the biggest impact on the winning side, unless someone on
+ * the losing side did clearly more (half as much again). A tie goes to the biggest impact of all.
+ */
+export function playerOfTheMatch(match: Match): PlayerOfMatch | null {
+  const all = impacts(match).sort((a, b) => b.score - a.score);
+  if (!all.length) return null;
+  if (match.mom) {
+    const chosen = momChoices(match).find((c) => c.id === match.mom);
+    if (chosen) return { id: chosen.id, key: chosen.key, name: chosen.name, team: chosen.team, summary: chosen.summary };
+  }
+  const winner = matchState(match).winner;
+  const winners = all.find((i) => i.teamId === winner);
+  const losers = all.find((i) => i.teamId !== winner);
+  let best = all[0];
+  if (winner && winners && winners.score > 0) best = losers && losers.score >= winners.score * LOSER_MARGIN ? losers : winners;
+  if (best.score <= 0) return null;
+  return asAward(best);
 }
 
 // ─── Series ──────────────────────────────────────────────────────────────────

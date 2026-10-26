@@ -83,6 +83,8 @@ export type Match = {
   interruptions?: Interruption[];
   /** Average full first-innings score at this length, for DLS when the chase gets more resources. */
   dlsG?: number;
+  /** Man of the Match picked by hand (a player id); without it Crease picks. */
+  mom?: string;
 };
 
 import type { Interruption } from './dls.ts';
