@@ -79,6 +79,9 @@ export const hero = {
   muted: NIGHT.muted,
   faint: NIGHT.faint,
   accent: NIGHT.accent,
+  cyan: NIGHT.cyan,
+  gold: NIGHT.gold,
+  violet: NIGHT.violet,
   line: NIGHT.borderHi,
   ink: (alpha: number) => `rgba(255,255,255,${alpha})`,
 };

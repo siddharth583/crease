@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
-import { Animated, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap } from '../components/ui.tsx';
+import { TossScene, type TossResult } from '../components/TossScene.tsx';
 import { auctionState, rosterPlayer, type Auction } from '../engine/auction.ts';
 import { newMatch } from '../engine/engine.ts';
 import { seriesState } from '../engine/stats.ts';
@@ -50,44 +51,6 @@ function draftsFromAuction(a: Auction): [Draft, Draft] {
     const keeper = players.findIndex((p) => p.keeper);
     return { name: side.name, players: players.map((p) => p.name), captain: 0, keeper: keeper >= 0 ? keeper : undefined };
   }) as [Draft, Draft];
-}
-
-/** A coin that really spins, then says who won the toss. */
-function CoinToss({ names, onResult }: { names: [string, string]; onResult: (winner: '0' | '1') => void }) {
-  const spin = useRef(new Animated.Value(0)).current;
-  const [face, setFace] = useState<string | null>(null);
-  const [flipping, setFlipping] = useState(false);
-  const flip = () => {
-    if (flipping) return;
-    const winner = Math.random() < 0.5 ? '0' : '1';
-    setFlipping(true);
-    setFace(null);
-    spin.setValue(0);
-    tap('medium');
-    Animated.timing(spin, { toValue: 1, duration: 1100, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }).start(() => {
-      setFlipping(false);
-      setFace(winner === '0' ? 'Heads' : 'Tails');
-      tap('success');
-      onResult(winner);
-    });
-  };
-  const rotateY = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '1800deg'] });
-  const lift = spin.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -36, 0] });
-  return (
-    <View style={styles.toss}>
-      <PressableScale accessibilityLabel="Flip the coin" scaleTo={0.92} onPress={flip} haptic={null}>
-        <Animated.View style={[styles.coin, { transform: [{ perspective: 600 }, { translateY: lift }, { rotateY }] }]}>
-          <Text style={styles.coinText}>{face ? face[0] : '?'}</Text>
-        </Animated.View>
-      </PressableScale>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.tossTitle}>{flipping ? 'In the air…' : face ? `${face}!` : 'Flip for it'}</Text>
-        <Text style={styles.tossBody}>
-          {face ? 'Winner picked below. Now choose bat or bowl.' : `Tap the coin. Heads ${names[0]}, tails ${names[1]}.`}
-        </Text>
-      </View>
-    </View>
-  );
 }
 
 function TeamEditor({
@@ -242,8 +205,8 @@ export default function NewMatch() {
   const [seriesOf, setSeriesOf] = useState<'3' | '5' | '7'>('3');
   const [seriesName, setSeriesName] = useState('');
   const [common, setCommon] = useState(source ? source.teams[0].players.find((p) => p.common)?.name ?? '' : '');
-  const [tossWinner, setTossWinner] = useState<'0' | '1'>('0');
-  const [choice, setChoice] = useState<'bat' | 'bowl'>('bat');
+  // The toss happens out in the middle once the sides are set: Start match opens it.
+  const [tossing, setTossing] = useState(false);
 
   const names = teams.map((t, i) => t.name.trim() || (i === 0 ? 'Team A' : 'Team B'));
   const setSizeAll = (n: number) => {
@@ -264,7 +227,7 @@ export default function NewMatch() {
     });
   };
 
-  const start = () => {
+  const start = ({ winner: tossWinner, choice }: TossResult) => {
     const built = teams.map(
       (t, i): Team => ({
         id: newId(),
@@ -332,10 +295,10 @@ export default function NewMatch() {
               </Text>
               <Text style={styles.subtitle}>
                 {fromAuction
-                  ? 'The teams from the auction, captains and keepers set. Your rules, then the toss.'
+                  ? 'The teams from the auction, captains and keepers set. Then the toss.'
                   : source
-                    ? 'Same teams, same rules. Just do the toss.'
-                    : 'Two teams, your rules, then the toss.'}
+                    ? 'Same teams. Straight to the toss.'
+                    : 'Two teams, then out to the middle for the toss.'}
               </Text>
               <View style={{ marginTop: space.lg, gap: space.md }}>
                 <Segmented
@@ -427,56 +390,33 @@ export default function NewMatch() {
             })()}
           </Card>
 
-          <SectionLabel>Toss</SectionLabel>
-          <Card style={{ gap: space.md }}>
-            <CoinToss names={[names[0], names[1]]} onResult={setTossWinner} />
-            <Text style={styles.question}>Who won the toss?</Text>
-            <Segmented
-              value={tossWinner}
-              onChange={setTossWinner}
-              options={[
-                { value: '0', label: names[0] },
-                { value: '1', label: names[1] },
-              ]}
-            />
-            <Text style={styles.question}>They chose to</Text>
-            <Segmented
-              value={choice}
-              onChange={setChoice}
-              options={[
-                { value: 'bat', label: 'Bat' },
-                { value: 'bowl', label: 'Bowl' },
-              ]}
-            />
-          </Card>
         </ScrollView>
       </KeyboardAvoidingView>
       <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
         <Button
           label={ongoing?.next ? `Start match ${ongoing.next}` : kind === 'series' ? 'Start the series' : 'Start match'}
           icon="play"
-          onPress={start}
+          onPress={() => setTossing(true)}
         />
       </View>
+      <TossScene
+        visible={tossing}
+        names={[names[0], names[1]]}
+        captains={[0, 1].map((i) => {
+          const c = teams[i].captain;
+          return c !== undefined && teams[i].players[c]?.trim() ? teams[i].players[c].trim() : null;
+        }) as [string | null, string | null]}
+        onClose={() => setTossing(false)}
+        onDone={(result) => {
+          setTossing(false);
+          start(result);
+        }}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  toss: { flexDirection: 'row', alignItems: 'center', gap: space.lg, paddingVertical: space.sm },
-  coin: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: colors.gold,
-    borderWidth: 4,
-    borderColor: 'rgba(0,0,0,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coinText: { fontFamily: font.posterBlack, fontSize: 31, color: colors.onAccent },
-  tossTitle: { fontFamily: font.posterBlack, fontSize: 25, lineHeight: 28, color: colors.text },
-  tossBody: { color: colors.muted, fontSize: 13, fontFamily: font.medium, marginTop: 2 },
   pasteBox: { gap: space.sm, marginTop: space.sm },
   mark: {
     width: 34,
