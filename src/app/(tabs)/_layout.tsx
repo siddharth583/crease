@@ -2,10 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReducedMotion } from '../../components/motion.tsx';
 import { PressableScale, type IconName } from '../../components/ui.tsx';
 import { colors, font, radius, space, edge } from '../../theme.ts';
+
+const PAD = 6;
+const GAP = 4;
 
 const TABS: Record<string, { label: string; icon: IconName; iconOn: IconName }> = {
   index: { label: 'Matches', icon: 'albums-outline', iconOn: 'albums' },
@@ -15,10 +20,24 @@ const TABS: Record<string, { label: string; icon: IconName; iconOn: IconName }> 
 /** A floating capsule of tabs, with the one thing you come here to do (start a match) beside it in volt. */
 function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const still = useReducedMotion();
+  const tabs = state.routes.filter((r) => TABS[r.name]);
+  // The highlight glides to the chosen tab rather than jumping.
+  const [width, setWidth] = useState(0);
+  // The capsule has a 1px border; its tabs sit inside the padding.
+  const slot = width ? (width - 2 - PAD * 2 - GAP * (tabs.length - 1)) / tabs.length : 0;
+  const x = useRef(new Animated.Value(0)).current;
+  const at = Math.max(0, tabs.findIndex((r) => r.key === state.routes[state.index]?.key));
+  useEffect(() => {
+    const to = at * (slot + GAP);
+    if (still || !slot) x.setValue(to);
+    else Animated.spring(x, { toValue: to, useNativeDriver: Platform.OS !== 'web', speed: 16, bounciness: 7 }).start();
+  }, [at, slot, still, x]);
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, space.md) }]}>
       <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, `${colors.bg}EB`, colors.bg]} style={styles.fade} />
-      <View style={styles.capsule}>
+      <View style={styles.capsule} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        {slot > 0 && <Animated.View pointerEvents="none" style={[styles.indicator, { width: slot, transform: [{ translateX: x }] }]} />}
         {state.routes.map((route, i) => {
           const tab = TABS[route.name];
           if (!tab) return null;
@@ -32,7 +51,7 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
               scaleTo={0.94}
               onPress={() => !on && navigateToTab(route.key)}
               wrapStyle={{ flex: 1 }}
-              style={[styles.tab, on && styles.tabOn]}
+              style={styles.tab}
             >
               <Ionicons name={on ? tab.iconOn : tab.icon} size={19} color={on ? colors.text : colors.faint} />
               <Text style={[styles.tabLabel, on && styles.tabLabelOn]}>{tab.label}</Text>
@@ -101,7 +120,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  tabOn: { backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.borderHi },
+  indicator: {
+    position: 'absolute',
+    left: PAD,
+    top: PAD,
+    bottom: PAD,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceHi,
+    borderWidth: 1,
+    borderColor: colors.borderHi,
+  },
   tabLabel: { color: colors.faint, fontFamily: font.semibold, fontSize: 14 },
   tabLabelOn: { color: colors.text },
   fab: {

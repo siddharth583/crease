@@ -29,7 +29,6 @@ import {
   IconButton,
   MomentFlash,
   PitchStripes,
-  PopText,
   PressableScale,
   Screen,
   Segmented,
@@ -58,6 +57,7 @@ import {
   type InningsState,
 } from '../../../engine/engine.ts';
 import { plural } from '../../../engine/text.ts';
+import { Confetti, GrowBar, PopIn, Pulse, Sheen, Ticker } from '../../../components/motion.tsx';
 import { isPlaceholder, playerOfTheMatch, seriesState } from '../../../engine/stats.ts';
 import type { BallEvent, Extra, InningsEvent, Match, WicketKind } from '../../../engine/types.ts';
 import { newId, useMatch, useMatches } from '../../../store/matches.tsx';
@@ -79,10 +79,11 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
   return (
     <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
       <PitchStripes opacity={0.03} tint="255,255,255" />
+      <Sheen every={7000} strength={0.07} />
 
       <View style={styles.heroTop}>
         <View style={styles.livePill}>
-          <View style={styles.liveDot} />
+          <Pulse color={hero.accent} size={6} />
           <Text style={styles.liveText}>{index >= 2 ? 'Super over' : index === 0 ? '1st innings' : '2nd innings'}</Text>
         </View>
         <Text style={styles.heroOvers}>
@@ -96,7 +97,7 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
       </Text>
       <View style={styles.heroScoreRow}>
         <View style={styles.scoreWrap}>
-          <PopText value={s.runs} style={styles.heroScore} />
+          <Ticker value={s.runs} style={styles.heroScore} lineHeight={114} />
           <Text style={styles.heroWickets}>/{s.wickets}</Text>
         </View>
         <View style={styles.heroStats}>
@@ -111,7 +112,7 @@ function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index:
 
       {/* One notch per over, filling as the innings goes. */}
       <View style={styles.progress} accessibilityLabel={`${oversText(s.legalBalls)} of ${match.rules.overs} overs`}>
-        <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+        <GrowBar share={progress} trackStyle={StyleSheet.absoluteFill} style={styles.progressFill} />
         {match.rules.overs <= 25 &&
           Array.from({ length: match.rules.overs - 1 }, (_, i) => (
             <View key={i} style={[styles.notch, { left: `${((i + 1) / match.rules.overs) * 100}%` }]} />
@@ -498,13 +499,12 @@ function OverChart({ s }: { s: InningsState }) {
           return (
             <View key={first + i} style={styles.barCol}>
               <Text style={styles.barValue}>{t.runs}</Text>
-              <View
-                style={[
-                  styles.bar,
-                  { height: Math.max(3, (t.runs / peak) * 70) },
-                  t.runs >= 10 && { backgroundColor: colors.accent },
-                  current && styles.barCurrent,
-                ]}
+              <GrowBar
+                vertical
+                share={Math.max(3 / 70, t.runs / peak)}
+                delay={i * 40}
+                trackStyle={styles.barTrack}
+                style={[styles.bar, t.runs >= 10 && { backgroundColor: colors.accent }, current && styles.barCurrent]}
               />
               <View style={styles.barWickets}>
                 {Array.from({ length: Math.min(t.wickets, 3) }, (_, w) => (
@@ -975,7 +975,10 @@ export default function LiveMatch() {
       <FadeIn>
         <View style={styles.result}>
           <PitchStripes opacity={0.07} />
-          <MaterialCommunityIcons name="trophy" size={34} color={colors.onAccent} />
+          {winner && <Confetti height={640} />}
+          <PopIn delay={150}>
+            <MaterialCommunityIcons name="trophy" size={34} color={colors.onAccent} />
+          </PopIn>
           <Text style={styles.resultEyebrow}>
             {series ? `${series.name.toUpperCase()} · MATCH ${match.series!.number} OF ${series.of}` : winner ? 'RESULT' : 'ALL SQUARE'}
           </Text>
@@ -1313,7 +1316,6 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: radius.pill,
   },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger },
   liveText: { ...type.label, fontSize: 10, color: hero.accent },
   heroOvers: { color: hero.muted, fontSize: 16, fontFamily: font.poster, ...type.num },
   heroTeam: { ...type.poster, color: hero.text, fontSize: 22, marginTop: space.lg },
@@ -1332,7 +1334,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginTop: space.md,
   },
-  progressFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: hero.accent, borderRadius: 3 },
+  progressFill: { height: '100%', backgroundColor: hero.accent, borderRadius: 3 },
   notch: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: HERO_BG },
   heroFoot: { color: hero.muted, fontSize: 13, fontFamily: font.semibold, marginTop: space.md },
   chase: {
@@ -1394,7 +1396,8 @@ const styles = StyleSheet.create({
   chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 118 },
   barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   barValue: { color: colors.muted, fontSize: 13, fontFamily: font.poster, marginBottom: 3, ...type.num },
-  bar: { width: '100%', maxWidth: 20, borderRadius: 6, backgroundColor: ink(0.18) },
+  barTrack: { height: 70, width: '100%', maxWidth: 20, justifyContent: 'flex-end' },
+  bar: { width: '100%', borderRadius: 6, backgroundColor: ink(0.18) },
   barCurrent: { borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.accentDim },
   barWickets: { flexDirection: 'row', gap: 2, height: 8, marginTop: 3 },
   wicketDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger },

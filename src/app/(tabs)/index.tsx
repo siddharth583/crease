@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ExportSheet } from '../../components/ExportSheet.tsx';
 import { LinearGradient } from 'expo-linear-gradient';
+import { CountUp, Pulse, Rise, Sheen, Ticker } from '../../components/motion.tsx';
 import { Button, FadeIn, PitchStripes, PressableScale, Screen, SectionLabel, useToast } from '../../components/ui.tsx';
 import { sampleSeason } from '../../demo/sampleSeason.ts';
 import { matchState, oversText } from '../../engine/engine.ts';
@@ -45,9 +46,10 @@ function LiveHero({ match }: { match: Match }) {
     <PressableScale scaleTo={0.98} onPress={() => openMatch(match, true)} accessibilityLabel={`Live: ${s.battingTeam.name} ${s.runs} for ${s.wickets}. Open scoring`}>
       <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.liveHero}>
         <PitchStripes opacity={0.035} tint="255,255,255" />
+        <Sheen />
         <View style={styles.liveTop}>
           <View style={styles.liveTag}>
-            <View style={styles.liveDot} />
+            <Pulse color={colors.danger} size={7} />
             <Text style={styles.liveTagText}>Live</Text>
           </View>
           <Text style={styles.liveVs} numberOfLines={1}>
@@ -58,7 +60,7 @@ function LiveHero({ match }: { match: Match }) {
           {s.battingTeam.name}
         </Text>
         <View style={styles.liveScoreRow}>
-          <Text style={styles.liveScore}>{batted ? s.runs : '0'}</Text>
+          <Ticker value={batted ? s.runs : 0} style={styles.liveScore} lineHeight={101} />
           <Text style={styles.liveWkts}>/{batted ? s.wickets : 0}</Text>
           <View style={{ flex: 1 }} />
           <View style={{ alignItems: 'flex-end' }}>
@@ -87,6 +89,7 @@ function PosterHero() {
   return (
     <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.poster}>
       <PitchStripes opacity={0.035} tint="255,255,255" />
+      <Sheen every={6500} />
       <View style={styles.posterBall}>
         <MaterialCommunityIcons name="cricket" size={26} color={colors.onAccent} />
       </View>
@@ -116,18 +119,18 @@ function Season({ matches }: { matches: Match[] }) {
       <View style={styles.bento}>
         <View style={[styles.tile, styles.tileBig]}>
           <Text style={styles.tileLabel}>Runs scored</Text>
-          <Text style={styles.tileBigValue}>{runs}</Text>
+          <CountUp value={runs} style={styles.tileBigValue} />
           <Text style={styles.tileSub}>
             in {matches.length} match{matches.length === 1 ? '' : 'es'}
           </Text>
         </View>
         <View style={{ flex: 1, gap: space.sm }}>
           <View style={styles.tile}>
-            <Text style={styles.tileValue}>{wickets}</Text>
+            <CountUp value={wickets} style={styles.tileValue} delay={120} />
             <Text style={styles.tileLabel}>Wickets</Text>
           </View>
           <View style={styles.tile}>
-            <Text style={styles.tileValue}>{sixes}</Text>
+            <CountUp value={sixes} style={styles.tileValue} delay={200} />
             <Text style={styles.tileLabel}>Sixes</Text>
           </View>
         </View>
@@ -143,10 +146,10 @@ function Season({ matches }: { matches: Match[] }) {
               {top.name}
             </Text>
           </View>
-          <Text style={styles.topRuns}>
-            {top.batting.runs}
+          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+            <CountUp value={top.batting.runs} style={styles.topRuns} delay={260} />
             <Text style={styles.topUnit}> runs</Text>
-          </Text>
+          </View>
           <Ionicons name="chevron-forward" size={16} color={colors.faint} />
         </PressableScale>
       )}
@@ -293,8 +296,10 @@ export default function Home() {
           <FadeIn delay={90}>
             <SectionLabel>Series</SectionLabel>
             <View style={{ gap: space.sm }}>
-              {series.map((s) => (
-                <SeriesCard key={s.id} s={s} />
+              {series.map((s, i) => (
+                <Rise key={s.id} index={i}>
+                  <SeriesCard s={s} />
+                </Rise>
               ))}
             </View>
           </FadeIn>
@@ -350,8 +355,10 @@ export default function Home() {
           <FadeIn delay={240}>
             <SectionLabel right={<Text style={styles.hint}>Hold to delete</Text>}>Results</SectionLabel>
             <View style={{ gap: space.sm }}>
-              {done.map((m) => (
-                <ResultRow key={m.id} match={m} onDelete={() => deleteMatch(m.id)} />
+              {done.map((m, i) => (
+                <Rise key={m.id} index={i}>
+                  <ResultRow match={m} onDelete={() => deleteMatch(m.id)} />
+                </Rise>
               ))}
             </View>
           </FadeIn>
@@ -444,7 +451,6 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: radius.pill,
   },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.danger },
   liveTagText: { fontSize: 12, fontFamily: font.bold, color: '#FF8A73' },
   liveVs: { color: hero.muted, fontSize: 13, fontFamily: font.medium, flexShrink: 1 },
   liveTeam: { fontFamily: font.poster, fontSize: 22, color: hero.text, marginTop: space.lg, letterSpacing: -0.4 },

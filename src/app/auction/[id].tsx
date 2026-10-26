@@ -9,6 +9,7 @@ import { auctionState, money, nextBid, passPlayer, rosterPlayer, sell, undoAucti
 import { CATEGORY_LABEL, categoryOf, overall, ROLE_LABEL } from '../../engine/squad.ts';
 import { careerStats, playerKey } from '../../engine/stats.ts';
 import { plural } from '../../engine/text.ts';
+import { CountUp, PopIn } from '../../components/motion.tsx';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { colors, edge, font, hero, radius, space, type, HERO_BG } from '../../theme.ts';
@@ -23,9 +24,7 @@ function SidePanel({ s, i, leading }: { s: AuctionState['sides'][number]; i: 0 |
       <Text style={styles.sideName} numberOfLines={1}>
         {s.name}
       </Text>
-      <Text style={styles.purse}>
-        {money(s.left)}
-      </Text>
+      <CountUp value={s.left} format={money} style={styles.purse} duration={800} />
       <Text style={styles.sideMeta} numberOfLines={1}>
         {plural(s.players.length, 'player')} · {s.slots ? `max bid ${money(s.maxBid)}` : 'full'}
       </Text>
@@ -85,6 +84,13 @@ export default function AuctionScreen() {
   const s = useMemo(() => (a ? auctionState(a) : null), [a]);
   // The bidding on the current player lives here until the hammer falls.
   const [bid, setBid] = useState<{ side: 0 | 1; amount: number } | null>(null);
+  // The hammer comes down: a "Sold!" stamp lands over the lot for a moment.
+  const [sold, setSold] = useState<{ name: string; to: string; price: number; side: 0 | 1; key: number } | null>(null);
+  useEffect(() => {
+    if (!sold) return;
+    const t = setTimeout(() => setSold(null), 1500);
+    return () => clearTimeout(t);
+  }, [sold]);
   useEffect(() => setBid(null), [s?.current]);
   const careers = useMemo(() => careerStats(matches), [matches]);
 
@@ -112,7 +118,7 @@ export default function AuctionScreen() {
     if (!bid || !p) return;
     saveAuction(sell(a, bid.side, bid.amount));
     tap('success');
-    toast.show(`SOLD! ${p.name} to ${s.sides[bid.side].name} for ${money(bid.amount)}`, 'success');
+    setSold({ name: p.name, to: s.sides[bid.side].name, price: bid.amount, side: bid.side, key: Date.now() });
   };
   const pass = () => {
     if (!p) return;
@@ -249,6 +255,19 @@ export default function AuctionScreen() {
           <Button label="Start a match with these teams" icon="play" onPress={() => router.push({ pathname: '/new', params: { auction: a.id } })} />
         </View>
       )}
+      {sold && (
+        <View pointerEvents="none" style={styles.stampWrap}>
+          <PopIn key={sold.key} turn={-18} style={[styles.stamp, { borderColor: SIDE_TINT[sold.side] }]}>
+            <Text style={[styles.stampWord, { color: SIDE_TINT[sold.side] }]}>Sold!</Text>
+            <Text style={styles.stampName} numberOfLines={1}>
+              {sold.name}
+            </Text>
+            <Text style={styles.stampTo} numberOfLines={1}>
+              to {sold.to} · {money(sold.price)}
+            </Text>
+          </PopIn>
+        </View>
+      )}
       {toast.element}
     </Screen>
   );
@@ -321,4 +340,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  stampWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.scrim, zIndex: 60 },
+  stamp: {
+    alignItems: 'center',
+    backgroundColor: HERO_BG,
+    borderWidth: 3,
+    borderRadius: radius.xl,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
+    maxWidth: 320,
+  },
+  stampWord: { fontFamily: font.posterBlack, fontSize: 64, lineHeight: 72, letterSpacing: -2.5 },
+  stampName: { color: hero.text, fontFamily: font.poster, fontSize: 22, letterSpacing: -0.4 },
+  stampTo: { color: hero.muted, fontFamily: font.semibold, fontSize: 13, marginTop: 4 },
 });

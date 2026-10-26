@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FaceOff } from '../components/FaceOff.tsx';
 import { BallChip, Card, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel } from '../components/ui.tsx';
+import { Tug } from '../components/motion.tsx';
 import { rivalry, verdict } from '../engine/records.ts';
 import type { WicketKind } from '../engine/types.ts';
 import { useMatches } from '../store/matches.tsx';
@@ -96,8 +97,7 @@ export default function RivalryScreen() {
             <View style={styles.tugWrap}>
               <Text style={[styles.tugEnd, { color: hero.accent }]}>BAT</Text>
               <View style={styles.tug}>
-                <View style={[styles.tugBat, { flex: v.edge }]} />
-                <View style={[styles.tugBowl, { flex: 1 - v.edge }]} />
+                <Tug edge={v.edge} style={StyleSheet.absoluteFill} leftStyle={styles.tugBat} rightStyle={styles.tugBowl} delay={300} />
               </View>
               <Text style={[styles.tugEnd, { color: colors.violet }]}>BALL</Text>
             </View>

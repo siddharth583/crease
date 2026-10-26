@@ -140,7 +140,7 @@ export const font = {
 };
 
 export const type = {
-  display: { fontSize: 104, fontFamily: font.posterBlack, letterSpacing: -4, lineHeight: 108, fontVariant: ['tabular-nums' as const] },
+  display: { fontSize: 104, fontFamily: font.posterBlack, letterSpacing: -4, lineHeight: 114, fontVariant: ['tabular-nums' as const] },
   poster: { fontFamily: font.poster, letterSpacing: -0.5 },
   title: { fontSize: 30, fontFamily: font.posterBlack, letterSpacing: -0.8 },
   heading: { fontSize: 17, fontFamily: font.bold, letterSpacing: -0.2 },

@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, IconButton, Screen, SectionLabel, tap, GhostWord, PitchStripes } from '../../components/ui.tsx';
+import { CountUp, GrowBar } from '../../components/motion.tsx';
 import { oversText } from '../../engine/engine.ts';
 import {
   battingAverage,
@@ -22,12 +23,20 @@ import { colors, gradients, radius, space, type, font, ink, hero } from '../../t
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
 
+/** A figure that counts up when it's a number ("24.5", 147); text like "3/18" or "–" just shows. */
+function Figure({ value, style }: { value: string | number; style: StyleProp<TextStyle> }) {
+  const text = String(value);
+  if (!/^\d+(\.\d+)?$/.test(text)) return <Text style={style}>{text}</Text>;
+  const decimals = text.includes('.') ? text.split('.')[1].length : 0;
+  return <CountUp value={Number(text)} style={style} format={(n) => n.toFixed(decimals)} />;
+}
+
 function Tiles({ items }: { items: [string, string | number, boolean?][] }) {
   return (
     <View style={styles.tiles}>
       {items.map(([label, value, hero]) => (
         <View key={label} style={[styles.tile, hero && styles.tileHero]}>
-          <Text style={[styles.tileValue, hero && { color: colors.accentInk }]}>{value}</Text>
+          <Figure value={value} style={[styles.tileValue, hero && { color: colors.accentInk }]} />
           <Text style={styles.tileLabel}>{label}</Text>
         </View>
       ))}
@@ -128,7 +137,7 @@ export default function PlayerProfile() {
               ['Wickets', c.bowling.wickets],
             ].map(([label, value]) => (
               <View key={label} style={styles.heroStat}>
-                <Text style={styles.heroValue}>{value}</Text>
+                <CountUp value={Number(value)} style={styles.heroValue} />
                 <Text style={styles.heroLabel}>{label}</Text>
               </View>
             ))}
@@ -139,7 +148,7 @@ export default function PlayerProfile() {
           <>
             <SectionLabel right={<Text style={styles.formHint}>Last {form.length} innings</Text>}>Form</SectionLabel>
             <Card style={styles.formCard}>
-              {form.map((h) => {
+              {form.map((h, i) => {
                 const hot = h.bat!.runs >= 30;
                 return (
                   <View key={h.matchId} style={styles.formCol}>
@@ -147,10 +156,13 @@ export default function PlayerProfile() {
                       {h.bat!.runs}
                       {h.bat!.notOut ? '*' : ''}
                     </Text>
-                    <View
+                    <GrowBar
+                      vertical
+                      share={Math.max(4 / 90, h.bat!.runs / peak)}
+                      delay={150 + i * 70}
+                      trackStyle={styles.formTrack}
                       style={[
                         styles.formBar,
-                        { height: Math.max(4, (h.bat!.runs / peak) * 90) },
                         hot && { backgroundColor: colors.accent },
                         h.bat!.runs === 0 && !h.bat!.notOut && { backgroundColor: colors.danger },
                       ]}
@@ -265,7 +277,8 @@ const styles = StyleSheet.create({
   formHint: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
   formCard: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 160, paddingBottom: space.md },
   formCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
-  formBar: { width: '100%', maxWidth: 24, borderRadius: 3, backgroundColor: ink(0.25), marginTop: 4 },
+  formTrack: { height: 90, width: '100%', maxWidth: 24, marginTop: 4, justifyContent: 'flex-end' },
+  formBar: { width: '100%', borderRadius: 6, backgroundColor: ink(0.25) },
   formVs: { color: colors.faint, fontSize: 9, fontFamily: font.bold, marginTop: 4 },
   formText: { color: colors.text, fontSize: 16, fontFamily: font.posterBlack, ...type.num },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

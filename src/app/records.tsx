@@ -4,6 +4,7 @@ import { useMemo, useState, type ComponentProps } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BallChip, Card, Chip, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../components/ui.tsx';
+import { CountUp, GrowBar, Tug } from '../components/motion.tsx';
 import { recordBookHtml } from '../engine/recordBook.ts';
 import { FaceOff } from '../components/FaceOff.tsx';
 import { headToHead, matchups, records, teamNames, verdict } from '../engine/records.ts';
@@ -66,9 +67,7 @@ function Board({ label, icon, items, empty, lowIsBest }: { label: string; icon: 
                     {x.unit ? <Text style={styles.unit}>{x.unit}</Text> : null}
                   </Text>
                 </View>
-                <View style={styles.track}>
-                  <View style={[styles.fill, { width: `${share(x.value) * 100}%` }]} />
-                </View>
+                <GrowBar share={share(x.value)} delay={120 + i * 70} trackStyle={styles.track} style={styles.fill} />
                 <Text style={styles.sub} numberOfLines={1}>
                   {x.sub}
                 </Text>
@@ -98,9 +97,7 @@ function Season({ s }: { s: ReturnType<typeof records>['summary'] }) {
       <View style={styles.seasonRow}>
         {cells.map((c) => (
           <View key={c.k} style={{ flex: 1 }}>
-            <Text style={styles.seasonValue} numberOfLines={1} adjustsFontSizeToFit>
-              {c.v}
-            </Text>
+            <CountUp value={c.v} style={styles.seasonValue} />
             <Text style={styles.seasonKey}>{c.k}</Text>
           </View>
         ))}
@@ -281,8 +278,12 @@ export default function Records() {
                   </View>
                   {h2h.played > 0 && (
                     <View style={styles.tug}>
-                      <View style={[styles.tugBat, { flex: h2h.winsA + 0.001 }]} />
-                      <View style={[styles.tugBowl, { flex: h2h.winsB + 0.001 }]} />
+                      <Tug
+                        edge={(h2h.winsA + 0.001) / (h2h.winsA + h2h.winsB + 0.002)}
+                        style={StyleSheet.absoluteFill}
+                        leftStyle={styles.tugBat}
+                        rightStyle={styles.tugBowl}
+                      />
                     </View>
                   )}
                   {h2h.recent.map((g) => (

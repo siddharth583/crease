@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BallView } from '../engine/engine.ts';
+import { EASE_OUT, useReducedMotion } from './motion.tsx';
 import { ballColors, colors, font, gradients, radius, space, type, edge, isDay } from '../theme.ts';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -137,14 +138,17 @@ export function PressableScale({
   );
 }
 
-/** Fades and rises into place on mount; pass increasing delays to stagger a list. */
+/** Fades and rises into place on mount, settling slowly; pass increasing delays to stagger a list. */
 export function FadeIn({ children, delay = 0, style }: { children: ReactNode; delay?: number; style?: StyleProp<ViewStyle> }) {
-  const v = useRef(new Animated.Value(0)).current;
+  const still = useReducedMotion();
+  const v = useRef(new Animated.Value(still ? 1 : 0)).current;
   useEffect(() => {
-    Animated.timing(v, { toValue: 1, duration: 420, delay, easing: Easing.out(Easing.cubic), useNativeDriver: native }).start();
-  }, [v, delay]);
-  const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
-  return <Animated.View style={[style, { opacity: v, transform: [{ translateY }] }]}>{children}</Animated.View>;
+    if (still) return;
+    Animated.timing(v, { toValue: 1, duration: 640, delay, easing: EASE_OUT, useNativeDriver: native }).start();
+  }, [v, delay, still]);
+  const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [20, 0] });
+  const scale = v.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] });
+  return <Animated.View style={[style, { opacity: v, transform: [{ translateY }, { scale }] }]}>{children}</Animated.View>;
 }
 
 /** Text that punches up whenever its value changes: the score after every run. */
@@ -183,32 +187,38 @@ export function MomentFlash({ moment }: { moment: Moment | null }) {
     setShown(moment);
     v.setValue(0);
     Animated.sequence([
-      Animated.timing(v, { toValue: 1, duration: 260, easing: Easing.out(Easing.back(1.6)), useNativeDriver: native }),
+      Animated.spring(v, { toValue: 1, useNativeDriver: native, speed: 11, bounciness: 9 }),
       Animated.delay(MOMENTS[moment.kind].hold),
-      Animated.timing(v, { toValue: 2, duration: 320, easing: Easing.in(Easing.cubic), useNativeDriver: native }),
+      Animated.timing(v, { toValue: 2, duration: 380, easing: Easing.bezier(0.55, 0, 1, 0.45), useNativeDriver: native }),
     ]).start(() => setShown(null));
   }, [moment, v]);
 
   if (!shown) return null;
   const m = MOMENTS[shown.kind];
-  const opacity = v.interpolate({ inputRange: [0, 0.6, 1.4, 2], outputRange: [0, 0.96, 0.96, 0] });
-  const scale = v.interpolate({ inputRange: [0, 1, 2], outputRange: [0.55, 1, 1.25] });
-  const translateX = v.interpolate({ inputRange: [0, 1, 2], outputRange: [-60, 0, 80] });
+  const opacity = v.interpolate({ inputRange: [0, 0.5, 1.5, 2], outputRange: [0, 0.97, 0.97, 0] });
+  const scale = v.interpolate({ inputRange: [0, 1, 2], outputRange: [0.6, 1, 1.12] });
+  const translateY = v.interpolate({ inputRange: [0, 1, 2], outputRange: [40, 0, -30] });
+  // A ring bursts out from the centre as the colour floods in.
+  const ring = v.interpolate({ inputRange: [0, 1, 2], outputRange: [0.2, 2.6, 4] });
+  const ringOpacity = v.interpolate({ inputRange: [0, 0.4, 1, 2], outputRange: [0, 0.5, 0.15, 0] });
 
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.moment, { backgroundColor: m.bg, opacity }]}>
-      <PitchStripes count={7} opacity={0.08} />
+      <PitchStripes count={7} opacity={0.06} />
+      <Animated.View style={[styles.momentRing, { borderColor: m.fg, opacity: ringOpacity, transform: [{ scale: ring }] }]} />
       <Animated.Text
         numberOfLines={1}
         adjustsFontSizeToFit
         style={[
           styles.momentWord,
-          { color: m.fg, fontSize: 150 * m.size, lineHeight: 160 * m.size, transform: [{ translateX }, { scale }] },
+          { color: m.fg, fontSize: 150 * m.size, lineHeight: 160 * m.size, transform: [{ translateY }, { scale }] },
         ]}
       >
         {m.word}
       </Animated.Text>
-      {shown.caption ? <Text style={[styles.momentCaption, { color: m.fg }]}>{shown.caption}</Text> : null}
+      {shown.caption ? (
+        <Animated.Text style={[styles.momentCaption, { color: m.fg, transform: [{ translateY }] }]}>{shown.caption}</Animated.Text>
+      ) : null}
     </Animated.View>
   );
 }
@@ -498,17 +508,27 @@ export function Sheet({
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const still = useReducedMotion();
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!visible) return;
+    v.setValue(still ? 1 : 0);
+    if (!still) Animated.spring(v, { toValue: 1, useNativeDriver: native, speed: 14, bounciness: 5 }).start();
+  }, [visible, v, still]);
+  const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [520, 0] });
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: v }]}>
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+      </Animated.View>
+      <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg, position: 'absolute', left: 0, right: 0, bottom: 0, transform: [{ translateY }] }]}>
         <View style={styles.grabber} />
         <View style={styles.sheetHead}>
           <Text style={styles.sheetTitle}>{title}</Text>
           <IconButton icon="close" label="Close" onPress={onClose} />
         </View>
         {children}
-      </View>
+      </Animated.View>
     </Modal>
   );
 }
@@ -591,6 +611,7 @@ export const styles = StyleSheet.create({
   ballEmpty: { borderWidth: 1.5, borderColor: colors.borderHi, borderStyle: 'dashed' },
   ballText: { fontFamily: font.posterBlack, ...type.num },
   moment: { alignItems: 'center', justifyContent: 'center', zIndex: 50 },
+  momentRing: { position: 'absolute', width: 220, height: 220, borderRadius: 110, borderWidth: 3 },
   momentWord: { fontFamily: font.posterBlack, fontSize: 150, lineHeight: 165, letterSpacing: -6 },
   momentCaption: { fontFamily: font.poster, fontSize: 24, marginTop: 0, letterSpacing: -0.3 },
   toastWrap: { position: 'absolute', left: space.lg, right: space.lg, alignItems: 'center', zIndex: 40 },

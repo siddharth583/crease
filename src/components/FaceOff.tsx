@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { verdict, type Matchup } from '../engine/records.ts';
 import { colors, edge, font, hero, radius, space, type, HERO_BG } from '../theme.ts';
 import { PitchStripes, PressableScale } from './ui.tsx';
+import { Tug } from './motion.tsx';
 
 const openRivalry = (m: Matchup) => () => router.push({ pathname: '/rivalry', params: { bat: m.batterKey, bowl: m.bowlerKey } });
 
@@ -30,8 +31,7 @@ export function FaceOff({ m, big }: { m: Matchup; big?: boolean }) {
         </View>
       </View>
       <View style={[styles.tug, big && { backgroundColor: hero.ink(0.1) }]}>
-        <View style={[styles.tugBat, { flex: v.edge }]} />
-        <View style={[styles.tugBowl, { flex: 1 - v.edge }]} />
+        <Tug edge={v.edge} style={StyleSheet.absoluteFill} leftStyle={styles.tugBat} rightStyle={styles.tugBowl} />
       </View>
       <View style={styles.faceFoot}>
         <Text style={[styles.faceStats, big && { color: hero.text }]}>
