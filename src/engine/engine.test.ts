@@ -407,16 +407,28 @@ test('a first bounce is the umpire’s call (fair or wide); the second in the ov
   assert.equal(s.overs[0][0].label, '4');
 });
 
-test('a ball in a finished over can’t change whether it counts, so the overs never shift', () => {
+test('a ball in a finished over can become a wide or stop being one, and the overs never shift', () => {
   let m = start(setup({ overs: 3 }));
   m = play(m, ball(0, 'wide'), ...Array.from({ length: 6 }, () => ball(1)));
   m = play(m, { type: 'bowler', bowler: 'b2' }, ball(1), ball(0, 'noball'));
   const wideAt = m.innings[0].events.findIndex((e) => e.type === 'ball' && e.extra === 'wide');
-  // The wide is in the first (finished) over: it can't become a fair ball, and a fair ball there can't be deleted.
-  assert.equal(replaceBall(m, 0, wideAt, ball(0)), m);
+  const was = matchState(m).innings[0];
+  // The wide in the first (finished) over becomes a fair ball: the over keeps its six balls, b2's over is untouched.
+  const fair = matchState(replaceBall(m, 0, wideAt, ball(0))).innings[0];
+  assert.equal(fair.legalBalls, was.legalBalls);
+  assert.equal(fair.extras.wide, 0);
+  assert.deepEqual(fair.overBowlers.slice(0, 2), [['b1'], ['b2']]);
+  // A fair ball there becomes a wide: one more run, still six balls.
+  const wide = matchState(replaceBall(m, 0, wideAt + 1, ball(0, 'wide'))).innings[0];
+  assert.equal(wide.legalBalls, was.legalBalls);
+  assert.equal(wide.runs, was.runs - 1 + 1);
+  assert.equal(wide.bowlers.find((b) => b.id === 'b1')!.balls, 6);
+  // Fixed back, the override goes again.
+  const back = replaceBall(replaceBall(m, 0, wideAt + 1, ball(0, 'wide')), 0, wideAt + 1, ball(1));
+  assert.deepEqual(back.innings[0].events[wideAt + 1], ball(1));
+  // A counted ball in a finished over still can't be deleted: the over would be a ball short.
   assert.equal(replaceBall(m, 0, wideAt + 1, null), m);
-  // Its runs can still change, and so can the over being bowled now.
-  assert.notEqual(replaceBall(m, 0, wideAt, ball(2, 'wide')), m);
+  // The over being bowled now changes as before.
   const fixed = replaceBall(m, 0, m.innings[0].events.length - 1, ball(0));
   const s = matchState(fixed).innings[0];
   assert.equal(s.legalBalls, 8);

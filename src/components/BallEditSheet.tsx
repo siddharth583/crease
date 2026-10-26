@@ -22,8 +22,6 @@ const WICKET_EDIT_KINDS: { value: WicketKind; label: string }[] = [
   { value: 'hitwicket', label: 'Hit wicket' },
 ];
 
-const reballed = (e: BallEvent | null) => e?.extra === 'wide' || e?.extra === 'noball';
-
 /**
  * Apply a fix from the sheet: the ball itself, then who bowled it. The fixed match, or why it can't be done.
  * `next` null deletes the ball.
@@ -32,15 +30,13 @@ export function fixBall(match: Match, inningsIndex: number, eventIndex: number, 
   const old = match.innings[inningsIndex].events[eventIndex] as BallEvent;
   let fixed = JSON.stringify(next) === JSON.stringify(old) ? match : replaceBall(match, inningsIndex, eventIndex, next);
   if (fixed === match && next && JSON.stringify(next) !== JSON.stringify(old)) {
-    if (reballed(next) !== reballed(old) && !canChangeLegality(match, inningsIndex, eventIndex))
-      return 'That over is finished: a ball in it can’t become a wide or no-ball, or stop being one. Change the runs instead.';
     return 'That doesn’t fit with the balls after it (more balls than the overs allow, or the innings would have ended sooner). Fix the later balls first.';
   }
   if (!next) {
     if (fixed !== match) return fixed;
     return canChangeLegality(match, inningsIndex, eventIndex)
       ? 'That doesn’t fit with the balls after it, so it can’t be deleted.'
-      : 'That over is finished, so its balls can’t be deleted. Change the runs instead.';
+      : 'That over is finished, so taking a ball out would leave it a ball short. Change this ball to what really happened instead.';
   }
   if (bowler && bowler !== currentBowler(fixed, inningsIndex, eventIndex)) {
     const changed = setBowlerFrom(fixed, inningsIndex, eventIndex, bowler);

@@ -239,7 +239,7 @@ export function inningsState(match: Match, index: number, target: number | null)
       }
       bouncersThisOver += 1;
     }
-    const legal = isLegal(rules, e.extra);
+    const legal = e.counts ?? isLegal(rules, e.extra);
     const penalty = e.extra === 'wide' || e.extra === 'noball' ? rules.extraRun : 0;
     const total = e.runs + penalty;
     s.runs += total;
@@ -579,32 +579,40 @@ export function canChangeLegality(match: Match, inningsIndex: number, eventIndex
   return !laterInnings && !events.some((e, k) => k > eventIndex && e.type === 'bowler' && startsAnOver(events, ends, k));
 }
 
-/** Fix or remove one delivery. Everything after it is worked out again. */
-export function replaceBall(match: Match, inningsIndex: number, eventIndex: number, ball: BallEvent | null): Match {
+/**
+ * Fix or remove one delivery. Everything after it is worked out again. A ball in a finished over can become a wide or
+ * no-ball (or stop being one) but keeps its place in the over, so no over after it moves.
+ */
+export function replaceBall(match: Match, inningsIndex: number, eventIndex: number, fix: BallEvent | null): Match {
   const old = match.innings[inningsIndex]?.events[eventIndex];
+  let ball = fix && { ...fix };
+  if (ball) delete ball.counts;
   if (!old || old.type !== 'ball') return match;
   // A wicket can be corrected (how out, who caught it) but must stay a wicket of the same batter:
   // everything after it was scored with that batter gone.
   if (Boolean(old.wicket) !== Boolean(ball?.wicket)) return match;
   if (old.wicket && ball?.wicket && old.wicket.playerOut !== ball.wicket.playerOut) return match;
-  const next: Match = {
+  const build = (b: BallEvent | null): Match => ({
     ...match,
     innings: match.innings.map((inn, i) =>
       i !== inningsIndex
         ? inn
         : {
             ...inn,
-            events: ball
-              ? inn.events.map((e, j) => (j === eventIndex ? ball : e))
-              : inn.events.filter((_, j) => j !== eventIndex),
+            events: b ? inn.events.map((e, j) => (j === eventIndex ? b : e)) : inn.events.filter((_, j) => j !== eventIndex),
           },
     ),
-  };
-  // Over by over the balls must still line up with the bowlers who bowled them: a change to whether a ball counts
-  // is only for the over being bowled.
+  });
+  let next = build(ball);
+  // Over by over the balls must still line up with the bowlers who bowled them. In the over being bowled a ball can
+  // start or stop counting; in a finished one it keeps counting as it did. A counted ball there can't be deleted.
   const before = legalBallsTo(match, inningsIndex, eventIndex);
   const after = ball ? legalBallsTo(next, inningsIndex, eventIndex) : legalBallsTo(match, inningsIndex, eventIndex - 1);
-  if (before !== after && !canChangeLegality(match, inningsIndex, eventIndex)) return match;
+  if (before !== after && !canChangeLegality(match, inningsIndex, eventIndex)) {
+    if (!ball) return match;
+    ball = { ...ball, counts: before - legalBallsTo(match, inningsIndex, eventIndex - 1) === 1 };
+    next = build(ball);
+  }
   // And every later ball must still fall inside its innings' overs and wickets. A chase that now passes its target
   // sooner keeps the balls it was scored with: the scorecard says what happened.
   return fitsTogether(next) ? next : match;
