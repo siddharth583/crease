@@ -7,7 +7,7 @@ import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg
 import { font, hero, radius, space, type } from '../theme.ts';
 import { Confetti, useReducedMotion } from './motion.tsx';
 import { PressableScale, tap } from './ui.tsx';
-import { FIGURE, newPose, Person, STRIDES, type Look, type Pose } from './toss/Person.tsx';
+import { FIGURE, newPose, Person, STRIDE_LENGTH, STRIDE_MS, type Look, type Pose } from './toss/Person.tsx';
 import { STAGE, Stadium } from './toss/Stadium.tsx';
 
 // The toss, out in the middle under the lights, shot like television. It opens high on the floodlights and the crowd
@@ -21,12 +21,19 @@ type Face = 'heads' | 'tails';
 type Phase = 'intro' | 'call' | 'ready' | 'flight' | 'reveal' | 'result' | 'choose' | 'manual';
 export type TossResult = { winner: '0' | '1'; choice: 'bat' | 'bowl' };
 
-/** Where everyone stands on the 360 × 420 stage: their middle, their feet, and how near they are. */
+/**
+ * Where everyone stands on the 360 × 420 stage: their middle, their feet, how near they are, and where they walk in
+ * from. They walk the way they face: the home captain in from the left, the away captain from the right, the umpire
+ * from the left behind them.
+ */
 const SPOTS = {
-  home: { cx: 98, feet: 360, s: 1 },
-  umpire: { cx: 180, feet: 336, s: 0.9 },
-  away: { cx: 262, feet: 360, s: 1 },
+  home: { cx: 98, feet: 360, s: 1, from: -80 },
+  umpire: { cx: 180, feet: 336, s: 0.9, from: -60 },
+  away: { cx: 262, feet: 360, s: 1, from: 440 },
 };
+type Spot = (typeof SPOTS)['home'];
+/** Whole strides for a walk in, so they arrive with their feet together. */
+const stridesFor = (spot: Spot) => Math.max(1, Math.round(Math.abs(spot.cx - spot.from) / (STRIDE_LENGTH * spot.s)));
 /** The coin's path: from the home captain's raised hand, high over the umpire, onto the pitch in front of them. */
 const COIN = 26;
 const PATH = {
@@ -41,24 +48,14 @@ const SLACK = 1.12;
 const run = (v: Animated.Value, to: number, duration: number, easing = Easing.out(Easing.cubic), delay = 0) =>
   Animated.timing(v, { toValue: to, duration, easing, delay, useNativeDriver: native });
 
-/** A figure that walks out from the far end of the pitch to their spot, and can jump. */
-function Walker({ spot, walk, hop, children }: { spot: { cx: number; feet: number; s: number }; walk: Animated.Value; hop: Animated.Value; children: ReactNode }) {
+/** A figure that walks in from the side to their spot, the way they face, and can jump. */
+function Walker({ spot, walk, hop, children }: { spot: Spot; walk: Animated.Value; hop: Animated.Value; children: ReactNode }) {
   // The box sits so that, scaled by `s` about its middle, the feet land on the spot.
   const top = spot.feet - FIGURE.h / 2 - (FIGURE.h / 2) * spot.s;
-  // From the far end: small, near the middle of the pitch.
-  const far = { x: 180 + (spot.cx - 180) * 0.2, feet: 200, s: spot.s * 0.3 };
-  const dx = far.x - spot.cx;
-  const dy = far.feet - FIGURE.h / 2 - (FIGURE.h / 2) * far.s - top;
-  const translateX = walk.interpolate({ inputRange: [0, 1], outputRange: [dx, 0] });
-  const translateY = Animated.add(
-    walk.interpolate({ inputRange: [0, 1], outputRange: [dy, 0] }),
-    hop.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -30, 0], easing: Easing.inOut(Easing.sin) }),
-  );
-  // Nearer means bigger; perspective makes the last steps grow fastest.
-  const scale = walk.interpolate({ inputRange: [0, 0.6, 1], outputRange: [far.s, far.s + (spot.s - far.s) * 0.4, spot.s] });
-  const opacity = walk.interpolate({ inputRange: [0, 0.12, 1], outputRange: [0, 1, 1] });
+  const translateX = walk.interpolate({ inputRange: [0, 1], outputRange: [spot.from - spot.cx, 0] });
+  const translateY = hop.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -30, 0], easing: Easing.inOut(Easing.sin) });
   return (
-    <Animated.View pointerEvents="none" style={[styles.walker, { left: spot.cx - FIGURE.w / 2, top, opacity, transform: [{ translateX }, { translateY }, { scale }] }]}>
+    <Animated.View pointerEvents="none" style={[styles.walker, { left: spot.cx - FIGURE.w / 2, top, transform: [{ translateX }, { translateY }, { scale: spot.s }] }]}>
       {children}
     </Animated.View>
   );
@@ -179,7 +176,8 @@ export function TossScene({
       p.backShoulder.setValue(5);
       p.backElbow.setValue(-8);
       p.head.setValue(0);
-      p.gait.setValue(still ? STRIDES : 0);
+      p.gait.setValue(0);
+      p.stride.setValue(0);
       p.crouch.setValue(0);
     }
     for (const x of v.walk) x.setValue(still ? 1 : 0);
@@ -196,9 +194,18 @@ export function TossScene({
     v.cam.y.setValue(150);
     Animated.sequence([run(v.title, 1, 600), Animated.delay(1100), run(v.title, 2, 600)]).start();
     camTo(1, 0, 0, 3000, Easing.inOut(Easing.quad)).start();
-    const walkOut = (i: number, delay: number) =>
-      Animated.parallel([run(v.walk[i], 1, 2600, Easing.linear, delay), Animated.timing(poses[i].gait, { toValue: STRIDES, duration: 2600, delay, easing: Easing.linear, useNativeDriver: native })]);
-    Animated.parallel([walkOut(1, 200), walkOut(0, 450), walkOut(2, 650)]).start(() => {
+    // A steady walk: so many whole strides, each at an easy pace, covering the ground they cross (no skating feet).
+    const walkOut = (i: number, spot: Spot, delay: number) => {
+      const strides = stridesFor(spot);
+      const duration = strides * STRIDE_MS;
+      return Animated.parallel([
+        run(v.walk[i], 1, duration, Easing.linear, delay),
+        Animated.timing(poses[i].gait, { toValue: strides, duration, delay, easing: Easing.linear, useNativeDriver: native }),
+        // Into the walk over the first half step, out of it over the last, feet together at the end.
+        Animated.sequence([Animated.delay(delay), run(poses[i].stride, 1, 280, Easing.out(Easing.quad)), Animated.delay(duration - 560), run(poses[i].stride, 0, 280, Easing.in(Easing.quad))]),
+      ]);
+    };
+    Animated.parallel([walkOut(1, SPOTS.umpire, 0), walkOut(0, SPOTS.home, 500), walkOut(2, SPOTS.away, 500)]).start(() => {
       setPhase('call');
       // The camera breathes while they wait.
       Animated.loop(Animated.sequence([run(v.drift, 1, 2600, Easing.inOut(Easing.sin)), run(v.drift, 0, 2600, Easing.inOut(Easing.sin))])).start();

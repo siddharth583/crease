@@ -18,8 +18,10 @@ export type Pose = {
   backShoulder: Animated.Value;
   backElbow: Animated.Value;
   head: Animated.Value;
-  /** Strides taken while walking: each whole number is one full stride; standing still between. */
+  /** How far through the walk: each whole number is one full stride (a step with each foot). */
   gait: Animated.Value;
+  /** How much they're walking, 0 to 1: it rises as they set off and falls as they stop, so the feet come together. */
+  stride: Animated.Value;
   /** A crouch, 0 to 1: knees bent, as before a jump. */
   crouch: Animated.Value;
 };
@@ -31,11 +33,16 @@ export const newPose = (): Pose => ({
   backElbow: new Animated.Value(-8),
   head: new Animated.Value(0),
   gait: new Animated.Value(0),
+  stride: new Animated.Value(0),
   crouch: new Animated.Value(0),
 });
 
-/** Strides in a walk out: the gait runs from 0 to this. */
-export const STRIDES = 4;
+/** The most strides a walk can take: the gait runs from 0 to a whole number up to this. */
+export const STRIDES = 8;
+/** How far one stride (a step with each foot) carries a person on the stage, at full size. */
+export const STRIDE_LENGTH = 84;
+/** How long a stride takes at an easy walk. */
+export const STRIDE_MS = 1050;
 
 const shade = (hex: string, by: number) => {
   const n = parseInt(hex.slice(1), 16);
@@ -47,12 +54,14 @@ const shade = (hex: string, by: number) => {
 const deg = (v: Animated.Value | Animated.AnimatedAddition) =>
   (v as Animated.Value).interpolate({ inputRange: [-720, 720], outputRange: ['-720deg', '720deg'] });
 
-/** The gait's pattern for one stride, repeated for every stride of the walk. */
-function cycle(gait: Animated.Value, pattern: number[]) {
+/**
+ * One stride's pattern (it ends where it starts), repeated for every stride and scaled by how much they're walking.
+ */
+function cycle(pose: Pose, pattern: number[]) {
   const inputRange: number[] = [];
   const outputRange: number[] = [];
   for (let s = 0; s < STRIDES; s++) pattern.forEach((p, i) => (s > 0 && i === 0 ? null : (inputRange.push(s + i / (pattern.length - 1)), outputRange.push(p))));
-  return gait.interpolate({ inputRange, outputRange, extrapolate: 'clamp' });
+  return Animated.multiply(pose.gait.interpolate({ inputRange, outputRange, extrapolate: 'clamp' }), pose.stride);
 }
 
 /** A part that turns about a point at its top middle (a shoulder, elbow, hip or knee). */
@@ -222,20 +231,24 @@ const Torso = memo(TorsoArt);
 /** The person, posed. `facing` -1 turns them to face left. */
 export function Person({ look, id, pose, facing = 1 }: { look: Look; id: string; pose: Pose; facing?: 1 | -1 }) {
   const umpire = look.kind === 'umpire';
-  // The walk: legs swing from the hip with the knee bending behind, arms swing against them, the body rises a little.
-  const legA = cycle(pose.gait, [0, -22, 0, 18, 0]);
-  const legB = cycle(pose.gait, [0, 18, 0, -22, 0]);
-  const kneeA = cycle(pose.gait, [0, 4, 6, 30, 0]);
-  const kneeB = cycle(pose.gait, [0, 30, 6, 4, 0]);
-  const swing = cycle(pose.gait, [0, 16, 0, -16, 0]);
-  const bob = cycle(pose.gait, [0, -1.6, 0, -1.6, 0]);
+  // The walk, a stride at a time: the front foot lands heel first with the knee straight, the leg passes under the
+  // body, pushes off behind with the knee bending, and swings through with the knee bent most. The other leg does
+  // the same half a stride later. The arms swing against the legs; the body is lowest with both feet down.
+  const legA = cycle(pose, [-24, -2, 20, 2, -24]);
+  const kneeA = cycle(pose, [4, 8, 28, 42, 4]);
+  const legB = cycle(pose, [20, 2, -24, -2, 20]);
+  const kneeB = cycle(pose, [28, 42, 4, 8, 28]);
+  const frontSwing = cycle(pose, [17, 1, -15, -1, 17]);
+  const backSwing = cycle(pose, [-15, -1, 17, 1, -15]);
+  const elbowSwing = cycle(pose, [-4, -10, -22, -10, -4]);
+  const bob = cycle(pose, [1.2, -1.4, 1.2, -1.4, 1.2]);
   // A crouch bends the hips forward and the knees back, and drops the body.
   const hipBend = pose.crouch.interpolate({ inputRange: [0, 1], outputRange: [0, -28] });
   const kneeBend = pose.crouch.interpolate({ inputRange: [0, 1], outputRange: [0, 50] });
   const drop = pose.crouch.interpolate({ inputRange: [0, 1], outputRange: [0, 12] });
 
-  const front = { shoulder: deg(Animated.add(pose.frontShoulder, Animated.multiply(swing, -1))), elbow: deg(pose.frontElbow) };
-  const back = { shoulder: deg(Animated.add(pose.backShoulder, swing)), elbow: deg(pose.backElbow) };
+  const front = { shoulder: deg(Animated.add(pose.frontShoulder, frontSwing)), elbow: deg(Animated.add(pose.frontElbow, elbowSwing)) };
+  const back = { shoulder: deg(Animated.add(pose.backShoulder, backSwing)), elbow: deg(Animated.add(pose.backElbow, elbowSwing)) };
   const hips = { a: deg(Animated.add(legA, hipBend)), b: deg(Animated.add(legB, hipBend)), ka: deg(Animated.add(kneeA, kneeBend)), kb: deg(Animated.add(kneeB, kneeBend)) };
 
   return (
