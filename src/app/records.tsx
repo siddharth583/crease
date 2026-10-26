@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BallChip, Card, Chip, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../components/ui.tsx';
 import { CountUp, GrowBar, Tug } from '../components/motion.tsx';
 import { FaceOff } from '../components/FaceOff.tsx';
-import { headToHead, matchups, records, teamNames, verdict } from '../engine/records.ts';
+import { BALLS_TO_CALL, headToHead, matchups, records, rivalryContext, teamNames, verdict } from '../engine/records.ts';
 import { useMatches } from '../store/matches.tsx';
 import { useMatchFiles } from '../store/useMatchFiles.ts';
 import { useSquad } from '../store/squad.ts';
@@ -120,10 +120,12 @@ export default function Records() {
   const ta = a ?? teams[0];
   const tb = b ?? teams.find((t) => t !== ta);
   const h2h = useMemo(() => (ta && tb ? headToHead(matches, ta, tb) : null), [matches, ta, tb]);
-  const duels = useMemo(() => [...matchups(matches)].filter((d) => d.balls >= 6).sort((x, y) => y.balls - x.balls), [matches, squad]);
+  const allDuels = useMemo(() => matchups(matches), [matches, squad]);
+  const ctx = useMemo(() => rivalryContext(allDuels), [allDuels]);
+  const duels = useMemo(() => allDuels.filter((d) => d.balls >= BALLS_TO_CALL).sort((x, y) => y.balls - x.balls), [allDuels]);
   const [lean, setLean] = useState<'all' | 'batter' | 'bowler' | 'even'>('all');
   const [shown, setShown] = useState(8);
-  const leaning = duels.filter((d) => lean === 'all' || verdict(d).side === lean);
+  const leaning = duels.filter((d) => lean === 'all' || verdict(d, ctx).side === lean);
   const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -333,7 +335,7 @@ export default function Records() {
             {duels[0] ? (
               <FadeIn>
                 <SectionLabel>Rivalry of the season</SectionLabel>
-                <FaceOff m={duels[0]} big />
+                <FaceOff m={duels[0]} big ctx={ctx} />
                 <SectionLabel right={<Text style={styles.count}>{leaning.length}</Text>}>Every rivalry (6+ balls)</SectionLabel>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm, paddingBottom: space.md }}>
                   {(
@@ -349,7 +351,7 @@ export default function Records() {
                 </ScrollView>
                 <View style={{ gap: space.sm }}>
                   {leaning.slice(0, shown).map((d) => (
-                    <FaceOff key={d.id} m={d} />
+                    <FaceOff key={d.id} m={d} ctx={ctx} />
                   ))}
                 </View>
                 {leaning.length > shown && (

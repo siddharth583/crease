@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FaceOff } from '../components/FaceOff.tsx';
 import { BallChip, Card, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel } from '../components/ui.tsx';
 import { Tug } from '../components/motion.tsx';
-import { rivalry, verdict } from '../engine/records.ts';
+import { matchups, rivalry, rivalryContext, verdict } from '../engine/records.ts';
 import type { WicketKind } from '../engine/types.ts';
 import { useMatches } from '../store/matches.tsx';
 import { useSquad } from '../store/squad.ts';
@@ -40,6 +40,7 @@ export default function RivalryScreen() {
   const { matches } = useMatches();
   const { squad } = useSquad();
   const r = useMemo(() => (bat && bowl ? rivalry(matches, bat, bowl) : null), [matches, bat, bowl, squad]);
+  const ctx = useMemo(() => rivalryContext(matchups(matches)), [matches, squad]);
   const back = () => (router.canGoBack() ? router.back() : router.replace('/records'));
 
   if (!r) {
@@ -53,7 +54,7 @@ export default function RivalryScreen() {
     );
   }
 
-  const v = verdict(r);
+  const v = verdict(r, ctx);
   const sr = r.balls ? (r.runs * 100) / r.balls : 0;
   const avg = r.outs ? (r.runs / r.outs).toFixed(1) : '∞';
   const perOut = r.outs ? (r.balls / r.outs).toFixed(1) : '–';
@@ -116,6 +117,20 @@ export default function RivalryScreen() {
           <Stat label="Average" value={avg} sub="runs a dismissal" />
           <Stat label="Dot balls" value={`${Math.round((r.dots / Math.max(1, r.balls)) * 100)}%`} sub={`${r.dots} of ${r.balls}`} />
           <Stat label="Boundaries" value={String(r.fours + r.sixes)} sub={`${plural(r.fours, 'four')} · ${plural(r.sixes, 'six', 'sixes')}`} />
+          {v.batterUsual && (
+            <Stat
+              label={`${r.batter.split(' ')[0]} v others`}
+              value={v.batterUsual.sr.toFixed(0)}
+              sub={`strike rate off everyone else${v.batterUsual.perOut ? `, out every ${v.batterUsual.perOut.toFixed(0)} balls` : ''}`}
+            />
+          )}
+          {v.bowlerUsual && (
+            <Stat
+              label={`${r.bowler.split(' ')[0]} v others`}
+              value={v.bowlerUsual.sr.toFixed(0)}
+              sub={`strike rate batters get off them${v.bowlerUsual.perOut ? `, a wicket every ${v.bowlerUsual.perOut.toFixed(0)} balls` : ''}`}
+            />
+          )}
         </View>
 
         <SectionLabel>Every ball, added up</SectionLabel>
@@ -194,7 +209,7 @@ export default function RivalryScreen() {
         {r.reverse && (
           <>
             <SectionLabel>The other way round</SectionLabel>
-            <FaceOff m={r.reverse} />
+            <FaceOff m={r.reverse} ctx={ctx} />
           </>
         )}
       </ScrollView>

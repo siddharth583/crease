@@ -1,5 +1,5 @@
 import { ballView, matchState, oversText, type BallView, type InningsState } from './engine.ts';
-import { careerStats, COMMON_TEAM, keyFor, playerOfTheMatch } from './stats.ts';
+import { careerStats, COMMON_TEAM, displayName, keyFor, playerOfTheMatch } from './stats.ts';
 import type { Match, Team, WicketKind } from './types.ts';
 
 // The record book: the best (and worst) of every saved match. Only the two main innings count, not super overs.
@@ -45,9 +45,43 @@ export type Rivalry = Matchup & {
   reverse: Matchup | null;
 };
 
-export type Verdict = { side: 'batter' | 'bowler' | 'even'; title: string; line: string; /** 0 (all bowler) to 1 (all batter). */ edge: number };
+export type Verdict = {
+  side: 'batter' | 'bowler' | 'even';
+  title: string;
+  line: string;
+  /** 0 (all bowler) to 1 (all batter). */
+  edge: number;
+  /** Too few balls to call it yet: the bar only leans a little. */
+  early: boolean;
+  /** How each usually goes against everyone else, when there's enough to say. */
+  batterUsual: { sr: number; perOut: number | null; balls: number } | null;
+  bowlerUsual: { sr: number; perOut: number | null; balls: number } | null;
+};
 
-const nameOf = (match: Match, id: string | null) => match.teams.flatMap((t) => t.players).find((p) => p.id === id)?.name ?? '';
+/** Faced balls, runs and dismissals: the numbers behind every rivalry. */
+type Tally = { balls: number; runs: number; outs: number };
+
+/**
+ * What the rivalries are judged against: how every batter and every bowler goes across all their duels, and what a
+ * wicket is worth in runs in these matches.
+ */
+export type RivalryContext = { all: Tally; batters: Map<string, Tally>; bowlers: Map<string, Tally> };
+
+export function rivalryContext(all: Matchup[]): RivalryContext {
+  const add = (map: Map<string, Tally>, key: string, x: Tally) => {
+    const t = map.get(key) ?? { balls: 0, runs: 0, outs: 0 };
+    map.set(key, { balls: t.balls + x.balls, runs: t.runs + x.runs, outs: t.outs + x.outs });
+  };
+  const ctx: RivalryContext = { all: { balls: 0, runs: 0, outs: 0 }, batters: new Map(), bowlers: new Map() };
+  for (const x of all) {
+    ctx.all = { balls: ctx.all.balls + x.balls, runs: ctx.all.runs + x.runs, outs: ctx.all.outs + x.outs };
+    add(ctx.batters, x.batterKey, x);
+    add(ctx.bowlers, x.bowlerKey, x);
+  }
+  return ctx;
+}
+
+const nameOf = (match: Match, id: string | null) => displayName(match.teams.flatMap((t) => t.players).find((p) => p.id === id)?.name ?? '');
 
 function sideOf(match: Match, id: string): { team: Team; key: string; label: string } | null {
   for (const team of match.teams) {
@@ -236,7 +270,8 @@ export function matchups(matches: Match[]): Matchup[] {
     p.balls += 1;
     p.runs += runs;
     if (out) p.outs += 1;
-    if (!runs && !out) p.dots += 1;
+    // A dot: nothing off the bat and no wicket. A no-ball gave the batting side a run, so it isn't one.
+    if (!runs && !out && d.ball.extra !== 'noball') p.dots += 1;
     if (runs === 4 && !d.ball.extra) p.fours += 1;
     if (runs === 6 && !d.ball.extra) p.sixes += 1;
     p.seen.add(m.id);
@@ -272,23 +307,63 @@ export function rivalry(matches: Match[], batterKey: string, bowlerKey: string):
 
 const first = (name: string) => name.trim().split(/\s+/)[0];
 
-/** Who's winning the contest, in a few words. */
-export function verdict(x: Matchup): Verdict {
-  const sr = x.balls ? (x.runs * 100) / x.balls : 0;
-  const perOut = x.outs ? x.balls / x.outs : Infinity;
-  const avg = x.outs ? x.runs / x.outs : Infinity;
-  // Strike rate pulls towards the batter, a wicket every few balls towards the bowler.
-  const raw = Math.max(0.05, Math.min(0.95, 0.5 + (sr - 110) / 260 - (x.outs ? Math.min(0.35, 4 / perOut) : 0)));
-  // The bar always leans the way the verdict goes.
-  const lean = (side: Verdict['side']) => (side === 'batter' ? Math.max(raw, 0.6) : side === 'bowler' ? Math.min(raw, 0.4) : Math.max(0.42, Math.min(0.58, raw)));
+/** Balls before a rivalry is called: under this it only leans. */
+export const BALLS_TO_CALL = 8;
+/** How many balls of "usual" a small sample is pulled towards: the fewer balls, the less it's trusted. */
+const TRUST = 12;
+
+const minus = (a: Tally, b: Tally): Tally => ({ balls: a.balls - b.balls, runs: a.runs - b.runs, outs: a.outs - b.outs });
+const srOf = (t: Tally) => (t.balls ? (t.runs * 100) / t.balls : 0);
+const perOutOf = (t: Tally) => (t.outs ? t.balls / t.outs : null);
+const times = (n: number) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
+const balls = (n: number) => `${n} ball${n === 1 ? '' : 's'}`;
+
+/**
+ * Who's winning the contest. Each ball is worth its runs to the batter, and a wicket costs the batter what a wicket
+ * is worth in these matches (the runs scored for every one that fell). The duel is set against what you'd expect:
+ * this batter against everyone else, and this bowler against everyone else. A small sample is trusted less, and under
+ * `BALLS_TO_CALL` balls it isn't called at all. Without a context, it's judged against a short game's usual alone.
+ */
+export function verdict(x: Matchup, ctx?: RivalryContext): Verdict {
+  const all = ctx?.all ?? { balls: 0, runs: 0, outs: 0 };
+  // A wicket's worth in runs: half what's scored for each one that falls, since in a short game the batters after
+  // keep the rate going. With little to go on, a short game's typical numbers.
+  const wicket = all.outs >= 5 ? Math.max(6, (0.5 * all.runs) / all.outs) : 10;
+  const usualNet = all.balls >= 60 ? (all.runs - all.outs * wicket) / all.balls : 1.2 - wicket / 18;
+  const net = (t: Tally) => (t.balls ? (t.runs - t.outs * wicket) / t.balls : usualNet);
+  // Everyone else: their whole record less this duel, pulled towards the usual while it's small.
+  const others = (t: Tally | undefined) => (t ? minus(t, x) : { balls: 0, runs: 0, outs: 0 });
+  const batOthers = others(ctx?.batters.get(x.batterKey));
+  const bowlOthers = others(ctx?.bowlers.get(x.bowlerKey));
+  const steady = (t: Tally) => (net(t) * t.balls + usualNet * TRUST) / (t.balls + TRUST);
+  const expected = (steady(batOthers) + steady(bowlOthers)) / 2;
+  // How far this duel beats (or falls short of) that, a ball, trusted by how many balls there were.
+  const gap = (net(x) - expected) * (x.balls / (x.balls + TRUST));
+  const early = x.balls < BALLS_TO_CALL;
+  const raw = 0.5 + Math.max(-0.45, Math.min(0.45, gap / 2.2));
+  const side: Verdict['side'] = early || Math.abs(gap) < 0.22 ? 'even' : gap > 0 ? 'batter' : 'bowler';
+  // The bar always leans the way the verdict goes, and only a little while it's early.
+  const clampEven = (v: number) => Math.max(0.42, Math.min(0.58, v));
+  const edge = side === 'batter' ? Math.max(raw, 0.6) : side === 'bowler' ? Math.min(raw, 0.4) : clampEven(raw);
+
+  const usual = (t: Tally) => (t.balls >= BALLS_TO_CALL ? { sr: srOf(t), perOut: perOutOf(t), balls: t.balls } : null);
+  const batterUsual = usual(batOthers);
+  const bowlerUsual = usual(bowlOthers);
   const bat = first(x.batter);
   const bowl = first(x.bowler);
-  if (x.outs === 0 && x.balls >= 6 && sr >= 110)
-    return { side: 'batter', title: `${bat} on top`, line: `${x.runs} off ${x.balls} and never out to ${bowl}.`, edge: lean('batter') };
-  if (x.outs > 0 && (perOut <= 8 || avg < 12))
-    return { side: 'bowler', title: `${bowl} on top`, line: `Out ${x.outs === 1 ? 'once' : `${x.outs} times`} in ${x.balls} balls, ${avg.toFixed(0)} runs a dismissal.`, edge: lean('bowler') };
-  // In short games scoring fast matters as much as staying in: 170 a hundred balls at 20 a dismissal wins it.
-  if (avg >= 30 || (x.outs === 0 && sr >= 140) || (sr >= 170 && avg >= 20))
-    return { side: 'batter', title: `${bat} on top`, line: `${x.runs} runs at a strike rate of ${sr.toFixed(0)}${x.outs ? `, out ${x.outs === 1 ? 'once' : `${x.outs} times`}` : ''}.`, edge: lean('batter') };
-  return { side: 'even', title: 'Even contest', line: `${x.runs} off ${x.balls}${x.outs ? `, out ${x.outs === 1 ? 'once' : `${x.outs} times`}` : ', not out yet'}. Nobody's ahead.`, edge: lean('even') };
+  const sr = srOf(x);
+  const outs = x.outs ? `, out ${times(x.outs)}` : ', never out';
+  const base = { edge, early, batterUsual, bowlerUsual };
+
+  if (early) return { ...base, side, title: 'Too early to call', line: `${x.runs} off ${balls(x.balls)}${outs}. ${BALLS_TO_CALL - x.balls} more and it gets a verdict.` };
+  if (side === 'batter') {
+    const vs = batterUsual ? `, against ${batterUsual.sr.toFixed(0)} off everyone else` : '';
+    return { ...base, side, title: `${bat} on top`, line: `Scores at a strike rate of ${sr.toFixed(0)} off ${bowl}${vs}${outs}.` };
+  }
+  if (side === 'bowler') {
+    const every = x.outs ? `Gets ${bat} out every ${(x.balls / x.outs).toFixed(0)} balls` : `Holds ${bat} to a strike rate of ${sr.toFixed(0)}`;
+    const vs = x.outs && batterUsual?.perOut ? `; everyone else needs ${batterUsual.perOut.toFixed(0)}` : !x.outs && batterUsual ? `, against ${batterUsual.sr.toFixed(0)} off everyone else` : '';
+    return { ...base, side, title: `${bowl} on top`, line: `${every}${vs}.` };
+  }
+  return { ...base, side, title: 'Even contest', line: `${x.runs} off ${x.balls}${outs}: about what you'd expect from these two.` };
 }

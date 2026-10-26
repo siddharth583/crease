@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { verdict, type Matchup } from '../engine/records.ts';
+import { verdict, type Matchup, type RivalryContext } from '../engine/records.ts';
 import { colors, edge, font, hero, radius, space, type, HERO_BG } from '../theme.ts';
 import { PitchStripes, PressableScale } from './ui.tsx';
 import { Tug } from './motion.tsx';
@@ -8,8 +8,9 @@ import { Tug } from './motion.tsx';
 const openRivalry = (m: Matchup) => () => router.push({ pathname: '/rivalry', params: { bat: m.batterKey, bowl: m.bowlerKey } });
 
 /** Batter against bowler: who's ahead, as a tug of war. */
-export function FaceOff({ m, big }: { m: Matchup; big?: boolean }) {
-  const v = verdict(m);
+/** `ctx`: everyone's duels, to judge this one against how the two usually go. */
+export function FaceOff({ m, big, ctx }: { m: Matchup; big?: boolean; ctx?: RivalryContext }) {
+  const v = verdict(m, ctx);
   const sr = m.balls ? (m.runs * 100) / m.balls : 0;
   const tone = v.side === 'batter' ? colors.accent : v.side === 'bowler' ? colors.violet : colors.faint;
   return (
@@ -38,7 +39,7 @@ export function FaceOff({ m, big }: { m: Matchup; big?: boolean }) {
           <Text style={styles.faceStrong}>{m.runs}</Text> off {m.balls} · SR {sr.toFixed(0)} · {m.outs ? `out ${m.outs}×` : 'never out'}
         </Text>
         <View style={[styles.verdict, { backgroundColor: tone }]}>
-          <Text style={[styles.verdictText, v.side === 'bowler' && { color: '#FFFFFF' }]}>{v.side === 'even' ? 'EVEN' : v.side === 'batter' ? 'BAT WINS' : 'BALL WINS'}</Text>
+          <Text style={[styles.verdictText, v.side === 'bowler' && { color: '#FFFFFF' }]}>{v.early ? 'EARLY' : v.side === 'even' ? 'EVEN' : v.side === 'batter' ? 'BAT WINS' : 'BALL WINS'}</Text>
         </View>
       </View>
     </PressableScale>

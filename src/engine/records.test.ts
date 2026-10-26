@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleSeason } from '../demo/sampleSeason.ts';
 import { matchState } from './engine.ts';
-import { headToHead, matchups, records, rivalry, verdict } from './records.ts';
+import { BALLS_TO_CALL, headToHead, matchups, records, rivalry, rivalryContext, verdict } from './records.ts';
 
 const { matches } = sampleSeason(new Date('2026-10-23T12:00:00Z'));
 
@@ -85,4 +85,29 @@ test('the tug of war always leans the way of the verdict', () => {
     if (v.side === 'bowler') assert.ok(v.edge <= 0.4, m.id);
     if (v.side === 'even') assert.ok(v.edge > 0.4 && v.edge < 0.6, m.id);
   }
+});
+
+test('a rivalry is judged against how the two usually go, and not called on a handful of balls', () => {
+  const base = { batter: 'Sam Bat', bowler: 'Ben Ball', dots: 0, fours: 0, sixes: 0, matches: 2 };
+  const duel = (id: string, batterKey: string, bowlerKey: string, balls: number, runs: number, outs: number) => ({ ...base, id, batterKey, bowlerKey, balls, runs, outs });
+  // Sam usually scores at 200 and is out every 60 balls. 30 off 24 and out twice to Ben is Ben's, though alone it
+  // would look even (out every 12 balls, 15 a time).
+  const sam = [duel('s1', 'sam', 'x', 60, 120, 1), duel('s2', 'sam', 'y', 60, 120, 1), duel('sb', 'sam', 'ben', 24, 30, 2)];
+  const others = [duel('o1', 'p', 'ben', 60, 72, 3), duel('o2', 'q', 'x', 60, 72, 3), duel('o3', 'r', 'y', 60, 72, 3)];
+  const ctx = rivalryContext([...sam, ...others]);
+  const v = verdict(sam[2], ctx);
+  assert.equal(v.side, 'bowler', v.line);
+  assert.ok(v.batterUsual && Math.round(v.batterUsual.sr) === 200);
+  // Batting through 24 balls of a bowler who usually takes a wicket every 20, never out, is the batter's.
+  assert.equal(verdict(duel('pb', 'p2', 'ben', 24, 30, 0), ctx).side, 'batter');
+  // A wicket in three balls is a start, not a verdict.
+  const early = verdict(duel('e', 'sam', 'ben', 3, 0, 1), ctx);
+  assert.equal(early.early, true);
+  assert.equal(early.side, 'even');
+  assert.ok(early.edge >= 0.42 && early.edge <= 0.58);
+  assert.equal(BALLS_TO_CALL, 8);
+});
+
+test('a no-ball is never a dot ball in a rivalry', () => {
+  for (const m of matchups(matches)) assert.ok(m.dots + m.outs <= m.balls);
 });
