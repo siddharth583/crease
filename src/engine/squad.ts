@@ -1,4 +1,4 @@
-import type { Role, Team } from './types.ts';
+import type { Role, Rules, Team } from './types.ts';
 
 // The squad: the regulars who turn up every week, whichever side they end up on. Each has a role and a rating
 // (1 to 5) for batting, bowling and fielding, used to set them up for an auction. A regular's stats follow
@@ -94,6 +94,17 @@ const SIDES: { id: string; name: string; players: string[]; captain: string; kee
     captain: 'Ashwani Singh',
   },
 ];
+
+/** The club's rules, the same every match: set here rather than on the match setup screen. */
+export const HOUSE_RULES: Omit<Rules, 'overs' | 'playersPerSide'> = {
+  extraRun: 1,
+  reball: true,
+  freeHit: true,
+  bouncer: { fair: 1, calledAs: 'noball' },
+  lastManStands: true,
+  maxOversPerBowler: 2,
+  extraOverBowlers: 2,
+};
 
 /** Which version of the usual sides a phone has. */
 export const TEAMS_REVISION = 2;

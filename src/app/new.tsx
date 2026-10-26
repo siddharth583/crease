@@ -3,12 +3,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Animated, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, ToggleRow } from '../components/ui.tsx';
+import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap } from '../components/ui.tsx';
 import { auctionState, rosterPlayer, type Auction } from '../engine/auction.ts';
 import { newMatch } from '../engine/engine.ts';
 import { seriesState } from '../engine/stats.ts';
 import type { Match, Rules, SeriesInfo, Team } from '../engine/types.ts';
 import { newId, useMatches } from '../store/matches.tsx';
+import { HOUSE_RULES } from '../engine/squad.ts';
 import { useSquad } from '../store/squad.ts';
 import { colors, radius, space, font } from '../theme.ts';
 
@@ -234,16 +235,8 @@ export default function NewMatch() {
           { name: '', players: resize([], size) },
         ],
   );
-  const [rules, setRules] = useState<Omit<Rules, 'playersPerSide'>>(() => {
-    const { playersPerSide: _, ...r } = (source ?? last)?.rules ?? {
-      playersPerSide: 8,
-      overs: 10,
-      extraRun: 1,
-      reball: true,
-      lastManStands: false,
-    };
-    return { maxOversPerBowler: 0, extraOverBowlers: 0, freeHit: false, bouncer: { fair: 1, calledAs: 'noball' as const }, ...r };
-  });
+  // Only the length is chosen here; the club's house rules are the same every match.
+  const [rules, setRules] = useState<Omit<Rules, 'playersPerSide'>>(() => ({ ...HOUSE_RULES, overs: (source ?? last)?.rules.overs ?? 10 }));
   // The next match of a series carries the series on; otherwise a series can be started here.
   const ongoing = continueSeries && source?.series ? seriesState(matches.filter((m) => m.series?.id === source.series!.id)) : null;
   const [kind, setKind] = useState<'single' | 'series'>('single');
@@ -422,32 +415,6 @@ export default function NewMatch() {
             <Stepper label="Overs" hint="Per innings" value={rules.overs} min={1} max={50} onChange={(overs) => setRules((r) => ({ ...r, overs }))} />
             <View style={styles.divider} />
             <Stepper label="Players" hint="Per side" value={size} min={2} max={11} onChange={setSizeAll} />
-            <View style={styles.divider} />
-            <Stepper
-              label="Overs per bowler"
-              hint={rules.maxOversPerBowler ? `Nobody bowls more than ${rules.maxOversPerBowler}` : 'No limit'}
-              value={rules.maxOversPerBowler ?? 0}
-              min={0}
-              max={rules.overs}
-              onChange={(maxOversPerBowler) => setRules((r) => ({ ...r, maxOversPerBowler }))}
-            />
-            {Boolean(rules.maxOversPerBowler) && (
-              <>
-                <View style={styles.divider} />
-                <Stepper
-                  label="Bowlers with an extra over"
-                  hint={
-                    rules.extraOverBowlers
-                      ? `${rules.extraOverBowlers} can bowl ${(rules.maxOversPerBowler ?? 0) + 1}, the rest ${rules.maxOversPerBowler}`
-                      : 'Nobody goes over the limit'
-                  }
-                  value={rules.extraOverBowlers ?? 0}
-                  min={0}
-                  max={size}
-                  onChange={(extraOverBowlers) => setRules((r) => ({ ...r, extraOverBowlers }))}
-                />
-              </>
-            )}
             {(() => {
               // Can the side bowl the whole innings under the limit?
               const limit = rules.maxOversPerBowler ?? 0;
@@ -459,63 +426,6 @@ export default function NewMatch() {
                 </Text>
               ) : null;
             })()}
-          </Card>
-
-          <SectionLabel>House rules</SectionLabel>
-          <Card style={{ paddingVertical: space.sm }}>
-            <ToggleRow
-              label="Run for wides & no-balls"
-              hint="Adds 1 extra run to the score"
-              value={rules.extraRun === 1}
-              onChange={(v) => setRules((r) => ({ ...r, extraRun: v ? 1 : 0 }))}
-            />
-            <View style={styles.divider} />
-            <ToggleRow
-              label="Re-bowl wides & no-balls"
-              hint="Off: they count as a ball of the over"
-              value={rules.reball}
-              onChange={(reball) => setRules((r) => ({ ...r, reball }))}
-            />
-            <View style={styles.divider} />
-            <ToggleRow
-              label="Free hit after a no-ball"
-              hint="Only a run out counts on the next ball"
-              value={Boolean(rules.freeHit)}
-              onChange={(freeHit) => setRules((r) => ({ ...r, freeHit }))}
-            />
-            <View style={styles.divider} />
-            <Stepper
-              label="Bounces allowed an over"
-              hint={
-                (rules.bouncer?.fair ?? 1)
-                  ? `Umpire’s call (fair or wide) for ${rules.bouncer?.fair ?? 1}; the next is a ${rules.bouncer?.calledAs === 'wide' ? 'wide' : 'no ball'}`
-                  : `Every bounce is a ${rules.bouncer?.calledAs === 'wide' ? 'wide' : 'no ball'}`
-              }
-              value={rules.bouncer?.fair ?? 1}
-              min={0}
-              max={3}
-              onChange={(fair) => setRules((r) => ({ ...r, bouncer: { calledAs: r.bouncer?.calledAs ?? 'noball', fair } }))}
-            />
-            <View style={styles.bounceRow}>
-              <Text style={styles.question}>After that, a bounce is a</Text>
-              <View style={{ flex: 1 }}>
-                <Segmented
-                  value={rules.bouncer?.calledAs ?? 'noball'}
-                  onChange={(calledAs) => setRules((r) => ({ ...r, bouncer: { fair: r.bouncer?.fair ?? 1, calledAs } }))}
-                  options={[
-                    { value: 'wide', label: 'Wide' },
-                    { value: 'noball', label: 'No ball' },
-                  ]}
-                />
-              </View>
-            </View>
-            <View style={styles.divider} />
-            <ToggleRow
-              label="Last man stands"
-              hint="The last batter can bat on alone"
-              value={rules.lastManStands}
-              onChange={(lastManStands) => setRules((r) => ({ ...r, lastManStands }))}
-            />
           </Card>
 
           <SectionLabel>Toss</SectionLabel>
@@ -581,7 +491,6 @@ const styles = StyleSheet.create({
   markOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   markText: { color: colors.faint, fontSize: 11, fontFamily: font.heavy },
   markTextOn: { color: colors.onAccent },
-  bounceRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingBottom: space.md },
   seriesInput: {
     color: colors.text,
     fontSize: 15,
