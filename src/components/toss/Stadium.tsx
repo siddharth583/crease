@@ -6,6 +6,8 @@ import Svg, { Circle, Defs, G, Line, LinearGradient, Polygon, RadialGradient, Re
 // Drawn on a 360 × 420 stage; the toss scene scales the stage to the screen.
 
 export const STAGE = { w: 360, h: 420 };
+/** How far the night sky carries on above the stage. */
+const SKY = 220;
 /** Where the pitch's far end and near end sit, for the figures and the coin to stand on it. */
 export const PITCH = { farY: 168, nearY: 420, farHalf: 26, nearHalf: 74, cx: 180 };
 
@@ -42,11 +44,13 @@ function StadiumArt() {
   });
   const board = ['#D7FF3A', '#7FE6FF', '#F1F5EE', '#FFCB52', '#B9A6FF', '#7FE6FF', '#D7FF3A'];
   return (
-    <Svg width="100%" height="100%" viewBox={`0 0 ${STAGE.w} ${STAGE.h}`} preserveAspectRatio="xMidYMid slice">
+    // The sky carries on well above the stage, so the camera can look up after the coin without finding an edge.
+    <Svg width={STAGE.w} height={STAGE.h + SKY} viewBox={`0 ${-SKY} ${STAGE.w} ${STAGE.h + SKY}`} style={{ position: 'absolute', left: 0, top: -SKY }}>
       <Defs>
         <LinearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#03070A" />
-          <Stop offset="0.7" stopColor="#0A1712" />
+          <Stop offset="0" stopColor="#020407" />
+          <Stop offset="0.5" stopColor="#04090C" />
+          <Stop offset="0.85" stopColor="#0A1712" />
           <Stop offset="1" stopColor="#10261A" />
         </LinearGradient>
         <RadialGradient id="lampGlow" cx="0.5" cy="0.5" r="0.5">
@@ -77,10 +81,10 @@ function StadiumArt() {
         </LinearGradient>
       </Defs>
 
-      <Rect width="360" height="420" fill="url(#sky)" />
+      <Rect x="0" y={-SKY} width="360" height={420 + SKY} fill="url(#sky)" />
       {/* Stars in a clear sky. */}
-      {Array.from({ length: 26 }, (_, i) => (
-        <Circle key={`s${i}`} cx={(i * 137) % 360} cy={8 + ((i * 53) % 70)} r={i % 3 === 0 ? 0.9 : 0.5} fill="#FFFFFF" opacity={0.25 + (i % 4) * 0.12} />
+      {Array.from({ length: 70 }, (_, i) => (
+        <Circle key={`s${i}`} cx={(i * 137) % 360} cy={-SKY + 8 + ((i * 53) % (SKY + 78))} r={i % 3 === 0 ? 0.9 : 0.5} fill="#FFFFFF" opacity={0.2 + (i % 4) * 0.12} />
       ))}
 
       {/* The stands and the crowd. */}

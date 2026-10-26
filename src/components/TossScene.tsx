@@ -3,16 +3,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, Modal, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { font, hero, radius, space, type } from '../theme.ts';
 import { Confetti, useReducedMotion } from './motion.tsx';
 import { PressableScale, tap } from './ui.tsx';
-import { FIGURE, Person, type Look } from './toss/Person.tsx';
+import { FIGURE, newPose, Person, STRIDES, type Look, type Pose } from './toss/Person.tsx';
 import { STAGE, Stadium } from './toss/Stadium.tsx';
 
-// The toss, out in the middle under the lights. The captains and the umpire walk out from the far end, the away
-// captain calls, the home captain flicks the coin up, it spins high over the umpire, bounces and wobbles flat, the
-// camera closes in on it, and the umpire points to the winner, who chooses to bat or bowl.
+// The toss, out in the middle under the lights, shot like television. It opens high on the floodlights and the crowd
+// and cranes down as the captains and the umpire walk out from the far end. The away captain calls; the home captain
+// flicks the coin. Everyone's eyes follow it up; it rises and slows, falls faster, bounces, wobbles flat, and the camera
+// shakes with the landing and closes right in on the coin. Then it pulls back to the winner, the umpire points, the
+// winner crouches and jumps with a fist in the air, the cameras in the crowd flash, and they choose to bat or bowl.
 
 const native = Platform.OS !== 'web';
 type Face = 'heads' | 'tails';
@@ -21,40 +23,40 @@ export type TossResult = { winner: '0' | '1'; choice: 'bat' | 'bowl' };
 
 /** Where everyone stands on the 360 × 420 stage: their middle, their feet, and how near they are. */
 const SPOTS = {
-  home: { cx: 96, feet: 356, s: 1 },
-  umpire: { cx: 180, feet: 332, s: 0.9 },
-  away: { cx: 264, feet: 356, s: 1 },
+  home: { cx: 98, feet: 360, s: 1 },
+  umpire: { cx: 180, feet: 336, s: 0.9 },
+  away: { cx: 262, feet: 360, s: 1 },
 };
 /** The coin's path: from the home captain's raised hand, high over the umpire, onto the pitch in front of them. */
-const COIN = 28;
+const COIN = 26;
 const PATH = {
   t: [0, 0.42, 0.78, 0.84, 0.9, 0.94, 1],
-  x: [129, 168, 184, 186, 188, 189, 190],
-  y: [192, 18, 364, 348, 364, 360, 364],
+  x: [122, 166, 184, 186, 188, 189, 190],
+  y: [168, 6, 366, 350, 366, 362, 366],
 };
-const LANDED = { x: 190, y: 364 };
+const LANDED = { x: 190, y: 366 };
+/** The stage is drawn a little larger than the screen, so the camera can pull back without showing an edge. */
+const SLACK = 1.12;
 
-const deg = (v: Animated.Value) => v.interpolate({ inputRange: [-360, 360], outputRange: ['-360deg', '360deg'] });
 const run = (v: Animated.Value, to: number, duration: number, easing = Easing.out(Easing.cubic), delay = 0) =>
   Animated.timing(v, { toValue: to, duration, easing, delay, useNativeDriver: native });
 
-/** A figure that walks out from the far end of the pitch to their spot, and can hop. */
+/** A figure that walks out from the far end of the pitch to their spot, and can jump. */
 function Walker({ spot, walk, hop, children }: { spot: { cx: number; feet: number; s: number }; walk: Animated.Value; hop: Animated.Value; children: ReactNode }) {
   // The box sits so that, scaled by `s` about its middle, the feet land on the spot.
   const top = spot.feet - FIGURE.h / 2 - (FIGURE.h / 2) * spot.s;
   // From the far end: small, near the middle of the pitch.
-  const far = { x: 180 + (spot.cx - 180) * 0.15, feet: 198, s: spot.s * 0.32 };
+  const far = { x: 180 + (spot.cx - 180) * 0.2, feet: 200, s: spot.s * 0.3 };
   const dx = far.x - spot.cx;
   const dy = far.feet - FIGURE.h / 2 - (FIGURE.h / 2) * far.s - top;
-  const steps = Array.from({ length: 13 }, (_, i) => i / 12);
-  const stride = walk.interpolate({ inputRange: steps, outputRange: steps.map((t, i) => (t === 1 ? 0 : i % 2 ? -3 : 0)) });
   const translateX = walk.interpolate({ inputRange: [0, 1], outputRange: [dx, 0] });
   const translateY = Animated.add(
-    walk.interpolate({ inputRange: [0, 1], outputRange: [dy, 0], easing: Easing.out(Easing.quad) }),
-    Animated.add(stride, hop.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -24, 0] })),
+    walk.interpolate({ inputRange: [0, 1], outputRange: [dy, 0] }),
+    hop.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -30, 0], easing: Easing.inOut(Easing.sin) }),
   );
-  const scale = walk.interpolate({ inputRange: [0, 1], outputRange: [far.s, spot.s], easing: Easing.out(Easing.quad) });
-  const opacity = walk.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 1, 1] });
+  // Nearer means bigger; perspective makes the last steps grow fastest.
+  const scale = walk.interpolate({ inputRange: [0, 0.6, 1], outputRange: [far.s, far.s + (spot.s - far.s) * 0.4, spot.s] });
+  const opacity = walk.interpolate({ inputRange: [0, 0.12, 1], outputRange: [0, 1, 1] });
   return (
     <Animated.View pointerEvents="none" style={[styles.walker, { left: spot.cx - FIGURE.w / 2, top, opacity, transform: [{ translateX }, { translateY }, { scale }] }]}>
       {children}
@@ -85,9 +87,30 @@ function Coin({ face }: { face: Face }) {
       <View style={styles.coinRim} />
       <LinearGradient colors={['#FFF0B0', '#F2C14E', '#B9851A', '#F7D477']} locations={[0, 0.35, 0.7, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.coinFace}>
         <View style={styles.coinRing} />
-        <MaterialCommunityIcons name={face === 'heads' ? 'crown' : 'cricket'} size={15} color="#6B4708" />
+        <MaterialCommunityIcons name={face === 'heads' ? 'crown' : 'cricket'} size={14} color="#6B4708" />
       </LinearGradient>
     </View>
+  );
+}
+
+/** Camera flashes popping in the stands. */
+function Flashes({ on }: { on: Animated.Value }) {
+  // Each pops at its own moment in the loop, kept clear of the loop's ends.
+  const dots = useMemo(() => Array.from({ length: 16 }, (_, i) => ({ x: 14 + ((i * 97) % 332), y: 100 + ((i * 37) % 44), at: 0.06 + ((i * 0.137) % 1) * 0.88 })), []);
+  return (
+    <>
+      {dots.map((d, i) => {
+        const a = d.at - 0.04;
+        const b = d.at + 0.04;
+        return (
+          <Animated.View
+            key={i}
+            pointerEvents="none"
+            style={[styles.flash, { left: d.x, top: d.y, opacity: on.interpolate({ inputRange: [0, a, d.at, b, 1], outputRange: [0, 0, 1, 0, 0] }) }]}
+          />
+        );
+      })}
+    </>
   );
 }
 
@@ -113,106 +136,169 @@ export function TossScene({
   const [call, setCall] = useState<Face | null>(null);
   const [face, setFace] = useState<Face | null>(null);
   const [manualWinner, setManualWinner] = useState<'0' | '1'>('0');
+  const ms = (n: number) => (still ? 1 : n);
 
-  // Everything that moves.
+  // Everything that moves: the people's joints, where they are, the coin and the camera.
   const v = useRef({
     title: new Animated.Value(0),
     walk: [new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)],
     hop: [new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)],
-    homeFront: new Animated.Value(-12),
-    homeBack: new Animated.Value(10),
-    awayFront: new Animated.Value(-12),
-    awayBack: new Animated.Value(10),
-    umpFront: new Animated.Value(-6),
-    umpBack: new Animated.Value(6),
+    pose: { home: newPose(), umpire: newPose(), away: newPose() } as Record<'home' | 'umpire' | 'away', Pose>,
     flight: new Animated.Value(0),
     settle: new Animated.Value(0),
-    zoom: new Animated.Value(0),
     reveal: new Animated.Value(0),
     spot: new Animated.Value(0),
+    flashes: new Animated.Value(0),
+    cam: { s: new Animated.Value(1), x: new Animated.Value(0), y: new Animated.Value(0) },
+    drift: new Animated.Value(0),
   }).current;
+  const poses = [v.pose.home, v.pose.umpire, v.pose.away];
+
+  /** Move the camera: scale about the stage's middle, then shift (in stage units). */
+  const camTo = (s: number, x: number, y: number, duration: number, easing = Easing.inOut(Easing.cubic)) =>
+    Animated.parallel([run(v.cam.s, s, duration, easing), run(v.cam.x, x, duration, easing), run(v.cam.y, y, duration, easing)]);
+  /** The shift that puts a point on the stage at a place on screen, at a scale. */
+  const frame = (p: { x: number; y: number }, at: { x: number; y: number }, s: number) => ({
+    x: at.x - (STAGE.w / 2 + (p.x - STAGE.w / 2) * s),
+    y: at.y - (STAGE.h / 2 + (p.y - STAGE.h / 2) * s),
+  });
 
   const short = (i: 0 | 1) => (captains[i] ? captains[i]!.trim().split(/\s+/)[0] : names[i]);
   const winner: '0' | '1' | null = face && call ? (face === call ? '1' : '0') : null;
 
-  // Walk out from the far end, once the scene opens.
+  // The opening: high on the lights and the crowd, craning down as they walk out from the far end.
   useEffect(() => {
     if (!visible) return;
     setPhase('intro');
     setCall(null);
     setFace(null);
-    for (const x of [v.flight, v.settle, v.zoom, v.reveal, v.spot, ...v.hop]) x.setValue(0);
+    for (const x of [v.flight, v.settle, v.reveal, v.spot, v.flashes, v.drift, ...v.hop]) x.setValue(0);
+    for (const p of poses) {
+      p.frontShoulder.setValue(-4);
+      p.frontElbow.setValue(-10);
+      p.backShoulder.setValue(5);
+      p.backElbow.setValue(-8);
+      p.head.setValue(0);
+      p.gait.setValue(still ? STRIDES : 0);
+      p.crouch.setValue(0);
+    }
     for (const x of v.walk) x.setValue(still ? 1 : 0);
-    [v.homeFront, v.awayFront].forEach((x) => x.setValue(-12));
-    [v.homeBack, v.awayBack].forEach((x) => x.setValue(10));
-    v.umpFront.setValue(-6);
-    v.umpBack.setValue(6);
     v.title.setValue(0);
     if (still) {
+      v.cam.s.setValue(1);
+      v.cam.x.setValue(0);
+      v.cam.y.setValue(0);
       setPhase('call');
       return;
     }
-    Animated.sequence([run(v.title, 1, 500), Animated.delay(900), run(v.title, 2, 500)]).start();
-    Animated.stagger(220, [
-      run(v.walk[1], 1, 2000, Easing.out(Easing.quad), 300),
-      run(v.walk[0], 1, 2000, Easing.out(Easing.quad), 300),
-      run(v.walk[2], 1, 2000, Easing.out(Easing.quad), 300),
-    ]).start(() => setPhase('call'));
-  }, [visible, still, v]);
+    v.cam.s.setValue(1.5);
+    v.cam.x.setValue(0);
+    v.cam.y.setValue(150);
+    Animated.sequence([run(v.title, 1, 600), Animated.delay(1100), run(v.title, 2, 600)]).start();
+    camTo(1, 0, 0, 3000, Easing.inOut(Easing.quad)).start();
+    const walkOut = (i: number, delay: number) =>
+      Animated.parallel([run(v.walk[i], 1, 2600, Easing.linear, delay), Animated.timing(poses[i].gait, { toValue: STRIDES, duration: 2600, delay, easing: Easing.linear, useNativeDriver: native })]);
+    Animated.parallel([walkOut(1, 200), walkOut(0, 450), walkOut(2, 650)]).start(() => {
+      setPhase('call');
+      // The camera breathes while they wait.
+      Animated.loop(Animated.sequence([run(v.drift, 1, 2600, Easing.inOut(Easing.sin)), run(v.drift, 0, 2600, Easing.inOut(Easing.sin))])).start();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, still]);
 
   const pick = (f: Face) => {
     tap('light');
     setCall(f);
     setPhase('ready');
+    // The away captain calls with a nod; the home captain readies the coin on the thumb.
+    Animated.sequence([run(v.pose.away.head, 8, ms(160)), run(v.pose.away.head, 0, ms(220))]).start();
+    Animated.parallel([run(v.pose.home.frontShoulder, -40, ms(380)), run(v.pose.home.frontElbow, -70, ms(380))]).start();
   };
 
   const flip = () => {
     if (phase !== 'ready' || !call) return;
     const landed: Face = Math.random() < 0.5 ? 'heads' : 'tails';
     const won = landed === call ? 2 : 0;
-    const ms = (n: number) => (still ? 1 : n);
     setPhase('flight');
     tap('medium');
-    // The flick: the arm snaps up, the coin leaves the thumb, the arm comes back down.
-    Animated.sequence([run(v.homeFront, -160, ms(200), Easing.out(Easing.back(2))), Animated.delay(ms(420)), run(v.homeFront, -12, ms(500))]).start();
-    Animated.timing(v.flight, { toValue: 1, duration: ms(2100), delay: ms(160), easing: Easing.linear, useNativeDriver: native }).start(() => {
+    v.drift.stopAnimation();
+    const home = v.pose.home;
+    // The flick: the arm snaps up and through, then comes back down.
+    Animated.sequence([
+      Animated.parallel([run(home.frontShoulder, -150, ms(170), Easing.out(Easing.quad)), run(home.frontElbow, -25, ms(170), Easing.out(Easing.quad))]),
+      Animated.delay(ms(380)),
+      Animated.parallel([run(home.frontShoulder, -4, ms(600)), run(home.frontElbow, -10, ms(600))]),
+    ]).start();
+    // Every eye follows the coin: up as it rises, down as it falls, on it where it lands.
+    for (const p of poses) Animated.sequence([run(p.head, -24, ms(700), Easing.out(Easing.quad), ms(150)), run(p.head, 12, ms(560), Easing.in(Easing.quad))]).start();
+    // The coin rises and slows, falls faster, bounces; the camera pulls back to keep it in, then comes down with it.
+    Animated.parallel([
+      Animated.sequence([
+        Animated.delay(ms(150)),
+        Animated.timing(v.flight, { toValue: 0.42, duration: ms(820), easing: Easing.out(Easing.quad), useNativeDriver: native }),
+        Animated.timing(v.flight, { toValue: 0.78, duration: ms(600), easing: Easing.in(Easing.quad), useNativeDriver: native }),
+        Animated.timing(v.flight, { toValue: 1, duration: ms(520), easing: Easing.out(Easing.quad), useNativeDriver: native }),
+      ]),
+      Animated.sequence([camTo(0.9, 0, 70, ms(950), Easing.out(Easing.quad)), camTo(1, 0, 0, ms(620), Easing.in(Easing.quad))]),
+    ]).start(() => {
       setFace(landed);
       tap('light');
-      // It wobbles flat like a spun coin, the camera closes in, and the face is read out.
+      // The landing shakes the camera; the coin wobbles flat; the camera closes right in on it and keeps creeping.
+      const close = frame(LANDED, { x: STAGE.w / 2, y: 238 }, 2.4);
+      const closer = frame(LANDED, { x: STAGE.w / 2, y: 238 }, 2.6);
       Animated.sequence([
-        Animated.timing(v.settle, { toValue: 1, duration: ms(1100), easing: Easing.out(Easing.quad), useNativeDriver: native }),
-        Animated.parallel([run(v.zoom, 1, ms(750), Easing.inOut(Easing.cubic)), run(v.reveal, 1, ms(500), Easing.out(Easing.back(1.6)), ms(450))]),
+        Animated.sequence([run(v.cam.x, 5, ms(45), Easing.linear), run(v.cam.x, -4, ms(55), Easing.linear), run(v.cam.x, 3, ms(55), Easing.linear), run(v.cam.x, 0, ms(70))]),
+        Animated.parallel([
+          Animated.timing(v.settle, { toValue: 1, duration: ms(1100), easing: Easing.out(Easing.quad), useNativeDriver: native }),
+          camTo(2.4, close.x, close.y, ms(900), Easing.inOut(Easing.cubic)),
+          run(v.reveal, 1, ms(500), Easing.out(Easing.back(1.6)), ms(700)),
+        ]),
       ]).start(() => {
         setPhase('reveal');
         tap('success');
+        camTo(2.6, closer.x, closer.y, ms(1400), Easing.linear).start();
         setTimeout(() => {
-          Animated.parallel([run(v.zoom, 0, ms(650), Easing.inOut(Easing.cubic)), run(v.reveal, 2, ms(400))]).start(() => {
+          // Pull back to the winner.
+          const at = won === 2 ? SPOTS.away : SPOTS.home;
+          const wide = frame({ x: (at.cx + 180) / 2, y: 300 }, { x: STAGE.w / 2, y: 236 }, 1.15);
+          Animated.parallel([camTo(1.15, wide.x, wide.y, ms(900)), run(v.reveal, 2, ms(400))]).start(() => {
             setPhase('result');
-            // The umpire points to the winner; the winning captain punches the air and jumps; the light finds them.
-            run(won === 2 ? v.umpFront : v.umpBack, won === 2 ? -95 : 95, ms(420), Easing.out(Easing.back(1.4))).start();
-            run(won === 2 ? v.awayFront : v.homeFront, -172, ms(360), Easing.out(Easing.back(1.8)), ms(300)).start();
-            run(v.spot, 1, ms(600), Easing.out(Easing.quad), ms(200)).start();
-            const hop = v.hop[won];
-            Animated.sequence([
-              Animated.delay(ms(320)),
-              run(hop, 1, ms(460), Easing.linear),
-              Animated.timing(hop, { toValue: 0, duration: 0, useNativeDriver: native }),
-              run(hop, 1, ms(460), Easing.linear),
-              Animated.timing(hop, { toValue: 0, duration: 0, useNativeDriver: native }),
+            const ump = v.pose.umpire;
+            const pose = poses[won];
+            const loser = poses[2 - won];
+            // The umpire turns and points, arm straight.
+            Animated.parallel([
+              run(won === 2 ? ump.frontShoulder : ump.backShoulder, won === 2 ? -92 : 92, ms(420), Easing.out(Easing.back(1.3))),
+              run(won === 2 ? ump.frontElbow : ump.backElbow, 0, ms(420)),
+              run(ump.head, 0, ms(300)),
             ]).start();
-            setTimeout(() => setPhase('choose'), ms(1200));
+            // The winner crouches, jumps with a fist up, twice; the other captain's head drops.
+            Animated.parallel([run(pose.head, -6, ms(300)), run(loser.head, 14, ms(500), Easing.out(Easing.quad), ms(300))]).start();
+            const jump = Animated.sequence([
+              run(pose.crouch, 1, ms(170), Easing.out(Easing.quad)),
+              Animated.parallel([run(pose.crouch, 0, ms(160), Easing.out(Easing.quad)), run(v.hop[won], 1, ms(520), Easing.linear)]),
+              Animated.timing(v.hop[won], { toValue: 0, duration: 0, useNativeDriver: native }),
+            ]);
+            Animated.sequence([
+              Animated.parallel([run(pose.frontShoulder, -168, ms(260), Easing.out(Easing.back(1.6))), run(pose.frontElbow, -12, ms(260)), run(pose.backShoulder, -30, ms(260)), run(pose.backElbow, -90, ms(260))]),
+              jump,
+              jump,
+            ]).start();
+            run(v.spot, 1, ms(700), Easing.out(Easing.quad), ms(150)).start();
+            if (!still) Animated.loop(run(v.flashes, 1, 2400, Easing.linear)).start();
+            setTimeout(() => setPhase('choose'), ms(1400));
           });
-        }, ms(1300));
+        }, ms(1400));
       });
     });
   };
 
-  // The camera: it follows the coin up a little, then closes in on it where it lands.
-  const zoomTo = 2.3;
-  const camX = v.zoom.interpolate({ inputRange: [0, 1], outputRange: [0, STAGE.w / 2 - (STAGE.w / 2 + (LANDED.x - STAGE.w / 2) * zoomTo)] });
-  const follow = v.flight.interpolate({ inputRange: [0, 0.42, 0.78, 1], outputRange: [0, 46, 0, 0] });
-  const camY = Animated.add(follow, v.zoom.interpolate({ inputRange: [0, 1], outputRange: [0, 236 - (STAGE.h / 2 + (LANDED.y - STAGE.h / 2) * zoomTo)] }));
-  const camS = v.zoom.interpolate({ inputRange: [0, 1], outputRange: [1, zoomTo] });
+  // The stage is drawn at 360 × 420, scaled to the screen's width (up to a tablet's), with room to pull back.
+  const fit = Math.min(screenW, 520);
+  const k = (fit / STAGE.w) * SLACK;
+  const stageH = (STAGE.h * fit) / STAGE.w;
+  const camX = Animated.add(v.cam.x, v.drift.interpolate({ inputRange: [0, 1], outputRange: [-4, 4] }));
+  const camY = Animated.add(v.cam.y, v.drift.interpolate({ inputRange: [0, 1], outputRange: [2, -2] }));
 
   const along = (key: 'x' | 'y', delay = 0) =>
     v.flight.interpolate({ inputRange: PATH.t.map((t) => t + delay), outputRange: PATH[key].map((p) => p - COIN / 2), extrapolate: 'clamp' });
@@ -222,21 +308,17 @@ export function TossScene({
     outputRange: ['0deg', '-34deg', '-12deg', '-28deg', '-17deg', '-25deg', '-21deg', '-22deg'],
   });
   const wobbleZ = v.settle.interpolate({ inputRange: [0, 0.3, 0.6, 1], outputRange: ['0deg', '160deg', '260deg', '300deg'] });
-  const grow = v.flight.interpolate({ inputRange: [0, 0.42, 0.78, 1], outputRange: [0.8, 1.25, 1, 1] });
-  const ghost = (k: number) => v.flight.interpolate({ inputRange: [0, 0.04, 0.74, 0.78], outputRange: [0, 0.32 / k, 0.32 / k, 0], extrapolate: 'clamp' });
+  const grow = v.flight.interpolate({ inputRange: [0, 0.42, 0.78, 1], outputRange: [0.8, 1.2, 1, 1] });
+  const ghost = (n: number) => v.flight.interpolate({ inputRange: [0, 0.04, 0.74, 0.78], outputRange: [0, 0.3 / n, 0.3 / n, 0], extrapolate: 'clamp' });
   const shadowOpacity = v.flight.interpolate({ inputRange: [0, 0.42, 0.78, 1], outputRange: [0.1, 0.03, 0.32, 0.32] });
   const shadowScale = v.flight.interpolate({ inputRange: [0, 0.42, 0.78, 1], outputRange: [0.6, 0.25, 1, 1] });
 
-  // The stage is drawn at 360 × 420 and scaled to the screen's width (up to a tablet's).
-  const fit = Math.min(screenW, 520);
-  const k = fit / STAGE.w;
-  const stageH = STAGE.h * k;
   const winnerSpot = winner === null ? null : winner === '0' ? SPOTS.home : SPOTS.away;
   const look = useMemo(
     () => ({
-      home: { kind: 'captain', shirt: '#C6EE2A', cap: '#9CC41A', skin: '#C99A76' } as Look,
-      away: { kind: 'captain', shirt: '#5FCFEF', cap: '#2E9FC2', skin: '#B9845F' } as Look,
-      umpire: { kind: 'umpire', shirt: '#FFFFFF', cap: '#FFFFFF', skin: '#D2A684' } as Look,
+      home: { kind: 'captain', shirt: '#B8E22A', cap: '#8DB116', skin: '#C38E68', hair: '#2A1D16' } as Look,
+      away: { kind: 'captain', shirt: '#4FC3E8', cap: '#2286AB', skin: '#A8714E', hair: '#16100C' } as Look,
+      umpire: { kind: 'umpire', shirt: '#FFFFFF', cap: '#FFFFFF', skin: '#D3A685', hair: '#9A9790' } as Look,
     }),
     [],
   );
@@ -250,10 +332,11 @@ export function TossScene({
             style={[
               styles.stage,
               { left: (screenW - STAGE.w) / 2, top: (stageH - STAGE.h) / 2 },
-              { transform: [{ scale: k }, { translateX: camX }, { translateY: camY }, { scale: camS }] },
+              { transform: [{ scale: k }, { translateX: camX }, { translateY: camY }, { scale: v.cam.s }] },
             ]}
           >
             <Stadium />
+            <Flashes on={v.flashes} />
 
             {/* The light swings onto the winner. */}
             {winnerSpot && (
@@ -271,13 +354,13 @@ export function TossScene({
             )}
 
             <Walker spot={SPOTS.umpire} walk={v.walk[1]} hop={v.hop[1]}>
-              <Person look={look.umpire} id="ump" front={deg(v.umpFront)} back={deg(v.umpBack)} />
+              <Person look={look.umpire} id="ump" pose={v.pose.umpire} />
             </Walker>
             <Walker spot={SPOTS.home} walk={v.walk[0]} hop={v.hop[0]}>
-              <Person look={look.home} id="home" front={deg(v.homeFront)} back={deg(v.homeBack)} />
+              <Person look={look.home} id="home" pose={v.pose.home} />
             </Walker>
             <Walker spot={SPOTS.away} walk={v.walk[2]} hop={v.hop[2]}>
-              <Person look={look.away} id="away" front={deg(v.awayFront)} back={deg(v.awayBack)} facing={-1} />
+              <Person look={look.away} id="away" pose={v.pose.away} facing={-1} />
             </Walker>
 
             {/* The coin, its shadow and its blur. */}
@@ -305,35 +388,47 @@ export function TossScene({
                 </Animated.View>
               </>
             )}
-            {/* Before the toss the coin is in the home captain's hand. */}
-            {(phase === 'call' || phase === 'ready') && (
-              <View pointerEvents="none" style={[styles.coin, { left: SPOTS.home.cx + 18 - COIN / 2, top: SPOTS.home.feet - 66 - COIN / 2, transform: [{ scale: 0.7 }] }]}>
+
+            {/* Before the flick the coin rests on the home captain's thumb. */}
+            {phase === 'ready' && (
+              <View pointerEvents="none" style={[styles.coin, { left: 150 - COIN / 2, top: 226 - COIN / 2, transform: [{ scale: 0.55 }] }]}>
                 <Coin face="heads" />
               </View>
             )}
 
             {/* Who's saying what. */}
             {phase === 'call' && (
-              <Bubble x={SPOTS.away.cx} y={SPOTS.away.feet - 206}>
+              <Bubble x={SPOTS.away.cx} y={SPOTS.away.feet - 214}>
                 Heads or tails…
               </Bubble>
             )}
             {(phase === 'ready' || phase === 'flight') && call && (
               <>
-                <Bubble x={SPOTS.away.cx} y={SPOTS.away.feet - 206}>
+                <Bubble x={SPOTS.away.cx} y={SPOTS.away.feet - 214}>
                   {call === 'heads' ? 'Heads!' : 'Tails!'}
                 </Bubble>
-                <Bubble x={SPOTS.home.cx} y={SPOTS.home.feet - 206}>
+                <Bubble x={SPOTS.home.cx} y={SPOTS.home.feet - 214}>
                   Here goes!
                 </Bubble>
               </>
             )}
             {(phase === 'result' || phase === 'choose') && face && (
-              <Bubble x={SPOTS.umpire.cx} y={SPOTS.umpire.feet - 196} volt>
+              <Bubble x={SPOTS.umpire.cx} y={SPOTS.umpire.feet - 200} volt>
                 {`It's ${face}!`}
               </Bubble>
             )}
           </Animated.View>
+
+          {/* A vignette, as through a lens. */}
+          <Svg pointerEvents="none" width="100%" height="100%" style={StyleSheet.absoluteFill}>
+            <Defs>
+              <RadialGradient id="vignette" cx="0.5" cy="0.5" r="0.75">
+                <Stop offset="0.55" stopColor="#000" stopOpacity="0" />
+                <Stop offset="1" stopColor="#000" stopOpacity="0.55" />
+              </RadialGradient>
+            </Defs>
+            <Rect width="100%" height="100%" fill="url(#vignette)" />
+          </Svg>
 
           {/* The opening title, over the ground. */}
           <Animated.View
@@ -474,6 +569,7 @@ const styles = StyleSheet.create({
   stage: { position: 'absolute', width: STAGE.w, height: STAGE.h },
   walker: { position: 'absolute', width: FIGURE.w, height: FIGURE.h },
   spot: { position: 'absolute', width: 180, height: 170 },
+  flash: { position: 'absolute', width: 3, height: 3, borderRadius: 2, backgroundColor: '#FFFFFF' },
   coin: { position: 'absolute', left: 0, top: 0, width: COIN, height: COIN },
   coinBody: { width: COIN, height: COIN },
   coinRim: { position: 'absolute', left: 0, top: 2.5, width: COIN, height: COIN, borderRadius: COIN / 2, backgroundColor: '#8A5F0E' },
@@ -497,7 +593,7 @@ const styles = StyleSheet.create({
   titleCard: { position: 'absolute', left: space.lg, right: space.lg, top: '30%', alignItems: 'center' },
   titleEyebrow: { ...type.label, color: hero.accent, letterSpacing: 3 },
   titleNames: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: hero.text, textAlign: 'center', marginTop: space.sm, letterSpacing: -1 },
-  reveal: { position: 'absolute', left: 0, right: 0, top: '16%', alignItems: 'center' },
+  reveal: { position: 'absolute', left: 0, right: 0, top: '14%', alignItems: 'center' },
   revealText: {
     fontFamily: font.posterBlack,
     fontSize: 64,
