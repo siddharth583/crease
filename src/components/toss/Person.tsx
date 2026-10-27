@@ -335,6 +335,7 @@ function HeadArt({ look, id, turn }: { look: Look; id: string; turn: 0 | 1 }) {
         </LinearGradient>
         <Soft id={`${id}soft`} by={0.7} />
         <Soft id={`${id}softer`} by={1.4} />
+        <Soft id={`${id}glow`} by={1.1} />
       </Defs>
       {/* Neck, darkest under the jaw. */}
       <Path d="M15 31 C15 35 14.6 40 14 44 L26 44 C25.4 40 25 35 25 31 Z" fill={`url(#${id}neck)`} />
@@ -361,6 +362,24 @@ function HeadArt({ look, id, turn }: { look: Look; id: string; turn: 0 | 1 }) {
         <Path d={turn ? 'M10.6 16 C10.6 12 12.6 10.6 14.6 10.6 L13 22.6 C12 23.4 11 23.2 10.8 21 Z' : 'M10.4 16.4 C10.4 12.2 12.4 10.8 14.2 10.6 L12.8 22.6 C11.8 23.2 10.6 22.6 10.4 20 Z'} fill={hair} />
         {!turn && <Path d="M29.6 16.4 C29.6 12.2 27.6 10.8 25.8 10.6 L27.2 22.6 C28.2 23.2 29.4 22.6 29.6 20 Z" fill={hair} />}
       </G>
+      {/* The painter's light on the face, soft: the forehead, the cheekbone and the bridge of the nose catch the key
+          light; the jaw on the far side takes the cool rim of the other floodlight; a warm glow bounces up under the chin. */}
+      <G filter={`url(#${id}glow)`}>
+        <Ellipse cx={turn ? 19.6 : 18} cy="17.4" rx="5.4" ry="2.4" fill="#FFF1DA" opacity="0.32" />
+        <Ellipse cx={turn ? 15.6 : 14.2} cy="25.4" rx="2.8" ry="1.8" fill="#FFF1DA" opacity="0.28" />
+        {!turn && <Ellipse cx="26" cy="25.4" rx="2.2" ry="1.5" fill="#FFF1DA" opacity="0.16" />}
+        <Ellipse cx={turn ? 22.6 : 19.8} cy="24" rx="0.9" ry="3.2" fill="#FFF6E6" opacity="0.32" />
+        <Ellipse cx="20" cy="34.4" rx="4" ry="1.2" fill="#FFB27A" opacity="0.18" />
+      </G>
+      <Path
+        d={turn ? 'M30.4 19 C30.6 22 30.8 24 30.4 25.4 C29.6 29.8 27.6 33 24.6 35' : 'M30 21 C30 27.6 28.6 31.2 25.8 33.6'}
+        stroke="#A9DCFF"
+        strokeWidth="1.1"
+        opacity="0.55"
+        fill="none"
+        filter={`url(#${id}soft)`}
+      />
+      {!turn && <Path d="M10 21 C10 27.6 11.4 31.2 14.2 33.6" stroke="#FFD3A0" strokeWidth="1" opacity="0.45" fill="none" filter={`url(#${id}soft)`} />}
       <Face look={look} id={id} turn={turn} />
       {/* Facial hair, soft-edged. */}
       {look.face === 'stubble' && (
@@ -423,6 +442,8 @@ function TorsoArt({ look, id, facing }: { look: Look; id: string; facing: 1 | -1
         <Round id={`${id}cloth`} base={umpire ? '#F4F3EC' : look.shirt} turn={umpire ? 0 : 0.08} />
         <Round id={`${id}hips`} base="#F3F2EA" turn={0.08} />
         <Soft id={`${id}ao`} by={1.6} />
+        <Soft id={`${id}paint`} by={2.4} />
+        <Soft id={`${id}rim`} by={0.7} />
       </Defs>
       {umpire ? (
         <>
@@ -471,6 +492,20 @@ function TorsoArt({ look, id, facing }: { look: Look; id: string; facing: 1 | -1
           </G>
         </>
       )}
+      {/* The painter's pass, all soft-edged: the warm key light on the chest, the cloth gathering in shadow under the
+          arms and at the waist, and the two floodlights' rims, warm on one edge and cool on the other. */}
+      <G filter={`url(#${id}paint)`}>
+        <Path d={umpire ? 'M27 46 C32 42 38 42 40 46 C39 56 33 62 28 60 Z' : 'M29 44 C35 40.6 44 40.6 49 44 C47 53 38 58 31 55 Z'} fill="#FFF4D6" opacity={umpire ? 0.35 : 0.24} />
+        <Path d={umpire ? 'M23 54 C24 62 24 70 23 78' : 'M25 52 C26 60 27 68 28 76'} stroke="#000" strokeWidth="3" opacity="0.16" fill="none" />
+        <Path d={umpire ? 'M57 54 C56 62 56 70 57 78' : 'M54 52 C53.4 60 53 68 53 76'} stroke="#000" strokeWidth="3" opacity="0.16" fill="none" />
+        <Path d={umpire ? 'M30 70 C34 76 35 88 33 100 M50 72 C47 80 46 92 48 104' : 'M32 66 C36 72 38 80 37 88 M47 68 C45 74 45 82 46 89'} stroke="#000" strokeWidth="1.6" opacity="0.1" fill="none" />
+      </G>
+      <G filter={`url(#${id}rim)`}>
+        <Path d={umpire ? 'M21.6 48 C21.4 60 21 90 19.8 122' : 'M22 48 C22.2 56 23.6 64 25 72 C26 80 26.8 88 27 94'} stroke="#FFD9A0" strokeWidth="1.2" opacity="0.55" fill="none" />
+        <Path d={umpire ? 'M58.4 48 C58.6 60 59 90 60.2 122' : 'M56.8 48 C56.6 56 55.6 66 55 76 C54.6 84 54.6 90 54.6 94'} stroke="#9ED8FF" strokeWidth="1.4" opacity="0.7" fill="none" />
+        <Path d={umpire ? 'M24 41.6 C27 39 31 38 35 37.6' : 'M24 42 C27 39.4 31 38.2 36 37.6'} stroke="#FFE7BF" strokeWidth="1.2" opacity="0.6" fill="none" />
+        <Path d={umpire ? 'M45 37.6 C49 38 53 39 56 41.6' : 'M45.6 37.2 C49.4 37.8 53 39.4 55.4 42'} stroke="#BFE6FF" strokeWidth="1.2" opacity="0.6" fill="none" />
+      </G>
     </Svg>
   );
 }
@@ -542,11 +577,16 @@ export function Person({ look, id, pose, facing = 1 }: { look: Look; id: string;
   return (
     <View style={[styles.person, facing === -1 && { transform: [{ scaleX: -1 }] }]}>
       {/* A soft shadow on the grass, under the feet. */}
-      <Svg width={76} height={16} style={styles.shadow}>
+      {/* Shadows on the grass: one long and faint from each floodlight, crossing under the feet, and a dark one
+          where they stand. */}
+      <Svg width={160} height={30} style={styles.shadow}>
         <Defs>
           <Soft id={`${id}gs`} by={2.2} />
+          <Soft id={`${id}gl`} by={3} />
         </Defs>
-        <Ellipse cx="38" cy="8" rx="26" ry="3.6" fill="#000" opacity="0.6" filter={`url(#${id}gs)`} />
+        <Ellipse cx="50" cy="17" rx="38" ry="4" fill="#000" opacity="0.22" transform="rotate(-9 80 15)" filter={`url(#${id}gl)`} />
+        <Ellipse cx="110" cy="17" rx="38" ry="4" fill="#000" opacity="0.22" transform="rotate(9 80 15)" filter={`url(#${id}gl)`} />
+        <Ellipse cx="80" cy="15" rx="26" ry="3.6" fill="#000" opacity="0.6" filter={`url(#${id}gs)`} />
       </Svg>
       <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: sway }, { translateY: Animated.add(bob, drop) }] }]}>
         {/* A captain's far arm (the one towards the other captain) is behind the body. */}
@@ -585,5 +625,5 @@ const styles = StyleSheet.create({
   head: { position: 'absolute', top: -6, width: 40, height: 44 },
   /** An eyelid, over an eye on the head. */
   lid: { position: 'absolute', top: 20.4, height: 3, borderRadius: 1.5 },
-  shadow: { position: 'absolute', left: 2, top: 168 },
+  shadow: { position: 'absolute', left: -40, top: 161 },
 });
