@@ -6,6 +6,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type Tex
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, IconButton, Screen, SectionLabel, tap, GhostWord, PitchStripes } from '../../components/ui.tsx';
 import { CountUp, GrowBar } from '../../components/motion.tsx';
+import { RatingChips } from '../../components/Ratings.tsx';
+import { playerRatings } from '../../engine/ratings.ts';
 import { oversText } from '../../engine/engine.ts';
 import {
   battingAverage,
@@ -94,6 +96,8 @@ export default function PlayerProfile() {
   const insets = useSafeAreaInsets();
   const { squad } = useSquad();
   const c = useMemo(() => careerStats(matches).find((x) => x.key === key), [matches, key, squad]);
+  // Their match ratings out of 10 and their form, as on the squad list.
+  const rated = useMemo(() => playerRatings(matches, key), [matches, key]);
 
   const back = (
     <View style={styles.header}>
@@ -123,8 +127,17 @@ export default function PlayerProfile() {
           <GhostWord size={260} style={{ right: -20, top: -60, color: hero.ink(0.05) }}>
             {c.name.slice(0, 1)}
           </GhostWord>
-          <View style={styles.teamTag}>
-            <Text style={styles.teamTagText}>{c.team}</Text>
+          <View style={styles.heroTop}>
+            <View style={styles.teamTag}>
+              <Text style={styles.teamTagText}>{c.team}</Text>
+            </View>
+            {rated.form !== null && (
+              <View style={[styles.formPill, rated.form >= 8 && { backgroundColor: hero.accent }]}>
+                <Text style={[styles.formPillText, rated.form >= 8 && { color: colors.onAccent }]}>
+                  Form <Text style={styles.formPillValue}>{rated.form.toFixed(1)}</Text>
+                </Text>
+              </View>
+            )}
           </View>
           <Text style={styles.name} numberOfLines={2}>
             {c.name}
@@ -144,9 +157,22 @@ export default function PlayerProfile() {
           </View>
         </LinearGradient>
 
+        {rated.history.length > 0 && (
+          <>
+            <SectionLabel right={<Text style={styles.formHint}>Out of 10</Text>}>Match ratings</SectionLabel>
+            <Card style={{ gap: space.md }}>
+              <RatingChips history={rated.history} />
+              <Text style={styles.formHint}>
+                A rating for each match from what they did with the bat, the ball and in the field. Form is the average of their last{' '}
+                {Math.min(5, rated.history.length)}.
+              </Text>
+            </Card>
+          </>
+        )}
+
         {form.length > 0 && (
           <>
-            <SectionLabel right={<Text style={styles.formHint}>Last {form.length} innings</Text>}>Form</SectionLabel>
+            <SectionLabel right={<Text style={styles.formHint}>Last {form.length} innings</Text>}>Recent innings</SectionLabel>
             <Card style={styles.formCard}>
               {form.map((h, i) => {
                 const hot = h.bat!.runs >= 30;
@@ -248,6 +274,10 @@ const styles = StyleSheet.create({
     borderColor: hero.line,
   },
   name: { fontFamily: font.posterBlack, fontSize: 49, lineHeight: 55, color: hero.text, letterSpacing: -1.5, marginTop: space.lg, alignSelf: 'stretch' },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  formPill: { flexDirection: 'row', alignItems: 'center', height: 28, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: hero.ink(0.12) },
+  formPillText: { ...type.label, color: hero.text },
+  formPillValue: { fontFamily: font.posterBlack, fontSize: 15, letterSpacing: 0, ...type.num },
   teamTag: { alignSelf: 'flex-start', backgroundColor: colors.accent, paddingHorizontal: 10, height: 24, borderRadius: radius.sm, justifyContent: 'center', transform: [{ skewX: '-8deg' }] },
   teamTagText: { ...type.label, color: colors.onAccent },
   heroStats: {

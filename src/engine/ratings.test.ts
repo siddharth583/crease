@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleSeason } from '../demo/sampleSeason.ts';
-import { matchRatings, ratedSquad, squadRatings, MATCHES_TO_RATE } from './ratings.ts';
+import { matchRatings, playerRatings, ratedSquad, squadRatings, MATCHES_TO_RATE } from './ratings.ts';
 import { DEFAULT_SQUAD } from './squad.ts';
 import { setRegulars } from './stats.ts';
 
@@ -40,4 +40,18 @@ test('the squad gets form and stars from its matches; the rest keep what was set
   const rated = ratedSquad(season.matches, squad);
   assert.equal(rated.find((p) => p.name === 'Nihal Walia')!.bat, 1);
   assert.deepEqual(rated.find((p) => p.name === 'Sejal Chauhan'), fresh);
+});
+
+test("a player's page shows the same form and ratings as the squad list", () => {
+  const squad = squadRatings(season.matches, DEFAULT_SQUAD);
+  let checked = 0;
+  for (const r of squad.values()) {
+    if (!r.history.length) continue;
+    const page = playerRatings(season.matches, r.key);
+    assert.equal(page.form, r.form, r.name);
+    assert.deepEqual(page.history.map((h) => h.rating), r.history.map((h) => h.rating), r.name);
+    checked++;
+  }
+  assert.ok(checked > 5);
+  assert.deepEqual(playerRatings(season.matches, 'nobody'), { history: [], form: null });
 });

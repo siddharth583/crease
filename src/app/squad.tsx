@@ -8,6 +8,7 @@ import { Button, Card, FadeIn, IconButton, PressableScale, Screen, SectionLabel,
 import { CATEGORIES, CATEGORY_LABEL, categoryOf, overall, ROLE_LABEL, type Category, type SquadPlayer } from '../engine/squad.ts';
 import type { Role } from '../engine/types.ts';
 import { MATCHES_TO_RATE, squadRatings, type PlayerRatings } from '../engine/ratings.ts';
+import { FormBadge, RatingChips } from '../components/Ratings.tsx';
 import { newId, useMatches } from '../store/matches.tsx';
 import { useSquad } from '../store/squad.ts';
 import { colors, font, radius, space, type } from '../theme.ts';
@@ -19,9 +20,6 @@ const ROLES: { value: Role; label: string }[] = [
   { value: 'wk', label: 'Keeper' },
 ];
 
-const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-/** A rating's colour: volt for a big game, cyan for a good one, plain otherwise, red for a poor one. */
-const ratingTone = (r: number) => (r >= 8 ? styles.rateTop : r >= 6.5 ? styles.rateGood : r < 5 ? styles.ratePoor : null);
 
 /** Their ratings match by match, newest first, and how the stars come about. */
 function MatchRatings({ r, p, onChange }: { r: PlayerRatings | undefined; p: SquadPlayer; onChange: (p: SquadPlayer) => void }) {
@@ -30,18 +28,7 @@ function MatchRatings({ r, p, onChange }: { r: PlayerRatings | undefined; p: Squ
     <View style={{ gap: space.sm }}>
       <Text style={styles.rateLabel}>Match ratings</Text>
       {r && r.history.length > 0 ? (
-        <View style={styles.ratings}>
-          {r.history.slice(0, 8).map((m) => (
-            <View key={m.matchId} style={styles.ratingCell}>
-              <View style={[styles.ratingChip, ratingTone(m.rating)]}>
-                <Text style={[styles.ratingText, m.rating >= 8 && { color: colors.onAccent }]}>{m.rating.toFixed(1)}</Text>
-              </View>
-              <Text style={styles.ratingDay} numberOfLines={1}>
-                {day(m.date)}
-              </Text>
-            </View>
-          ))}
-        </View>
+        <RatingChips history={r.history} />
       ) : (
         <Text style={styles.catHint}>No matches yet. A rating out of 10 comes after each one they play.</Text>
       )}
@@ -94,11 +81,7 @@ function PlayerRow({
             <Text style={styles.miniText}>Bat {shown.bat}</Text>
             <Text style={styles.miniText}>Bowl {shown.bowl}</Text>
             <Text style={styles.miniText}>Field {shown.field}</Text>
-            {r?.form != null && (
-              <View style={[styles.form, ratingTone(r.form)]}>
-                <Text style={[styles.formText, r.form >= 8 && { color: colors.onAccent }]}>Form {r.form.toFixed(1)}</Text>
-              </View>
-            )}
+            {r?.form != null && <FormBadge form={r.form} />}
           </View>
         </View>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.faint} />
@@ -254,15 +237,5 @@ const styles = StyleSheet.create({
   editor: { gap: space.md, padding: space.md, paddingTop: 0 },
   rateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rateLabel: { color: colors.text, fontSize: 14, fontFamily: font.semibold },
-  form: { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: colors.surfaceHi },
-  formText: { color: colors.text, fontSize: 10, fontFamily: font.heavy, letterSpacing: 0.3, ...type.num },
-  ratings: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  ratingCell: { alignItems: 'center', gap: 3, width: 46 },
-  ratingChip: { width: 44, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceHi },
-  ratingText: { fontFamily: font.posterBlack, fontSize: 15, color: colors.text, ...type.num },
-  ratingDay: { color: colors.faint, fontSize: 10, fontFamily: font.medium },
-  rateTop: { backgroundColor: colors.accent },
-  rateGood: { backgroundColor: colors.cyanDim },
-  ratePoor: { backgroundColor: colors.dangerDim },
   foot: { color: colors.faint, fontSize: 12, fontFamily: font.regular, marginTop: space.lg, textAlign: 'center' },
 });

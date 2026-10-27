@@ -80,6 +80,15 @@ export function matchRatings(match: Match): Map<string, MatchRating> {
   return out;
 }
 
+/** One player's ratings, newest first, and their form from the last five: anyone who has played, in the squad or not. */
+export function playerRatings(matches: Match[], key: string): { history: MatchRating[]; form: number | null } {
+  const history = [...matches]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .flatMap((m) => matchRatings(m).get(key) ?? []);
+  const recent = history.slice(0, FORM_OF);
+  return { history, form: recent.length ? Math.round((recent.reduce((n, r) => n + r.rating, 0) / recent.length) * 10) / 10 : null };
+}
+
 /** 1 to 5 stars by where a figure ranks among everyone who has one (the best get 5). */
 function ranked(values: Map<string, number>): Map<string, Rating> {
   const sorted = [...values.entries()].sort((a, b) => a[1] - b[1]);
