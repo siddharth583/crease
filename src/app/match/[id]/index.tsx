@@ -243,6 +243,7 @@ function MatchMenu({
   onAddPlayer,
   onDeadBall,
   onEndInnings,
+  onDelete,
   onBowlerChange,
   onMovePlayer,
   inningsLabel,
@@ -260,6 +261,8 @@ function MatchMenu({
   onAddPlayer: (teamId: string, name: string) => void;
   onDeadBall: () => void;
   onEndInnings: () => void;
+  /** The match is called off: it goes, without a result. */
+  onDelete: () => void;
   /** A new bowler finishes the over (the one bowling it is hurt or taken off). */
   onBowlerChange: (bowler: string) => void;
   /** A player switches to the other side. */
@@ -273,6 +276,7 @@ function MatchMenu({
   const [overs, setOversDraft] = useState(match.rules.overs);
   const [target, setTargetDraft] = useState(0);
   const [arming, setArming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [lateTeam, setLateTeam] = useState(match.teams[0].id);
   const [lateName, setLateName] = useState('');
   const original = match.originalOvers ?? match.rules.overs;
@@ -288,6 +292,7 @@ function MatchMenu({
       setOversDraft(match.rules.overs);
       setTargetDraft(firstInningsRuns !== null ? chaseTargetInfo(match, firstInningsRuns).target : 1);
       setArming(false);
+      setDeleting(false);
       setLateName('');
     }
   }, [visible, match.rules.overs, match.revisedTarget, firstInningsRuns]);
@@ -402,6 +407,15 @@ function MatchMenu({
           icon="flag-outline"
           onPress={() => (arming ? onEndInnings() : setArming(true))}
           style={{ marginTop: space.sm }}
+        />
+
+        <Text style={styles.sheetLabel}>Called off</Text>
+        <Text style={styles.editNote}>Rained off, or just a test? Delete the match. It won’t count in anyone’s numbers.</Text>
+        <Button
+          variant="ghost"
+          label={deleting ? 'Tap again to delete it' : 'Delete this match'}
+          icon="trash-outline"
+          onPress={() => (deleting ? onDelete() : setDeleting(true))}
         />
       </ScrollView>
     </Sheet>
@@ -836,7 +850,7 @@ function momentFor(match: Match, s: InningsState, e: InningsEvent): Omit<Moment,
 export default function LiveMatch() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { match, saveMatch, ready } = useMatch(id);
-  const { matches } = useMatches();
+  const { matches, deleteMatch } = useMatches();
   const insets = useSafeAreaInsets();
   const [openers, setOpeners] = useState<string[]>([]);
   const [wicketFor, setWicketFor] = useState<Extra | null | undefined>(undefined);
@@ -1114,9 +1128,16 @@ export default function LiveMatch() {
     <Screen>
       <View style={styles.header}>
         <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
-        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={styles.headerTitle}>
-          {match.teams[0].name} <Text style={{ color: colors.accentInk }}>×</Text> {match.teams[1].name}
-        </Text>
+        {/* Both names in full, one above the other, so neither is cut short. */}
+        <View style={styles.headerTitle}>
+          <Text numberOfLines={1} style={styles.headerTeam}>
+            {match.teams[0].name}
+          </Text>
+          <Text numberOfLines={1} style={styles.headerTeam}>
+            <Text style={styles.headerVs}>vs </Text>
+            {match.teams[1].name}
+          </Text>
+        </View>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
           {/* While scoring, Undo sits on the pad; between balls' screens (openers, bowler, result) it's up here. */}
           {!live && <IconButton icon="arrow-undo" label="Undo" disabled={!canUndo(match)} onPress={undoLast} />}
@@ -1204,6 +1225,11 @@ export default function LiveMatch() {
           setMenu(false);
           push({ type: 'endInnings' });
         }}
+        onDelete={() => {
+          setMenu(false);
+          deleteMatch(match.id);
+          router.replace('/');
+        }}
         onMovePlayer={(playerId) => {
           const moved = movePlayer(match, playerId);
           if (typeof moved === 'string') {
@@ -1249,7 +1275,9 @@ export default function LiveMatch() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.sm },
-  headerTitle: { flex: 1, color: colors.text, fontSize: 20, fontFamily: font.poster, textAlign: 'center' },
+  headerTitle: { flex: 1, minWidth: 0, paddingHorizontal: space.sm },
+  headerTeam: { color: colors.text, fontSize: 16, lineHeight: 20, fontFamily: font.poster },
+  headerVs: { color: colors.accentInk, fontFamily: font.semibold, fontSize: 13 },
 
   hero: { borderRadius: radius.xl, padding: space.xl, overflow: 'hidden' },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

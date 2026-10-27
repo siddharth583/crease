@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import { ExportSheet } from '../components/ExportSheet.tsx';
 import { Button, Card, IconButton, Screen, SectionLabel, Segmented, useToast } from '../components/ui.tsx';
 import { useMatches } from '../store/matches.tsx';
 import { applyTheme, usePrefs } from '../store/prefs.ts';
@@ -12,7 +14,8 @@ export default function SettingsScreen() {
   const { prefs, setPrefs } = usePrefs();
   const { matches } = useMatches();
   const toast = useToast();
-  const { exportMatches } = useMatchFiles(toast.show);
+  const { exportMatches, exportAs, importFile } = useMatchFiles(toast.show);
+  const [exporting, setExporting] = useState(false);
 
   const backedUp = prefs.lastBackup
     ? `Last backup ${new Date(prefs.lastBackup).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
@@ -42,7 +45,7 @@ export default function SettingsScreen() {
         </Card>
 
 
-        <SectionLabel>Backup</SectionLabel>
+        <SectionLabel>Matches</SectionLabel>
         <Card style={{ gap: space.md }}>
           <Text style={styles.body}>{backedUp}. A backup is one match file with every match; keep it in Google Drive or send it to yourself.</Text>
           <Button
@@ -55,8 +58,20 @@ export default function SettingsScreen() {
               setPrefs({ lastBackup: Date.now() });
             }}
           />
+          <Button variant="ghost" label="Export as PDF or file" icon="document-text-outline" disabled={!matches.length} onPress={() => setExporting(true)} />
+          <Button variant="ghost" label="Import a match file" icon="push-outline" onPress={() => importFile()} />
+          <Text style={styles.note}>Import a match or a backup someone sent you. Matches you already have aren’t added twice.</Text>
         </Card>
       </ScrollView>
+      <ExportSheet
+        visible={exporting}
+        matches={matches}
+        onClose={() => setExporting(false)}
+        onExport={(format, chosen) => {
+          setExporting(false);
+          exportAs(format, chosen);
+        }}
+      />
       {toast.element}
     </Screen>
   );

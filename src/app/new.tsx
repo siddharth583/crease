@@ -210,6 +210,8 @@ export default function NewMatch() {
   const [tossing, setTossing] = useState(false);
 
   const names = teams.map((t, i) => t.name.trim() || (i === 0 ? 'Team A' : 'Team B'));
+  // A saved team picked for one side isn't offered to the other.
+  const savedFor = (side: 0 | 1) => savedTeams.filter((t) => t.name.trim().toLowerCase() !== teams[1 - side].name.trim().toLowerCase());
   const setSizeAll = (n: number) => {
     setSize(n);
     setTeams(([a, b]) => [
@@ -361,13 +363,13 @@ export default function NewMatch() {
             </PressableScale>
           )}
           <View style={{ gap: space.md }}>
-            <TeamEditor label="Team A" draft={teams[0]} saved={savedTeams} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} />
+            <TeamEditor label="Team A" draft={teams[0]} saved={savedFor(0)} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} />
             <View style={styles.vs} pointerEvents="none">
               <View style={styles.vsBadge}>
                 <Text style={styles.vsText}>vs</Text>
               </View>
             </View>
-            <TeamEditor label="Team B" draft={teams[1]} saved={savedTeams} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} />
+            <TeamEditor label="Team B" draft={teams[1]} saved={savedFor(1)} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} />
           </View>
 
           <Card style={{ gap: space.sm, marginTop: space.md }}>
@@ -422,10 +424,6 @@ export default function NewMatch() {
       <TossScene
         visible={tossing}
         names={[names[0], names[1]]}
-        captains={[0, 1].map((i) => {
-          const c = teams[i].captain;
-          return c !== undefined && teams[i].players[c]?.trim() ? teams[i].players[c].trim() : null;
-        }) as [string | null, string | null]}
         onClose={() => setTossing(false)}
         onDone={(result) => {
           setTossing(false);

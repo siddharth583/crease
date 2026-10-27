@@ -1,11 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ExportSheet } from '../../components/ExportSheet.tsx';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CountUp, Pulse, Rise, Sheen, Ticker } from '../../components/motion.tsx';
-import { Button, FadeIn, PitchStripes, PressableScale, Screen, SectionLabel, useToast } from '../../components/ui.tsx';
+import { ShareCardSheet } from '../../components/ShareCard.tsx';
+import { Button, FadeIn, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Sheet, useToast } from '../../components/ui.tsx';
 import { sampleSeason } from '../../demo/sampleSeason.ts';
 import { matchState, oversText } from '../../engine/engine.ts';
 import { allSeries, careerStats, playerOfTheMatch, type SeriesState } from '../../engine/stats.ts';
@@ -17,24 +17,8 @@ import { usePrefs } from '../../store/prefs.ts';
 import { colors, font, gradients, radius, space, type, hero, edge } from '../../theme.ts';
 import { AppMark } from '../../components/AppMark.tsx';
 
-function confirmDelete(onYes: () => void) {
-  if (Platform.OS === 'web') {
-    if (window.confirm('Delete this match? This can’t be undone.')) onYes();
-    return;
-  }
-  Alert.alert('Delete match?', 'This can’t be undone.', [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: onYes },
-  ]);
-}
-
 const openMatch = (m: Match, live: boolean) =>
   router.push(live ? { pathname: '/match/[id]', params: { id: m.id } } : { pathname: '/match/[id]/scorecard', params: { id: m.id } });
-
-const greeting = () => {
-  const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-};
 
 /** The match on right now leads the screen: a scoreboard on the pitch green, one tap from the scoring pad. */
 function LiveHero({ match }: { match: Match }) {
@@ -179,62 +163,99 @@ function SeriesCard({ s }: { s: SeriesState }) {
   );
 }
 
-function ResultRow({ match, onDelete }: { match: Match; onDelete: () => void }) {
+/** What can be done with a finished match: play it again, share the result, or delete it. */
+function ResultMenu({ match, onClose, onShare, onDelete }: { match: Match | null; onClose: () => void; onShare: () => void; onDelete: () => void }) {
+  const [deleting, setDeleting] = useState(false);
+  const close = () => {
+    setDeleting(false);
+    onClose();
+  };
+  return (
+    <Sheet visible={match !== null} onClose={close} title={match ? `${match.teams[0].name} vs ${match.teams[1].name}` : ''}>
+      <View style={{ gap: space.sm }}>
+        <Button
+          variant="ghost"
+          icon="refresh"
+          label="Rematch"
+          onPress={() => {
+            close();
+            if (match) router.push({ pathname: '/new', params: { rematch: match.id } });
+          }}
+        />
+        <Button variant="ghost" icon="image-outline" label="Share result picture" onPress={onShare} />
+        <Button
+          variant="danger"
+          icon="trash-outline"
+          label={deleting ? 'Tap again to delete it' : 'Delete this match'}
+          onPress={() => {
+            if (!deleting) return setDeleting(true);
+            setDeleting(false);
+            onDelete();
+          }}
+        />
+      </View>
+    </Sheet>
+  );
+}
+
+function ResultRow({ match, onMore }: { match: Match; onMore: () => void }) {
   const state = matchState(match);
   const mom = state.result ? playerOfTheMatch(match) : null;
   const d = new Date(match.createdAt);
+  // The ⋯ sits beside the row rather than inside it: a button can't hold another button.
   return (
-    <PressableScale
-      scaleTo={0.98}
-      onPress={() => openMatch(match, false)}
-      onLongPress={() => confirmDelete(onDelete)}
-      style={styles.result}
-    >
-      <View style={styles.date}>
-        <Text style={styles.dateDay}>{d.getDate()}</Text>
-        <Text style={styles.dateMonth}>{d.toLocaleDateString(undefined, { month: 'short' })}</Text>
-      </View>
-      <View style={{ flex: 1, gap: 4 }}>
-        {/* The match itself; a super over shows in the result line. */}
-        {state.innings.slice(0, 2).map((inn, i) => {
-          const won = state.winner === inn.battingTeam.id;
-          return (
-            <View key={i} style={styles.resultLine}>
-              <View style={[styles.winBar, won && { backgroundColor: colors.accentInk }]} />
-              <Text numberOfLines={1} style={[styles.resultTeam, won && { color: colors.text }]}>
-                {inn.battingTeam.name}
-              </Text>
-              <Text style={[styles.resultScore, won && { color: colors.text }]}>
-                {inn.runs}/{inn.wickets}
-                <Text style={styles.resultOvers}> {oversText(inn.legalBalls)}</Text>
+    <View style={styles.resultWrap}>
+      <PressableScale scaleTo={0.98} onPress={() => openMatch(match, false)} onLongPress={onMore} style={styles.result}>
+        <View style={styles.date}>
+          <Text style={styles.dateDay}>{d.getDate()}</Text>
+          <Text style={styles.dateMonth}>{d.toLocaleDateString(undefined, { month: 'short' })}</Text>
+        </View>
+        <View style={{ flex: 1, gap: 4 }}>
+          {/* The match itself; a super over shows in the result line. */}
+          {state.innings.slice(0, 2).map((inn, i) => {
+            const won = state.winner === inn.battingTeam.id;
+            return (
+              <View key={i} style={styles.resultLine}>
+                <View style={[styles.winBar, won && { backgroundColor: colors.accentInk }]} />
+                <Text numberOfLines={1} style={[styles.resultTeam, won && { color: colors.text }]}>
+                  {inn.battingTeam.name}
+                </Text>
+                <Text style={[styles.resultScore, won && { color: colors.text }]}>
+                  {inn.runs}/{inn.wickets}
+                  <Text style={styles.resultOvers}> {oversText(inn.legalBalls)}</Text>
+                </Text>
+              </View>
+            );
+          })}
+          <Text numberOfLines={1} style={styles.resultText}>
+            {state.result}
+          </Text>
+          {mom && (
+            <View style={styles.resultMom}>
+              <Ionicons name="star" size={11} color={colors.gold} />
+              <Text numberOfLines={1} style={styles.resultMomText}>
+                <Text style={styles.resultMomName}>{mom.name}</Text> · Man of the Match
               </Text>
             </View>
-          );
-        })}
-        <Text numberOfLines={1} style={styles.resultText}>
-          {state.result}
-        </Text>
-        {mom && (
-          <View style={styles.resultMom}>
-            <Ionicons name="star" size={11} color={colors.gold} />
-            <Text numberOfLines={1} style={styles.resultMomText}>
-              <Text style={styles.resultMomName}>{mom.name}</Text> · Man of the Match
-            </Text>
-          </View>
-        )}
+          )}
+        </View>
+      </PressableScale>
+      <View style={styles.more}>
+        <IconButton icon="ellipsis-horizontal" label="More for this match" onPress={onMore} />
       </View>
-    </PressableScale>
+    </View>
   );
 }
 
 export default function Home() {
   const { matches, deleteMatch, ready, importMatches } = useMatches();
   const toast = useToast();
-  const { importFile, exportAs, exportMatches } = useMatchFiles(toast.show);
+  const { exportMatches } = useMatchFiles(toast.show);
   const { prefs, setPrefs } = usePrefs();
   // Remind once a week that a lost phone shouldn't mean lost matches.
   const backupDue = matches.length >= 2 && (!prefs.lastBackup || Date.now() - prefs.lastBackup > 7 * 86_400_000);
-  const [exporting, setExporting] = useState<Match[] | null>(null);
+  const [more, setMore] = useState<Match | null>(null);
+  const [sharing, setSharing] = useState<Match | null>(null);
   const live = matches.filter((m) => !matchState(m).result);
   const done = matches.filter((m) => matchState(m).result);
   const series = useMemo(() => allSeries(matches), [matches]);
@@ -246,18 +267,10 @@ export default function Home() {
           <AppMark size={34} />
           <Text style={styles.brand}>crease</Text>
           <View style={{ flex: 1 }} />
-          <PressableScale accessibilityLabel="Auction: pick the teams" onPress={() => router.push('/auction/new')} style={styles.auctionPill}>
-            <Ionicons name="hammer" size={15} color={colors.accentInk} />
-            <Text numberOfLines={1} style={styles.auctionText}>
-              Auction
-            </Text>
-          </PressableScale>
           <PressableScale accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={styles.gear}>
             <Ionicons name="settings-outline" size={18} color={colors.text} />
           </PressableScale>
         </View>
-        <Text style={styles.dateLine}>{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
-        <Text style={styles.greeting}>{greeting()}</Text>
 
         <FadeIn>{live[0] ? <LiveHero match={live[0]} /> : <PosterHero />}</FadeIn>
         {live.slice(1).map((m, i) => (
@@ -309,30 +322,6 @@ export default function Home() {
           </FadeIn>
         )}
 
-        <FadeIn delay={180}>
-          <SectionLabel>Match files</SectionLabel>
-          <View style={styles.files}>
-            <View style={{ flex: 1 }}>
-              <PressableScale onPress={() => importFile()} style={styles.fileButton}>
-                <View style={styles.fileIcon}>
-                  <Ionicons name="push-outline" size={18} color={colors.accentInk} />
-                </View>
-                <Text style={styles.fileTitle}>Import</Text>
-                <Text style={styles.fileBody}>A match someone sent you</Text>
-              </PressableScale>
-            </View>
-            <View style={{ flex: 1 }}>
-              <PressableScale disabled={!matches.length} onPress={() => setExporting(matches)} style={styles.fileButton}>
-                <View style={styles.fileIcon}>
-                  <Ionicons name="download-outline" size={18} color={colors.accentInk} />
-                </View>
-                <Text style={styles.fileTitle}>Export</Text>
-                <Text style={styles.fileBody}>PDF or match file, any matches</Text>
-              </PressableScale>
-            </View>
-          </View>
-        </FadeIn>
-
         {__DEV__ && (
           // Development builds only: a season of Copan A vs Copan B to try every screen with real-looking numbers.
           <PressableScale
@@ -350,26 +339,31 @@ export default function Home() {
 
         {done.length > 0 && (
           <FadeIn delay={240}>
-            <SectionLabel right={<Text style={styles.hint}>Hold to delete</Text>}>Results</SectionLabel>
+            <SectionLabel>Results</SectionLabel>
             <View style={{ gap: space.sm }}>
               {done.map((m, i) => (
                 <Rise key={m.id} index={i}>
-                  <ResultRow match={m} onDelete={() => deleteMatch(m.id)} />
+                  <ResultRow match={m} onMore={() => setMore(m)} />
                 </Rise>
               ))}
             </View>
           </FadeIn>
         )}
       </ScrollView>
-      <ExportSheet
-        visible={exporting !== null}
-        matches={exporting ?? []}
-        onClose={() => setExporting(null)}
-        onExport={(format, chosen) => {
-          setExporting(null);
-          exportAs(format, chosen);
+      <ResultMenu
+        match={more}
+        onClose={() => setMore(null)}
+        onShare={() => {
+          setSharing(more);
+          setMore(null);
+        }}
+        onDelete={() => {
+          if (more) deleteMatch(more.id);
+          setMore(null);
+          toast.show('Match deleted', 'info');
         }}
       />
+      {sharing && <ShareCardSheet match={sharing} all={matches} visible onClose={() => setSharing(null)} notify={toast.show} />}
       {toast.element}
     </Screen>
   );
@@ -377,23 +371,8 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: 130 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.xl },
   brand: { fontFamily: font.posterBlack, fontSize: 22, color: colors.text, letterSpacing: -0.6 },
-  dateLine: { color: colors.muted, fontSize: 13, fontFamily: font.medium, marginTop: space.xl },
-  greeting: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.2, marginBottom: space.lg },
-  auctionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 38,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...edge,
-  },
-  auctionText: { color: colors.text, fontSize: 14, fontFamily: font.semibold },
   gear: {
     width: 38,
     height: 38,
@@ -501,7 +480,6 @@ const styles = StyleSheet.create({
   topRuns: { fontFamily: font.posterBlack, fontSize: 24, color: colors.text, ...type.num },
   topUnit: { fontFamily: font.medium, fontSize: 13, color: colors.muted },
 
-  files: { flexDirection: 'row', gap: space.sm },
   series: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -517,20 +495,7 @@ const styles = StyleSheet.create({
   seriesName: { fontFamily: font.posterBlack, fontSize: 24, lineHeight: 28, color: colors.text, letterSpacing: -0.6 },
   seriesStatus: { color: colors.muted, fontSize: 13, fontFamily: font.medium },
   seriesScore: { fontFamily: font.posterBlack, fontSize: 44, lineHeight: 48, color: colors.text, letterSpacing: -1.5, ...type.num },
-  fileButton: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: space.lg,
-    gap: 4,
-    ...edge,
-  },
-  fileIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center' },
-  fileTitle: { fontFamily: font.poster, fontSize: 18, color: colors.text, marginTop: space.md, letterSpacing: -0.3 },
-  fileBody: { color: colors.muted, fontSize: 12, fontFamily: font.medium, lineHeight: 16 },
 
-  hint: { color: colors.faint, fontSize: 12, fontFamily: font.regular },
   devButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -544,7 +509,10 @@ const styles = StyleSheet.create({
     borderColor: colors.borderHi,
   },
   devText: { color: colors.faint, fontSize: 12, fontFamily: font.semibold },
+  resultWrap: { justifyContent: 'center' },
+  more: { position: 'absolute', right: space.sm },
   result: {
+    paddingRight: 56,
     flexDirection: 'row',
     gap: space.md,
     backgroundColor: colors.surface,

@@ -2,13 +2,10 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ExportSheet } from '../../components/ExportSheet.tsx';
-import { FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, Segmented, useToast } from '../../components/ui.tsx';
+import { FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, Segmented } from '../../components/ui.tsx';
 import { battingAverage, bestFigures, bowlingOvers, careerStats, economy, strikeRate, type Career } from '../../engine/stats.ts';
-import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
-import { useMatchFiles } from '../../store/useMatchFiles.ts';
 import { colors, font, radius, space, type, edge } from '../../theme.ts';
 
 type Board = 'batting' | 'bowling';
@@ -135,9 +132,6 @@ export default function Players() {
   const { squad } = useSquad();
   // The squad decides who counts as one person across teams.
   const careers = useMemo(() => careerStats(matches), [matches, squad]);
-  const toast = useToast();
-  const { exportAs } = useMatchFiles(toast.show);
-  const [exporting, setExporting] = useState<Match[] | null>(null);
 
   const q = query.trim().toLowerCase();
   const ranked = careers.filter(BOARDS[board].has).sort(BOARDS[board].sort);
@@ -156,7 +150,6 @@ export default function Players() {
           <View style={{ flexDirection: 'row', gap: space.sm }}>
             <IconButton icon="people-outline" label="The squad" onPress={() => router.push('/squad')} />
             <IconButton icon="trophy-outline" label="Record book" onPress={() => router.push('/records')} />
-          <IconButton icon="download-outline" label="Export matches" disabled={!matches.length} onPress={() => setExporting(matches)} />
           </View>
         </View>
         <View style={{ gap: space.md }}>
@@ -211,16 +204,6 @@ export default function Players() {
           </View>
         )}
       </ScrollView>
-      <ExportSheet
-        visible={exporting !== null}
-        matches={exporting ?? []}
-        onClose={() => setExporting(null)}
-        onExport={(format, chosen) => {
-          setExporting(null);
-          exportAs(format, chosen);
-        }}
-      />
-      {toast.element}
     </Screen>
   );
 }
