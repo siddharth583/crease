@@ -231,7 +231,7 @@ function ThisOver({ s, onEdit }: { s: InningsState; onEdit: (b: BallView) => voi
   );
 }
 
-/** Things that happen to the match rather than to a ball: rain, a declaration, a late arrival, penalties. */
+/** Things that happen to the match rather than to a ball: rain, a declaration, a late arrival, a switch of sides. */
 function MatchMenu({
   visible,
   match,
@@ -241,7 +241,6 @@ function MatchMenu({
   onOvers,
   onTarget,
   onAddPlayer,
-  onPenalty,
   onDeadBall,
   onEndInnings,
   onBowlerChange,
@@ -259,7 +258,6 @@ function MatchMenu({
   onOvers: (overs: number) => void;
   onTarget: (target: number | undefined) => void;
   onAddPlayer: (teamId: string, name: string) => void;
-  onPenalty: (runs: number) => void;
   onDeadBall: () => void;
   onEndInnings: () => void;
   /** A new bowler finishes the over (the one bowling it is hurt or taken off). */
@@ -396,14 +394,7 @@ function MatchMenu({
         </Card>
 
         <Text style={styles.sheetLabel}>Umpire’s call</Text>
-        <View style={{ flexDirection: 'row', gap: space.sm }}>
-          <View style={{ flex: 1 }}>
-            <Button variant="ghost" label={`+5 to ${s.battingTeam.name}`} icon="alert-circle-outline" onPress={() => onPenalty(5)} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Button variant="ghost" label="Dead ball" icon="hand-left-outline" onPress={onDeadBall} />
-          </View>
-        </View>
+        <Button variant="ghost" label="Dead ball" icon="hand-left-outline" onPress={onDeadBall} />
 
         <Button
           variant="danger"
@@ -1202,11 +1193,6 @@ export default function LiveMatch() {
         onAddPlayer={(teamId, name) => {
           saveMatch(addPlayer(match, teamId, { id: newId(), name }));
           toast.show(`${name} added`, 'success');
-          setMenu(false);
-        }}
-        onPenalty={(runs) => {
-          push({ type: 'penalty', runs });
-          toast.show(`${runs} penalty runs to ${s.battingTeam.name}`, 'info');
           setMenu(false);
         }}
         onDeadBall={() => {

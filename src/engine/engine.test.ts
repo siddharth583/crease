@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addEvent, addPlayer, movePlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, replaceOver, setOvers, startSuperOver, undo, type OverBall } from './engine.ts';
+import { addEvent, addPlayer, movePlayer, renamePlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, replaceOver, setOvers, startSuperOver, undo, type OverBall } from './engine.ts';
 import { momChoices, playerOfTheMatch } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Rules, Team } from './types.ts';
 
@@ -512,6 +512,16 @@ test('a player who hasn’t batted or bowled can switch sides mid-match', () => 
   assert.equal(typeof thin, 'string');
   // B can now be all out only after four wickets (five players).
   assert.equal(matchState(moved).innings[1].battingTeam.players.length, 5);
+});
+
+test('a player can be renamed after the match, keeping every ball', () => {
+  let m = start(setup({ overs: 1 }));
+  m = play(m, ball(4), ball(1));
+  const renamed = renamePlayer(m, 'a1', '  Siddharth   Singh ')!;
+  assert.equal(renamed.teams[0].players[0].name, 'Siddharth Singh');
+  assert.equal(matchState(renamed).innings[0].batters[0].runs, 5, 'their runs stay theirs');
+  assert.equal(renamePlayer(m, 'a1', '   '), null, 'a name can’t be empty');
+  assert.equal(renamePlayer(m, 'a1', 'a1'), m, 'the same name changes nothing');
 });
 
 test('last man standing: the lone batter is credited with every run, after singles and over ends too', () => {

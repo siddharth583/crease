@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OverEditSheet } from '../../../components/OverEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
 import { BallChip, Button, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../../../components/ui.tsx';
-import { dismissal, fairBalls, matchState, oversText, playerName, replaceOver, type InningsState } from '../../../engine/engine.ts';
+import { dismissal, fairBalls, matchState, oversText, playerName, renamePlayer, replaceOver, type InningsState } from '../../../engine/engine.ts';
 import { isPlaceholder, keyFor, momChoices, playerOfTheMatch } from '../../../engine/stats.ts';
 import type { BallEvent, Match, Team } from '../../../engine/types.ts';
 import { useMatch, useMatches } from '../../../store/matches.tsx';
@@ -228,6 +228,51 @@ function MomSheet({ match, visible, onClose, onPick }: { match: Match; visible: 
   );
 }
 
+/** One player's name, editable: saved when they finish typing, put back if left empty. */
+function NameField({ name, onSave }: { name: string; onSave: (name: string) => void }) {
+  const [draft, setDraft] = useState(name);
+  const save = () => {
+    if (!draft.trim()) setDraft(name);
+    else if (draft.trim() !== name) onSave(draft);
+  };
+  return (
+    <TextInput
+      value={draft}
+      onChangeText={setDraft}
+      onBlur={save}
+      onSubmitEditing={save}
+      returnKeyType="done"
+      autoCapitalize="words"
+      maxLength={28}
+      style={styles.nameInput}
+      placeholderTextColor={colors.faint}
+      accessibilityLabel={`Rename ${name}`}
+    />
+  );
+}
+
+/** Every player's name in this match, both sides, to fix a spelling or put in a full name. */
+function NamesEditor({ match, onRename }: { match: Match; onRename: (playerId: string, name: string) => void }) {
+  return (
+    <>
+      <SectionLabel>Players’ names</SectionLabel>
+      <Card style={{ gap: space.md }}>
+        <Text style={styles.namesHint}>Tap a name to change it. Their runs and wickets stay with them, and their stats follow the new name.</Text>
+        {match.teams.map((t) => (
+          <View key={t.id} style={{ gap: space.sm }}>
+            <Text style={styles.namesTeam}>{t.name}</Text>
+            {t.players
+              .filter((p) => !(p.common && t !== match.teams[0]))
+              .map((p) => (
+                <NameField key={p.id} name={p.name} onSave={(name) => onRename(p.id, name)} />
+              ))}
+          </View>
+        ))}
+      </Card>
+    </>
+  );
+}
+
 export default function Scorecard() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { match, saveMatch } = useMatch(id);
@@ -312,7 +357,8 @@ export default function Scorecard() {
             <Ionicons name="create-outline" size={16} color={colors.accentInk} />
             <Text style={styles.editHintText}>
               Editing. Tap any over below to change its balls, add or take some away, or say who bowled them (a new bowler
-              mid-over takes over from the ball they started). Every over keeps its 6 fair balls.
+              mid-over takes over from the ball they started). Every over keeps its 6 fair balls. Players’ names are at
+              the bottom.
             </Text>
           </View>
         )}
@@ -320,6 +366,15 @@ export default function Scorecard() {
           <>
             <InningsCard match={match} s={s} />
             <OversEditor match={match} s={s} inningsIndex={Number(shown)} onOpen={setEditingOver} />
+            <NamesEditor
+              match={match}
+              onRename={(playerId, name) => {
+                const renamed = renamePlayer(match, playerId, name);
+                if (!renamed || renamed === match) return;
+                saveMatch(renamed);
+                toast.show(`${playerName(match, playerId)} is now ${playerName(renamed, playerId)}`, 'success');
+              }}
+            />
           </>
         ) : started ? (
           <>
@@ -472,6 +527,19 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   editHintText: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 19, fontFamily: font.medium },
+  namesHint: { color: colors.muted, fontSize: 13, lineHeight: 19, fontFamily: font.medium },
+  namesTeam: { ...type.label, color: colors.muted },
+  nameInput: {
+    color: colors.text,
+    fontSize: 15,
+    fontFamily: font.semibold,
+    backgroundColor: colors.bg,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
+    height: 44,
+  },
   editOver: { paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: 1, borderTopColor: colors.border, gap: space.sm },
   editOverHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   editOverTitle: { ...type.label, fontSize: 10, color: colors.muted },

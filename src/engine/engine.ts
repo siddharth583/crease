@@ -496,6 +496,23 @@ export function movePlayer(match: Match, playerId: string): Match | string {
   };
 }
 
+/**
+ * Rename a player in this match (a typo, a nickname, a full name). Their balls stay theirs: only the name changes, so
+ * the scorecard, the stats and the records follow it. The common player is renamed on both sides. Null if the new
+ * name is empty or the player isn't here.
+ */
+export function renamePlayer(match: Match, playerId: string, name: string): Match | null {
+  const clean = name.trim().replace(/\s+/g, ' ');
+  const player = match.teams.flatMap((t) => t.players).find((p) => p.id === playerId);
+  if (!clean || !player) return null;
+  if (clean === player.name) return match;
+  const same = (p: { id: string; name: string; common?: boolean }) => p.id === playerId || (player.common && p.common && p.name === player.name);
+  return {
+    ...match,
+    teams: match.teams.map((t) => ({ ...t, players: t.players.map((p) => (same(p) ? { ...p, name: clean } : p)) })) as [Team, Team],
+  };
+}
+
 export function teamById(match: Match, id: string): Team {
   const team = match.teams.find((t) => t.id === id);
   if (!team) throw new Error(`Unknown team ${id}`);
