@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap } from '../components/ui.tsx';
+import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, useToast } from '../components/ui.tsx';
 import { TossScene, type TossResult } from '../components/TossScene.tsx';
 import { auctionState, rosterPlayer, type Auction } from '../engine/auction.ts';
 import { newMatch } from '../engine/engine.ts';
@@ -143,7 +143,7 @@ function TeamEditor({
               </PressableScale>
             </View>
           ))}
-          <Text style={styles.help}>Blank names become Player 1, Player 2… Tap C for the captain, WK for the keeper.</Text>
+          <Text style={styles.help}>Leave a slot empty if the side is short: they play with the names here. Tap C for the captain, WK for the keeper.</Text>
           <View style={styles.pasteBox}>
             <TextInput
               value={paste}
@@ -205,6 +205,7 @@ export default function NewMatch() {
   const [seriesOf, setSeriesOf] = useState<'3' | '5' | '7'>('3');
   const [seriesName, setSeriesName] = useState('');
   const [common, setCommon] = useState(source ? source.teams[0].players.find((p) => p.common)?.name ?? '' : '');
+  const toast = useToast();
   // The toss happens out in the middle once the sides are set: Start match opens it.
   const [tossing, setTossing] = useState(false);
 
@@ -227,19 +228,31 @@ export default function NewMatch() {
     });
   };
 
+  /**
+   * Each side's players: the names filled in, empty slots left out, so a side can play a player or two short. A side
+   * with no names at all plays as Player 1, Player 2…, for a quick match. `slot` is where each was in the list.
+   */
+  const lineUps = teams.map((t) => {
+    const named = t.players.map((p, slot) => ({ name: p.trim(), slot })).filter((x) => x.name);
+    return named.length ? named : t.players.map((_, slot) => ({ name: `Player ${slot + 1}`, slot }));
+  });
+  const tooFew = lineUps.findIndex((l) => l.length < 2);
+
   const start = ({ winner: tossWinner, choice }: TossResult) => {
     const built = teams.map(
       (t, i): Team => ({
         id: newId(),
         name: names[i],
         players: [
-          ...t.players.map((p, j) => ({ id: newId(), name: p.trim() || `Player ${j + 1}` })),
+          ...lineUps[i].map((x) => ({ id: newId(), name: x.name })),
           // The common player turns out for both sides.
           ...(common.trim() ? [{ id: newId(), name: common.trim(), common: true }] : []),
         ],
       }),
     ) as [Team, Team];
-    const match = newMatch(newId(), built, { ...rules, playersPerSide: size }, {
+    // The longer side's count; the other plays short.
+    const sideSize = Math.max(lineUps[0].length, lineUps[1].length);
+    const match = newMatch(newId(), built, { ...rules, playersPerSide: sideSize }, {
       winner: built[Number(tossWinner)].id,
       choice,
     });
@@ -252,8 +265,9 @@ export default function NewMatch() {
     const pick = (key: 'captain' | 'keeper') =>
       Object.fromEntries(
         built.flatMap((t, i) => {
-          const idx = teams[i][key];
-          return idx !== undefined && t.players[idx] ? [[t.id, t.players[idx].id]] : [];
+          // The captain and keeper were marked by their slot in the list; find them among the players kept.
+          const at = lineUps[i].findIndex((x) => x.slot === teams[i][key]);
+          return at >= 0 ? [[t.id, t.players[at].id]] : [];
         }),
       );
     match.captains = pick('captain');
@@ -396,7 +410,13 @@ export default function NewMatch() {
         <Button
           label={ongoing?.next ? `Start match ${ongoing.next}` : kind === 'series' ? 'Start the series' : 'Start match'}
           icon="play"
-          onPress={() => setTossing(true)}
+          onPress={() => {
+            if (tooFew >= 0) {
+              toast.show(`${names[tooFew]} needs at least 2 players`, 'error');
+              return;
+            }
+            setTossing(true);
+          }}
         />
       </View>
       <TossScene
@@ -412,6 +432,7 @@ export default function NewMatch() {
           start(result);
         }}
       />
+      {toast.element}
     </Screen>
   );
 }

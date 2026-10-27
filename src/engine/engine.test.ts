@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addEvent, addPlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, replaceOver, setOvers, startSuperOver, undo, type OverBall } from './engine.ts';
+import { addEvent, addPlayer, movePlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, replaceOver, setOvers, startSuperOver, undo, type OverBall } from './engine.ts';
 import { momChoices, playerOfTheMatch } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Rules, Team } from './types.ts';
 
@@ -495,6 +495,23 @@ test('a batter coming in after a wicket stays after it when the over is rewritte
   assert.equal(s.wickets, 1);
   assert.ok(s.batters.some((b) => b.id === 'a3'));
   assert.equal(s.legalBalls, 7);
+});
+
+test('a player who hasn’t batted or bowled can switch sides mid-match', () => {
+  let m = start(setup({ overs: 2 }, 4));
+  m = play(m, ball(1), ball(0));
+  // a3 hasn't batted yet: they can go to B, who now have five; a1 is batting and stays.
+  const moved = movePlayer(m, 'a3') as Match;
+  assert.equal(typeof moved, 'object');
+  assert.equal(moved.teams[0].players.length, 3);
+  assert.ok(moved.teams[1].players.some((p) => p.id === 'a3'));
+  assert.match(String(movePlayer(m, 'a1')), /already batted/);
+  assert.match(String(movePlayer(m, 'b1')), /already batted or bowled/);
+  // A side can't be left with fewer than two.
+  const thin = movePlayer(movePlayer(moved, 'a4') as Match, 'a2');
+  assert.equal(typeof thin, 'string');
+  // B can now be all out only after four wickets (five players).
+  assert.equal(matchState(moved).innings[1].battingTeam.players.length, 5);
 });
 
 test('last man standing: the lone batter is credited with every run, after singles and over ends too', () => {

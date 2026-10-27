@@ -2,7 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 
 /** Keep the screen on while scoring. Best effort: some browsers refuse a wake lock, and that's fine. */
 function useScreenAwake() {
@@ -43,6 +43,7 @@ import {
   addEvent,
   addPlayer,
   canUndo,
+  movePlayer,
   chaseTargetInfo,
   describeEvent,
   highlights,
@@ -244,6 +245,7 @@ function MatchMenu({
   onDeadBall,
   onEndInnings,
   onBowlerChange,
+  onMovePlayer,
   inningsLabel,
   dlsG,
   superOver,
@@ -262,6 +264,8 @@ function MatchMenu({
   onEndInnings: () => void;
   /** A new bowler finishes the over (the one bowling it is hurt or taken off). */
   onBowlerChange: (bowler: string) => void;
+  /** A player switches to the other side. */
+  onMovePlayer: (playerId: string) => void;
   inningsLabel: string;
   /** Average first-innings score at this length, for DLS. */
   dlsG?: number;
@@ -356,6 +360,25 @@ function MatchMenu({
 
           </>
         )}
+
+        <Text style={styles.sheetLabel}>Switch sides</Text>
+        <Card style={{ gap: space.sm }}>
+          <Text style={styles.editNote}>Tap a player to move them to the other side. Anyone who has batted or bowled stays where they are.</Text>
+          {match.teams.map((t) => (
+            <View key={t.id} style={{ gap: 6 }}>
+              <Text style={styles.switchTeam}>
+                {t.name} <Text style={{ color: colors.faint }}>· {t.players.length}</Text>
+              </Text>
+              <View style={styles.wrap}>
+                {t.players
+                  .filter((p) => !p.common)
+                  .map((p) => (
+                    <Chip key={p.id} label={p.name} icon="swap-horizontal" disabled={typeof movePlayer(match, p.id) === 'string'} onPress={() => onMovePlayer(p.id)} />
+                  ))}
+              </View>
+            </View>
+          ))}
+        </Card>
 
         <Text style={styles.sheetLabel}>Late arrival</Text>
         <Card style={{ gap: space.sm }}>
@@ -488,8 +511,6 @@ const EXTRAS: { value: PadMode; label: string }[] = [
   { value: 'wide', label: 'Wide' },
   { value: 'noball', label: 'No ball' },
   { value: 'bouncer', label: 'Bounce' },
-  { value: 'bye', label: 'Bye' },
-  { value: 'legbye', label: 'LB' },
 ];
 
 const MODE_HINT: Record<Extra, string> = {
@@ -517,13 +538,16 @@ function Key({
   disabled,
   variant = 'plain',
   height = 66,
+  icon,
 }: {
   label: string;
   sub?: string;
   onPress: () => void;
   disabled?: boolean;
-  variant?: 'plain' | 'four' | 'six' | 'out' | 'mode';
+  variant?: 'plain' | 'four' | 'six' | 'out' | 'mode' | 'undo';
   height?: number;
+  /** Shown instead of the label (the label still names it for screen readers). */
+  icon?: ComponentProps<typeof Ionicons>['name'];
 }) {
   const v = {
     plain: [styles.key, colors.text],
@@ -531,6 +555,7 @@ function Key({
     six: [[styles.key, styles.keySix], colors.onAccent],
     out: [[styles.key, styles.keyOut], '#FFFFFF'],
     mode: [[styles.key, styles.keyMode], colors.violet],
+    undo: [[styles.key, styles.keyUndo], colors.muted],
   }[variant] as [object, string];
   return (
     <View style={{ flex: 1 }}>
@@ -542,7 +567,7 @@ function Key({
         onPress={onPress}
         style={[v[0], { height }]}
       >
-        <Text style={[styles.keyText, { color: v[1] }, label.length > 2 && { fontSize: 26 }]}>{label}</Text>
+        {icon ? <Ionicons name={icon} size={26} color={v[1]} /> : <Text style={[styles.keyText, { color: v[1] }, label.length > 2 && { fontSize: 26 }]}>{label}</Text>}
         {sub && <Text style={[styles.keySub, { color: v[1] }]}>{sub}</Text>}
       </PressableScale>
     </View>
@@ -563,10 +588,15 @@ function Banner({ tone, title, body }: { tone: 'volt' | 'red'; title: string; bo
 function Pad({
   onBall,
   onWicket,
+  onUndo,
+  canUndo: undoable,
   bounce,
 }: {
   onBall: (b: BallEvent) => void;
   onWicket: (mode: Extra | null) => void;
+  /** Takes back the last ball, right where it was scored. */
+  onUndo: () => void;
+  canUndo: boolean;
   /** How a bounce would count right now. */
   bounce: { choice: boolean; hint: string };
 }) {
@@ -629,8 +659,10 @@ function Pad({
       )}
       <View style={styles.grid}>{[0, 1, 2, 3].map(runKey)}</View>
       <View style={styles.grid}>
-        {([4, 6, 5, 'out'] as const).map((k) =>
-          k === 'out' ? (
+        {([4, 6, 'undo', 'out'] as const).map((k) =>
+          k === 'undo' ? (
+            <Key key="undo" label="Undo" sub="LAST BALL" icon="arrow-undo" variant="undo" disabled={!undoable} onPress={onUndo} />
+          ) : k === 'out' ? (
             <Key
               key="out"
               label={'OUT'}
@@ -1095,7 +1127,8 @@ export default function LiveMatch() {
           {match.teams[0].name} <Text style={{ color: colors.accentInk }}>×</Text> {match.teams[1].name}
         </Text>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
-          <IconButton icon="arrow-undo" label="Undo" disabled={!canUndo(match)} onPress={undoLast} />
+          {/* While scoring, Undo sits on the pad; between balls' screens (openers, bowler, result) it's up here. */}
+          {!live && <IconButton icon="arrow-undo" label="Undo" disabled={!canUndo(match)} onPress={undoLast} />}
           <IconButton
             icon="stats-chart"
             label="Scorecard"
@@ -1119,7 +1152,7 @@ export default function LiveMatch() {
           {s.bowler && s.streaks[s.bowler] === 2 && (
             <Banner tone="red" title={'HAT-TRICK BALL'} body={`${playerName(match, s.bowler)} has two in a row`} />
           )}
-          <Pad onBall={push} onWicket={(mode) => setWicketFor(mode)} bounce={bounceInfo(match, s)} />
+          <Pad onBall={push} onWicket={(mode) => setWicketFor(mode)} onUndo={undoLast} canUndo={canUndo(match)} bounce={bounceInfo(match, s)} />
         </View>
       )}
 
@@ -1184,6 +1217,16 @@ export default function LiveMatch() {
         onEndInnings={() => {
           setMenu(false);
           push({ type: 'endInnings' });
+        }}
+        onMovePlayer={(playerId) => {
+          const moved = movePlayer(match, playerId);
+          if (typeof moved === 'string') {
+            toast.show(moved, 'error');
+            return;
+          }
+          const to = moved.teams.find((t) => t.players.some((p) => p.id === playerId))!;
+          saveMatch(moved);
+          toast.show(`${playerName(match, playerId)} now plays for ${to.name}`, 'success');
         }}
         onBowlerChange={(bowler) => {
           toast.show(`${playerName(match, bowler)} takes over from ${playerName(match, s.bowler)}`, 'info');
@@ -1378,6 +1421,7 @@ const styles = StyleSheet.create({
   keyFour: { backgroundColor: colors.cyanDim, borderColor: 'transparent' },
   keySix: { backgroundColor: colors.accent, borderColor: colors.accent },
   keyMode: { backgroundColor: colors.violetDim, borderColor: colors.violet },
+  keyUndo: { backgroundColor: colors.surfaceHi, borderColor: colors.borderHi },
   keyOut: { backgroundColor: colors.danger, borderColor: colors.danger },
   keyText: { color: colors.text, fontSize: 30, lineHeight: 34, fontFamily: font.posterBlack, ...type.num },
   keySub: { fontSize: 9, fontFamily: font.semibold, letterSpacing: 1, marginTop: -1, opacity: 0.75 },
@@ -1413,6 +1457,7 @@ const styles = StyleSheet.create({
   bannerTitle: { fontFamily: font.posterBlack, fontSize: 17, color: colors.onAccent },
   bannerBody: { flex: 1, fontFamily: font.semibold, fontSize: 12, color: colors.onAccent },
   sheetLabel: { ...type.label, color: colors.muted, marginTop: space.xs },
+  switchTeam: { fontFamily: font.bold, fontSize: 14, color: colors.text },
 
   result: {
     backgroundColor: colors.accent,

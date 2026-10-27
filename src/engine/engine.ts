@@ -469,6 +469,33 @@ export function addPlayer(match: Match, teamId: string, player: { id: string; na
   };
 }
 
+/**
+ * Move a player to the other side mid-match (sides rebalanced, someone's needed elsewhere). Only someone who hasn't
+ * batted or bowled yet can move: anything they've done counts for the side they did it for. Captaincy or keeping for
+ * their old side goes. The new match, or why the move can't be made.
+ */
+export function movePlayer(match: Match, playerId: string): Match | string {
+  const from = match.teams.find((t) => t.players.some((p) => p.id === playerId));
+  if (!from) return 'That player isn’t in this match.';
+  const player = from.players.find((p) => p.id === playerId)!;
+  if (player.common) return `${player.name} already plays for both sides.`;
+  const to = match.teams.find((t) => t !== from)!;
+  const state = matchState(match);
+  const played = state.innings.some((inn) => inn.batters.some((b) => b.id === playerId) || inn.bowlers.some((b) => b.id === playerId));
+  if (played) return `${player.name} has already batted or bowled for ${from.name}, so stays with them.`;
+  if (from.players.length <= 2) return `${from.name} would be left with only ${from.players.length - 1}.`;
+  const without = <T extends Record<string, string> | undefined>(marks: T) =>
+    marks && marks[from.id] === playerId ? (Object.fromEntries(Object.entries(marks).filter(([k]) => k !== from.id)) as T) : marks;
+  return {
+    ...match,
+    teams: match.teams.map((t) =>
+      t === from ? { ...t, players: t.players.filter((p) => p.id !== playerId) } : { ...t, players: [...t.players, player] },
+    ) as [Team, Team],
+    captains: without(match.captains),
+    keepers: without(match.keepers),
+  };
+}
+
 export function teamById(match: Match, id: string): Team {
   const team = match.teams.find((t) => t.id === id);
   if (!team) throw new Error(`Unknown team ${id}`);
