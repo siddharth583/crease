@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { mergeMatches } from '../engine/backup.ts';
-import { DEFAULT_TEAMS, TEAMS_REVISION } from '../engine/squad.ts';
+import { DEFAULT_TEAMS, renameSides, renameTeam, TEAMS_REVISION } from '../engine/squad.ts';
 import type { Match, Team } from '../engine/types.ts';
 
 // Everything lives on the phone (grounds often have no signal). Match files and backups move it between phones.
@@ -77,9 +77,10 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
       load<number>(TEAMS_REVISION_KEY, 1, (v) => typeof v === 'number'),
     ]).then(([loadedMatches, loadedTeams, loadedRevision]) => {
       writable.current = { matches: loadedMatches.writable, teams: loadedTeams.writable };
-      const m = loadedMatches.value;
-      const t = loadedTeams.value;
       const revision = loadedRevision.value;
+      // Copan A and B became Copan Strikers and Copan Royals in revision 3: the matches already played follow.
+      const m = revision < 3 ? loadedMatches.value.map(renameSides) : loadedMatches.value;
+      const t = revision < 3 ? loadedTeams.value.map(renameTeam) : loadedTeams.value;
       setMatches(m);
       // A phone with no saved teams (a new phone, or a new web address) starts with the club's two usual sides; one
       // that has them gets the new line-ups of those two once, when the sides change. Other saved teams stay.
@@ -111,7 +112,10 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
     setSavedTeams((all) => mergeTeams(all, teams));
   }, []);
 
-  const importMatches = useCallback((incoming: Match[], teams: Team[]) => {
+  const importMatches = useCallback((files: Match[], fileTeams: Team[]) => {
+    // A file from a phone that still has the old names comes in under the new ones.
+    const incoming = files.map(renameSides);
+    const teams = fileTeams.map(renameTeam);
     const result = mergeMatches(latest.current, incoming);
     // Merged against whatever is there when it lands, so two imports in a row both count.
     if (result.changed.length) setMatches((all) => mergeMatches(all, incoming).matches);

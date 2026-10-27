@@ -45,14 +45,14 @@ test('the order inside each team follows the squad notes', () => {
   const team = (t: string) => careers.filter((c) => c.team === t);
   const top = (t: string, by: (c: (typeof careers)[number]) => number, n: number) =>
     [...team(t)].sort((a, b) => by(b) - by(a)).slice(0, n).map((c) => c.name);
-  assert.deepEqual(top('Copan A', (c) => c.batting.runs, 2), ['Siddharth Singh', 'Anshul Rana']);
-  assert.deepEqual(top('Copan B', (c) => c.batting.runs, 2), ['Nihal Walia', 'Ashwani Singh']);
-  assert.equal(top('Copan A', (c) => c.bowling.wickets, 1)[0], 'Siddharth Singh');
-  const nihal = team('Copan B').find((c) => c.name === 'Nihal Walia')!;
+  assert.deepEqual(top('Copan Strikers', (c) => c.batting.runs, 2), ['Siddharth Singh', 'Anshul Rana']);
+  assert.deepEqual(top('Copan Royals', (c) => c.batting.runs, 2), ['Nihal Walia', 'Ashwani Singh']);
+  assert.equal(top('Copan Strikers', (c) => c.bowling.wickets, 1)[0], 'Siddharth Singh');
+  const nihal = team('Copan Royals').find((c) => c.name === 'Nihal Walia')!;
   assert.ok(nihal.history.filter((h) => h.bowl).length <= 2, 'Nihal keeps, so he rarely bowls');
   assert.ok(nihal.fielding.stumpings > 0, 'and he stumps people');
   const dismissals = (c: (typeof careers)[number]) => c.fielding.catches + c.fielding.runOuts + c.fielding.stumpings;
-  assert.equal(top('Copan B', dismissals, 1)[0], 'Nihal Walia');
+  assert.equal(top('Copan Royals', dismissals, 1)[0], 'Nihal Walia');
   assert.ok(season.matches.every((m) => playerOfTheMatch(m)));
   // Nobody on a losing side did half as much again as the winners' best, so every award went to the winners.
   for (const m of season.matches) {

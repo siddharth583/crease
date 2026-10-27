@@ -323,7 +323,7 @@ export default function Home() {
         )}
 
         {__DEV__ && (
-          // Development builds only: a season of Copan A vs Copan B to try every screen with real-looking numbers.
+          // Development builds only: a season of Copan Strikers vs Copan Royals to try every screen with real-looking numbers.
           <PressableScale
             onPress={() => {
               const demo = sampleSeason();

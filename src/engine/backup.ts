@@ -32,7 +32,7 @@ const clean = (s: string) => s.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' 
 
 /**
  * What an exported file is called. One match: its teams and the day it was played, with the series and match number
- * when it's part of one ("Copan Cup - Match 3 - Copan A vs Copan B - 26 Oct 2026"). Several: how many, and when.
+ * when it's part of one ("Copan Cup - Match 3 - Copan Strikers vs Copan Royals - 26 Oct 2026"). Several: how many, and when.
  */
 export function backupFileName(matches: Match[], when = new Date(), ext: 'json' | 'pdf' | 'png' = 'json') {
   if (matches.length === 1) {

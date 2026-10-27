@@ -18,7 +18,7 @@ test('the record book from the sample season', () => {
 });
 
 test('head to head adds up', () => {
-  const h = headToHead(matches, 'Copan A', 'copan b');
+  const h = headToHead(matches, 'Copan Strikers', 'copan royals');
   assert.equal(h.played, 6);
   assert.equal(h.winsA + h.winsB + h.ties, 6);
   assert.equal(h.recent.length, 5);

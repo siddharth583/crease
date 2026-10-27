@@ -1,4 +1,4 @@
-import type { Role, Rules, Team } from './types.ts';
+import type { Match, Role, Rules, Team } from './types.ts';
 
 // The squad: the regulars who turn up every week, whichever side they end up on. Each has a role and a rating
 // (1 to 5) for batting, bowling and fielding, used to set them up for an auction. A regular's stats follow
@@ -82,14 +82,14 @@ export function overall(p: Pick<SquadPlayer, 'bat' | 'bowl' | 'field'>): number 
 const SIDES: { id: string; name: string; players: string[]; captain: string; keeper?: string }[] = [
   {
     id: 'copan-a',
-    name: 'Copan A',
+    name: 'Copan Strikers',
     players: ['Nihal Walia', 'Karandeep Singh', 'Harleen Singh', 'Nitin Parmar', 'Chirag Taneja', 'Navjot Singh', 'Rohit Kumar', 'Mahika Kaushik', 'Satnoor Singh'],
     captain: 'Nihal Walia',
     keeper: 'Nihal Walia',
   },
   {
     id: 'copan-b',
-    name: 'Copan B',
+    name: 'Copan Royals',
     players: ['Ashwani Singh', 'Rishav Bhattacharjee', 'Siddharth Singh', 'Anshul Rana', 'Ajayvir Singh Ghai', 'Vivek Kumar', 'Charanjeet', 'Supreet Guleria', 'Sejal Chauhan', 'Rajeev'],
     captain: 'Ashwani Singh',
   },
@@ -107,14 +107,33 @@ export const HOUSE_RULES: Omit<Rules, 'overs' | 'playersPerSide'> = {
 };
 
 /** Which version of the usual sides a phone has. */
-export const TEAMS_REVISION = 2;
+export const TEAMS_REVISION = 3;
 
-/** The club's two usual sides: for a new phone, and to bring a phone's saved Copan A and B up to date. */
+/** The club's two usual sides: for a new phone, and to bring a phone's saved sides up to date. */
 export const DEFAULT_TEAMS: Team[] = SIDES.map((side) => {
   const players = side.players.map((name, i) => ({ id: `${side.id}-p${i + 1}`, name, role: DEFAULT_SQUAD.find((p) => p.name === name)?.role }));
   const idOf = (name?: string) => players.find((p) => p.name === name)?.id;
   return { id: side.id, name: side.name, players, captain: idOf(side.captain), keeper: idOf(side.keeper) };
 });
+
+/** The two sides were Copan A and Copan B until 27 Oct 2026: the old names, wherever they're written. */
+const OLD_SIDE = /\bCopan ([AB])\b/gi;
+const NEW_SIDE: Record<string, string> = { a: 'Copan Strikers', b: 'Copan Royals' };
+export const renameSide = (name: string) => name.replace(OLD_SIDE, (_, x: string) => NEW_SIDE[x.toLowerCase()]);
+
+/** A team under the sides' new names; the same team when it isn't one of them. */
+export function renameTeam(team: Team): Team {
+  const name = renameSide(team.name);
+  return name === team.name ? team : { ...team, name };
+}
+
+/** A match with the sides under their new names, the series it's part of too; the same match when nothing changes. */
+export function renameSides(match: Match): Match {
+  const teams = match.teams.map(renameTeam) as [Team, Team];
+  const series = match.series && { ...match.series, name: renameSide(match.series.name) };
+  const same = teams.every((t, i) => t === match.teams[i]) && series?.name === match.series?.name;
+  return same ? match : { ...match, teams, ...(series ? { series } : {}) };
+}
 
 /** A saved squad brought up to date: renamed players get their full names, and new regulars join. */
 export function updateSquad(squad: SquadPlayer[]): SquadPlayer[] {

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Animated, KeyboardAvoidingView, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, useToast } from '../components/ui.tsx';
 import { TossScene, type TossResult } from '../components/TossScene.tsx';
@@ -12,7 +12,7 @@ import type { Match, Rules, SeriesInfo, Team } from '../engine/types.ts';
 import { newId, useMatches } from '../store/matches.tsx';
 import { HOUSE_RULES } from '../engine/squad.ts';
 import { useSquad } from '../store/squad.ts';
-import { colors, radius, space, font } from '../theme.ts';
+import { colors, edge, radius, space, font } from '../theme.ts';
 
 /** `captain` and `keeper` are indexes into `players`. */
 type Draft = { name: string; players: string[]; captain?: number; keeper?: number };
@@ -53,12 +53,44 @@ function draftsFromAuction(a: Auction): [Draft, Draft] {
   }) as [Draft, Draft];
 }
 
+/** A player row's height and the gap under it: how far a dragged row travels to swap places with the next. */
+const ROW = 42 + space.sm;
+
+/** Where a slot ends up when the player in `from` is dragged to `to`. */
+const moved = (k: number, from: number, to: number) =>
+  k === from ? to : from < to && k > from && k <= to ? k - 1 : from > to && k >= to && k < from ? k + 1 : k;
+
+/** The handle on a player row: hold it and drag the row up or down the list. */
+function Grip({ index, onStart, onMove, onEnd }: { index: number; onStart: (i: number) => void; onMove: (dy: number) => void; onEnd: (dy: number) => void }) {
+  // The responder is made once; it calls whatever the latest props are.
+  const latest = useRef({ index, onStart, onMove, onEnd });
+  latest.current = { index, onStart, onMove, onEnd };
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => latest.current.onStart(latest.current.index),
+      onPanResponderMove: (_, g) => latest.current.onMove(g.dy),
+      onPanResponderRelease: (_, g) => latest.current.onEnd(g.dy),
+      onPanResponderTerminate: (_, g) => latest.current.onEnd(g.dy),
+    }),
+  ).current;
+  return (
+    <View {...pan.panHandlers} accessibilityLabel={`Hold and drag to move player ${index + 1}`} style={styles.grip}>
+      <Ionicons name="reorder-two" size={16} color={colors.faint} />
+      <Text style={styles.playerNum}>{index + 1}</Text>
+    </View>
+  );
+}
+
 function TeamEditor({
   label,
   draft,
   onChange,
   onSquad,
   saved,
+  onDragging,
 }: {
   label: string;
   draft: Draft;
@@ -66,11 +98,50 @@ function TeamEditor({
   /** A whole squad arrived (saved team or pasted list): its size becomes the side size. */
   onSquad: (d: Draft) => void;
   saved: Team[];
+  /** A row is being dragged: the page shouldn't scroll under it. */
+  onDragging: (on: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // The row being dragged, from its slot to where it would land, and how far it has moved.
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  const dragging = useRef(drag);
+  dragging.current = drag;
+  const dy = useRef(new Animated.Value(0)).current;
   const [paste, setPaste] = useState('');
   const pasted = parseNames(paste);
   const named = draft.players.filter((p) => p.trim()).length;
+  const landing = (from: number, d: number) => Math.max(0, Math.min(draft.players.length - 1, from + Math.round(d / ROW)));
+  const startDrag = (i: number) => {
+    tap();
+    dy.setValue(0);
+    setDrag({ from: i, to: i });
+    onDragging(true);
+  };
+  const moveDrag = (d: number) => {
+    const now = dragging.current;
+    if (!now) return;
+    dy.setValue(d);
+    const to = landing(now.from, d);
+    if (to !== now.to) {
+      tap();
+      setDrag({ from: now.from, to });
+    }
+  };
+  /** The player lands in their new slot; the captain and keeper marks go with whoever they were on. */
+  const endDrag = (d: number) => {
+    const now = dragging.current;
+    if (!now) return;
+    const to = landing(now.from, d);
+    if (to !== now.from) {
+      const players = [...draft.players];
+      players.splice(to, 0, ...players.splice(now.from, 1));
+      const follow = (at?: number) => (at === undefined ? at : moved(at, now.from, to));
+      onChange({ ...draft, players, captain: follow(draft.captain), keeper: follow(draft.keeper) });
+    }
+    setDrag(null);
+    dy.setValue(0);
+    onDragging(false);
+  };
 
   return (
     <Card style={{ gap: space.md }}>
@@ -113,8 +184,16 @@ function TeamEditor({
       {open && (
         <View style={{ gap: space.sm }}>
           {draft.players.map((p, i) => (
-            <View key={i} style={styles.playerRow}>
-              <Text style={styles.playerNum}>{i + 1}</Text>
+            <Animated.View
+              key={i}
+              style={[
+                styles.playerRow,
+                drag && i === drag.from
+                  ? [styles.lifted, { transform: [{ translateY: dy }] }]
+                  : drag && { transform: [{ translateY: (moved(i, drag.from, drag.to) - i) * ROW }] },
+              ]}
+            >
+              <Grip index={i} onStart={startDrag} onMove={moveDrag} onEnd={endDrag} />
               <TextInput
                 value={p}
                 onChangeText={(v) => onChange({ ...draft, players: draft.players.map((x, j) => (j === i ? v : x)) })}
@@ -141,9 +220,12 @@ function TeamEditor({
               >
                 <Text style={[styles.markText, draft.keeper === i && styles.markTextOn]}>WK</Text>
               </PressableScale>
-            </View>
+            </Animated.View>
           ))}
-          <Text style={styles.help}>Leave a slot empty if the side is short: they play with the names here. Tap C for the captain, WK for the keeper.</Text>
+          <Text style={styles.help}>
+            Hold ≡ and drag a player to change the order. Leave a slot empty if the side is short. Tap C for the captain, WK for the
+            keeper.
+          </Text>
           <View style={styles.pasteBox}>
             <TextInput
               value={paste}
@@ -208,6 +290,8 @@ export default function NewMatch() {
   const toast = useToast();
   // The toss happens out in the middle once the sides are set: Start match opens it.
   const [tossing, setTossing] = useState(false);
+  // No scrolling while a player row is being dragged.
+  const [locked, setLocked] = useState(false);
 
   const names = teams.map((t, i) => t.name.trim() || (i === 0 ? 'Team A' : 'Team B'));
   // A saved team picked for one side isn't offered to the other.
@@ -292,6 +376,7 @@ export default function NewMatch() {
       </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
+          scrollEnabled={!locked}
           contentContainerStyle={{ padding: space.lg, paddingBottom: 140 }}
           keyboardShouldPersistTaps="handled"
         >
@@ -363,13 +448,13 @@ export default function NewMatch() {
             </PressableScale>
           )}
           <View style={{ gap: space.md }}>
-            <TeamEditor label="Team A" draft={teams[0]} saved={savedFor(0)} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} />
+            <TeamEditor label="Team A" draft={teams[0]} saved={savedFor(0)} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} onDragging={setLocked} />
             <View style={styles.vs} pointerEvents="none">
               <View style={styles.vsBadge}>
                 <Text style={styles.vsText}>vs</Text>
               </View>
             </View>
-            <TeamEditor label="Team B" draft={teams[1]} saved={savedFor(1)} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} />
+            <TeamEditor label="Team B" draft={teams[1]} saved={savedFor(1)} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} onDragging={setLocked} />
           </View>
 
           <Card style={{ gap: space.sm, marginTop: space.md }}>
@@ -494,7 +579,17 @@ const styles = StyleSheet.create({
   },
   squadText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold, flex: 1 },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  playerNum: { color: colors.faint, width: 20, textAlign: 'right', fontFamily: font.bold },
+  playerNum: { color: colors.faint, width: 18, textAlign: 'right', fontFamily: font.bold },
+  grip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    height: 42,
+    paddingRight: 2,
+    // On the web: a drag here moves the row, not the page, and doesn't select text.
+    ...(Platform.OS === 'web' ? ({ touchAction: 'none', userSelect: 'none', cursor: 'grab' } as object) : null),
+  },
+  lifted: { zIndex: 10, backgroundColor: colors.surfaceHi, borderRadius: radius.sm, ...edge },
   playerInput: {
     flex: 1,
     color: colors.text,

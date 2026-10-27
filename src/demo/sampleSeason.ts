@@ -1,7 +1,7 @@
 import { addEvent, matchState, newMatch, oversLeft, type InningsState } from '../engine/engine.ts';
 import type { BallEvent, InningsEvent, Match, Rules, Team, WicketKind } from '../engine/types.ts';
 
-// A believable sample season for trying the app: Copan A vs Copan B, 10 overs, 8 a side, six Sundays.
+// A believable sample season for trying the app: Copan Strikers vs Copan Royals, 10 overs, 8 a side, six Sundays.
 // Every match is played ball by ball through the real engine, so all the stats behave exactly as scored ones.
 
 /** 0 to 1 for batting, bowling and fielding; `keeps` is who keeps wicket for the side (backup on the odd day). */
@@ -196,11 +196,11 @@ function playInnings(rng: () => number, match: Match, index: number, batting: Si
   return m;
 }
 
-/** The Copan Cup: a best-of-seven between Copan A and Copan B, six Sundays played, newest last week. */
+/** The Copan Cup: a best-of-seven between Copan Strikers and Copan Royals, six Sundays played, newest last week. */
 export function sampleSeason(now = new Date(), seed = SEED): { matches: Match[]; teams: Team[] } {
   const rng = seeded(seed);
-  const a = makeTeam('copan-a', 'Copan A', COPAN_A);
-  const b = makeTeam('copan-b', 'Copan B', COPAN_B);
+  const a = makeTeam('copan-a', 'Copan Strikers', COPAN_A);
+  const b = makeTeam('copan-b', 'Copan Royals', COPAN_B);
   const sides = { [a.id]: side(a, COPAN_A), [b.id]: side(b, COPAN_B) };
 
   const lastSunday = new Date(now);
