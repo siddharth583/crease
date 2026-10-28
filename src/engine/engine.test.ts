@@ -516,6 +516,44 @@ test('a bowled over is rewritten with its 6 fair balls: wides added in, and noth
   assert.match(String(replaceOver(m, 0, 0, [...draftOf(m, 0), { ball: ball(0, 'wide'), bowler: 'b1' }])), /sixth fair ball/);
 });
 
+test('any ball can be made a wicket in the editor: the batter coming in takes over everything after it', () => {
+  let m = start(setup({ overs: 3 }, 5));
+  m = play(m, ball(1), ball(0), ball(4), ball(0), ball(2), ball(0));
+  m = play(m, { type: 'bowler', bowler: 'b2' }, ball(3), ball(0, undefined, { kind: 'caught', playerOut: 'a2', fielder: 'b1' }), { type: 'batter', batter: 'a3' }, ball(1));
+  // a2 is on strike after the single; bowl them with the third ball, a4 coming in.
+  const draft = draftOf(m, 0);
+  draft[2] = { ...draft[2], ball: ball(0, undefined, { kind: 'bowled', playerOut: 'a2' }), incoming: 'a4' };
+  assert.match(String(replaceOver(m, 0, 0, draft.map((d, i) => (i === 2 ? { ...d, incoming: undefined } : d)))), /who came in/);
+  assert.match(String(replaceOver(m, 0, 0, draft.map((d, i) => (i === 2 ? { ...d, incoming: 'a3' } : d)))), /already batted/);
+  const fixed = replaceOver(m, 0, 0, draft);
+  assert.equal(typeof fixed, 'object');
+  const s = matchState(fixed as Match).innings[0];
+  const line = (id: string) => s.batters.find((b) => b.id === id)!;
+  assert.equal(s.wickets, 2);
+  assert.equal(line('a2').runs, 0);
+  assert.equal(line('a2').balls, 2);
+  assert.equal(line('a2').out?.kind, 'bowled');
+  // a4 faced what a2 did after it, and was the one caught.
+  assert.equal(line('a4').runs, 2);
+  assert.equal(line('a1').runs, 1 + 3);
+  assert.equal(line('a4').out?.kind, 'caught');
+  assert.equal(s.runs, 1 + 2 + 3 + 1);
+  assert.deepEqual([s.striker, s.nonStriker].sort(), ['a1', 'a3']);
+  // Someone not at the crease can't be out on it.
+  draft[2] = { ...draft[2], ball: ball(0, undefined, { kind: 'bowled', playerOut: 'a5' }) };
+  assert.match(String(replaceOver(m, 0, 0, draft)), /wasn’t batting/);
+});
+
+test('a wicket made in the editor on the last ball needs nobody to come in', () => {
+  let m = start(setup({ overs: 3 }));
+  m = play(m, ball(1), ball(1));
+  const draft = draftOf(m, 0);
+  draft[1] = { ...draft[1], ball: ball(0, undefined, { kind: 'lbw', playerOut: 'a2' }) };
+  const fixed = replaceOver(m, 0, 0, draft);
+  assert.equal(typeof fixed, 'object');
+  assert.equal(matchState(fixed as Match).innings[0].status, 'batter');
+});
+
 test('rewriting an over can take a ball away, and a bowler can take over partway through it', () => {
   let m = start(setup({ overs: 3 }));
   m = play(m, ball(0, 'noball'), ...Array.from({ length: 6 }, () => ball(1)));

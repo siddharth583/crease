@@ -668,7 +668,44 @@ export function replaceBall(match: Match, inningsIndex: number, eventIndex: numb
 }
 
 /** One delivery of an over being rewritten, and who bowled it. `from` is its event index if it was already there. */
-export type OverBall = { ball: BallEvent; bowler: string; from?: number };
+export type OverBall = {
+  ball: BallEvent;
+  bowler: string;
+  from?: number;
+  /** A ball made a wicket in the editor: who came in next. Everything the batter out did after it was theirs. */
+  incoming?: string;
+};
+
+/** One later event with a batter's part handed to another. */
+function handOver(e: InningsEvent, from: string, to: string): InningsEvent {
+  if ((e.type === 'batter' || e.type === 'retire') && e.batter === from) return { ...e, batter: to };
+  if (e.type === 'ball' && e.wicket?.playerOut === from) return { ...e, wicket: { ...e.wicket, playerOut: to } };
+  return e;
+}
+
+/** Who has batted (or is at the crease) in an innings at any point. */
+function battedIn(events: InningsEvent[]): Set<string> {
+  const ids = new Set<string>();
+  for (const e of events) {
+    if (e.type === 'openers') [e.striker, e.nonStriker].forEach((id) => ids.add(id));
+    if (e.type === 'batter') ids.add(e.batter);
+  }
+  return ids;
+}
+
+/** Who could come in after a ball made a wicket in the editor: the side's players who never batted in the innings. */
+export function couldComeIn(match: Match, inningsIndex: number): string[] {
+  const inn = match.innings[inningsIndex];
+  const batted = battedIn(inn.events);
+  return teamById(match, inn.battingTeam).players.map((p) => p.id).filter((id) => !batted.has(id));
+}
+
+/** Who was at the crease just before an event: [striker, non-striker]. */
+export function creaseAt(match: Match, inningsIndex: number, eventIndex: number): [string | null, string | null] {
+  const cut = { ...match, innings: match.innings.map((inn, i) => (i === inningsIndex ? { ...inn, events: inn.events.slice(0, eventIndex) } : i > inningsIndex ? { ...inn, events: [] } : inn)) };
+  const s = inningsState(cut, inningsIndex, null);
+  return [s.striker, s.nonStriker];
+}
 
 /** Fair deliveries in a list: the ones that take up a ball of the over. */
 export const fairBalls = (rules: Rules, balls: BallEvent[]) => balls.filter((b) => isLegal(rules, b.extra)).length;
@@ -707,12 +744,19 @@ export function replaceOver(match: Match, inningsIndex: number, overIndex: numbe
   const lead: InningsEvent[] = [];
   for (let k = first; k <= last && !kept.has(k); k++) if (events[k].type === 'ball') lead.push(...(attached.get(k) ?? []));
   let on: string | null = null;
+  // Balls made wickets here: where, and whose part the batter coming in takes over from then on.
+  const handovers: { at: number; from: string; to?: string }[] = [];
   for (const [n, d] of draft.entries()) {
     if (d.bowler !== on) rebuilt.push({ type: 'bowler', bowler: d.bowler });
     on = d.bowler;
     const ball: BallEvent = { ...d.ball };
     delete ball.counts;
     rebuilt.push(ball);
+    const was = d.from === undefined ? undefined : (events[d.from] as BallEvent);
+    if (ball.wicket && !was?.wicket) {
+      handovers.push({ at: rebuilt.length - 1, from: ball.wicket.playerOut, to: d.incoming });
+      if (d.incoming) rebuilt.push({ type: 'batter', batter: d.incoming });
+    }
     if (n === 0) rebuilt.push(...lead);
     if (d.from === undefined) continue;
     rebuilt.push(...(attached.get(d.from) ?? []));
@@ -720,15 +764,32 @@ export function replaceOver(match: Match, inningsIndex: number, overIndex: numbe
     for (let k = d.from + 1; k <= last && !kept.has(k); k++) if (events[k].type === 'ball') rebuilt.push(...(attached.get(k) ?? []));
   }
   const before = events.slice(0, first).filter((_, k) => k !== pick);
+  let all = [...before, ...rebuilt, ...events.slice(last + 1)];
+  const batted = battedIn(events);
+  for (const [k, h] of handovers.entries()) {
+    const at = before.length + h.at;
+    if (h.to && batted.has(h.to)) return `${playerName(match, h.to)} has already batted in this innings.`;
+    const [striker, nonStriker] = creaseAt({ ...match, innings: match.innings.map((x, i) => (i === inningsIndex ? { ...x, events: all } : x)) }, inningsIndex, at);
+    if (h.from !== striker && h.from !== nonStriker) return `${playerName(match, h.from)} wasn’t batting on that ball.`;
+    const later = all.slice(at + 1);
+    if (!h.to && later.some((e) => e.type === 'ball')) return `Say who came in after ${playerName(match, h.from)} was out.`;
+    if (!h.to) continue;
+    all = [...all.slice(0, at + 2), ...all.slice(at + 2).map((e) => handOver(e, h.from, h.to!))];
+    for (const later of handovers.slice(k + 1)) if (later.from === h.from) later.from = h.to;
+  }
   const next: Match = {
     ...match,
-    innings: match.innings.map((x, i) => (i === inningsIndex ? { ...x, events: [...before, ...rebuilt, ...events.slice(last + 1)] } : x)),
+    innings: match.innings.map((x, i) => (i === inningsIndex ? { ...x, events: all } : x)),
   };
   // The over still ends where it did: the next over's first ball is still the first ball of over overIndex + 2.
   const after = inningsState(next, inningsIndex, null);
   if (after.overs[overIndex]?.length !== draft.length) return 'A wide or no-ball can’t come after the over’s sixth fair ball. Move it earlier.';
   if (!final && after.overs.length !== s.overs.length) return 'That would move the overs after it.';
-  if (!fitsTogether(next)) return 'That doesn’t fit with the balls after it (a wicket or a batter coming in no longer lines up).';
+  if (!fitsTogether(next)) {
+    return handovers.length
+      ? 'That wicket would end the innings before the balls after it (they’d be all out).'
+      : 'That doesn’t fit with the balls after it (a wicket or a batter coming in no longer lines up).';
+  }
   return next;
 }
 

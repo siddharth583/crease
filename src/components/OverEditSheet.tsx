@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ballView, fairBalls, playerName, type InningsState, type OverBall } from '../engine/engine.ts';
+import { ballView, couldComeIn, creaseAt, fairBalls, playerName, type InningsState, type OverBall } from '../engine/engine.ts';
 import type { BallEvent, Extra, Match, WicketKind } from '../engine/types.ts';
 import { colors, font, radius, space, type } from '../theme.ts';
 import { BallChip, Button, Chip, PressableScale, Segmented, Sheet } from './ui.tsx';
@@ -26,6 +26,9 @@ const WICKET_KINDS: { value: WicketKind; label: string }[] = [
 ];
 
 const withFielder = (k: WicketKind) => k === 'caught' || k === 'runout' || k === 'stumped';
+
+/** A ball that wasn't a wicket can be made one: the extras switch gains Out. */
+const WITH_OUT: { value: 'none' | Extra | 'out'; label: string }[] = [...KINDS, { value: 'out', label: 'Out' }];
 
 /**
  * Rewrite one bowled over: change any ball, add or take away balls, and say who bowled which. It saves once the over
@@ -71,12 +74,31 @@ export function OverEditSheet({
   const kind = ball.extra ?? 'none';
   const byes = kind === 'bye' || kind === 'legbye';
   const keeper = match.keepers?.[s.bowlingTeam.id];
+  const events = match.innings[inningsIndex].events;
+  // A wicket already scored stays one (only how can change); any other ball can be made a wicket, or not.
+  const madeOut = Boolean(ball.wicket) && !(current.from !== undefined && (events[current.from] as BallEvent).wicket);
+  const canBeOut = !ball.wicket || madeOut;
+  // Who was batting on this ball, as it was scored: an added ball goes after the one before it.
+  const prev = draft.slice(0, at + 1).reverse().find((d) => d.from !== undefined);
+  const crease = creaseAt(match, inningsIndex, current.from ?? (prev?.from !== undefined ? prev.from + 1 : (draft[0].from ?? 0)));
+  const taken = new Set(draft.filter((d, i) => i !== at && d.incoming).map((d) => d.incoming));
+  const comers = couldComeIn(match, inningsIndex).filter((id) => !taken.has(id));
 
-  const set = (patch: Partial<BallEvent>) => {
+  const set = (patch: Partial<OverBall['ball']>, incoming?: string | null) => {
     // A changed ball is a plain one: a bounce call goes with the old version of it.
-    setDraft(draft.map((d, i) => (i === at ? { ...d, ball: { type: 'ball', runs: ball.runs, extra: ball.extra, wicket: ball.wicket, ...patch } } : d)));
+    setDraft(
+      draft.map((d, i) =>
+        i === at
+          ? { ...d, ball: { type: 'ball', runs: ball.runs, extra: ball.extra, wicket: ball.wicket, ...patch }, incoming: incoming === undefined ? d.incoming : incoming ?? undefined }
+          : d,
+      ),
+    );
     setError(null);
   };
+  const makeOut = (out: boolean) =>
+    out
+      ? set({ runs: 0, extra: undefined, wicket: { kind: 'bowled', playerOut: crease[0] ?? crease[1] ?? '' } }, comers[0] ?? null)
+      : set({ wicket: undefined }, null);
   const setBowler = (id: string) => {
     // From this ball to the end of the over: the one who took over finishes it.
     setDraft(draft.map((d, i) => (i >= at ? { ...d, bowler: id } : d)));
@@ -120,9 +142,47 @@ export function OverEditSheet({
         </View>
 
         <Text style={styles.label}>Ball {at + 1}</Text>
+        {canBeOut && (
+          <Segmented
+            value={ball.wicket ? 'out' : kind}
+            onChange={(v) => {
+              if (v === 'out') return makeOut(true);
+              if (ball.wicket) makeOut(false);
+              setDraft((d) =>
+                d.map((x, i) => (i === at ? { ...x, ball: { type: 'ball', runs: (v === 'bye' || v === 'legbye') && x.ball.runs === 0 ? 1 : x.ball.runs, extra: v === 'none' ? undefined : v } } : x)),
+              );
+            }}
+            options={WITH_OUT}
+          />
+        )}
         {ball.wicket ? (
           <>
-            <Text style={styles.note}>{playerName(match, ball.wicket.playerOut)} is out on this ball. Fix how, or who took it.</Text>
+            {madeOut ? (
+              <>
+                <Text style={styles.label}>Who’s out</Text>
+                <Segmented
+                  value={ball.wicket.playerOut}
+                  onChange={(id) => set({ wicket: { ...ball.wicket!, playerOut: id } })}
+                  options={crease.filter((id): id is string => id !== null).map((id) => ({ value: id, label: playerName(match, id) }))}
+                />
+                <Text style={styles.label}>Who came in next</Text>
+                {comers.length ? (
+                  <View style={styles.wrap}>
+                    {comers.map((id) => (
+                      <Chip key={id} label={playerName(match, id)} selected={current.incoming === id} onPress={() => set({}, id)} />
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.note}>Everyone else has batted, so this can only be the innings’ last ball.</Text>
+                )}
+                <Text style={styles.note}>
+                  Whatever {playerName(match, ball.wicket.playerOut)} did after this ball goes to {current.incoming ? playerName(match, current.incoming) : 'the batter who came in'}.
+                </Text>
+                <Text style={styles.label}>How</Text>
+              </>
+            ) : (
+              <Text style={styles.note}>{playerName(match, ball.wicket.playerOut)} is out on this ball. Fix how, or who took it.</Text>
+            )}
             <View style={styles.wrap}>
               {WICKET_KINDS.map((k) => (
                 <Chip
@@ -152,11 +212,6 @@ export function OverEditSheet({
           </>
         ) : (
           <>
-            <Segmented
-              value={kind}
-              onChange={(v) => set({ extra: v === 'none' ? undefined : v, runs: (v === 'bye' || v === 'legbye') && ball.runs === 0 ? 1 : ball.runs })}
-              options={KINDS}
-            />
             <View style={styles.wrap}>
               {[0, 1, 2, 3, 4, 5, 6].map((r) => (
                 <Chip key={r} label={String(r)} selected={ball.runs === r} disabled={byes && r === 0} onPress={() => set({ runs: r })} />
@@ -173,7 +228,7 @@ export function OverEditSheet({
         </View>
         <Text style={styles.note}>A new bowler bowls from this ball to the end of the over.</Text>
 
-        {!ball.wicket && draft.length > 1 && (
+        {canBeOut && draft.length > 1 && (
           <Button variant="ghost" label={`Take ball ${at + 1} away`} icon="trash-outline" onPress={remove} />
         )}
         {error && <Text style={styles.error}>{error}</Text>}
