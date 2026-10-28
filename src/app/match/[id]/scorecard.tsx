@@ -7,7 +7,7 @@ import { OverEditSheet } from '../../../components/OverEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
 import { BallChip, Button, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../../../components/ui.tsx';
-import { dismissal, fairBalls, matchState, oversText, playerName, renamePlayer, replaceOver, type InningsState } from '../../../engine/engine.ts';
+import { dismissal, fairBalls, matchState, oversText, playerName, renamePlayer, replaceOver, retirements, setRetirement, type InningsState } from '../../../engine/engine.ts';
 import { isPlaceholder, keyFor, momChoices, playerOfTheMatch } from '../../../engine/stats.ts';
 import type { BallEvent, Match, Team } from '../../../engine/types.ts';
 import { useMatch, useMatches } from '../../../store/matches.tsx';
@@ -187,6 +187,42 @@ function OversEditor({ match, s, inningsIndex, onOpen }: { match: Match; s: Inni
   );
 }
 
+/** Every batter who retired in the innings: switch each between retired hurt and retired out. */
+function RetirementsEditor({ match, inningsIndex, onChange }: { match: Match; inningsIndex: number; onChange: (eventIndex: number, out: boolean) => void }) {
+  const list = retirements(match, inningsIndex);
+  return (
+    <>
+      <SectionLabel>Retirements</SectionLabel>
+      <Card style={{ gap: space.md }}>
+        {list.length === 0 ? (
+          <Text style={styles.namesHint}>
+            Nobody retired. If a wicket was really a retirement, tap its over above, tap the ball, and pick Retired hurt or Retired out.
+          </Text>
+        ) : (
+          <>
+            <Text style={styles.namesHint}>Retired hurt isn’t a wicket and they can bat again. Retired out is a wicket, to no bowler.</Text>
+            {list.map((r) => (
+              <View key={r.event} style={{ gap: 6 }}>
+                <Text style={styles.namesTeam}>
+                  {playerName(match, r.batter)} <Text style={{ color: colors.faint }}>· after {r.over} overs</Text>
+                </Text>
+                <Segmented
+                  value={r.out ? 'out' : 'hurt'}
+                  onChange={(v) => v !== (r.out ? 'out' : 'hurt') && onChange(r.event, v === 'out')}
+                  options={[
+                    { value: 'hurt', label: 'Retired hurt' },
+                    { value: 'out', label: 'Retired out' },
+                  ]}
+                />
+              </View>
+            ))}
+          </>
+        )}
+      </Card>
+    </>
+  );
+}
+
 /** Pick the Man of the Match by hand, or leave it to Crease. Everyone who played, biggest impact first. */
 function MomSheet({ match, visible, onClose, onPick }: { match: Match; visible: boolean; onClose: () => void; onPick: (id: string | undefined) => void }) {
   if (!visible) return null;
@@ -357,8 +393,8 @@ export default function Scorecard() {
             <Ionicons name="create-outline" size={16} color={colors.accentInk} />
             <Text style={styles.editHintText}>
               Editing. Tap any over below to change its balls, add or take some away, or say who bowled them (a new bowler
-              mid-over takes over from the ball they started). Every over keeps its 6 fair balls. Players’ names are at
-              the bottom.
+              mid-over takes over from the ball they started). Every over keeps its 6 fair balls. Retirements and
+              players’ names are at the bottom.
             </Text>
           </View>
         )}
@@ -366,6 +402,17 @@ export default function Scorecard() {
           <>
             <InningsCard match={match} s={s} />
             <OversEditor match={match} s={s} inningsIndex={Number(shown)} onOpen={setEditingOver} />
+            <RetirementsEditor
+              match={match}
+              inningsIndex={Number(shown)}
+              onChange={(eventIndex, out) => {
+                const fixed = setRetirement(match, Number(shown), eventIndex, out);
+                if (typeof fixed === 'string') return toast.show(fixed, 'info');
+                saveMatch(fixed);
+                const r = retirements(fixed, Number(shown)).find((x) => x.event === eventIndex)!;
+                toast.show(`${playerName(match, r.batter)} is now retired ${out ? 'out' : 'hurt'}`, 'success');
+              }}
+            />
             <NamesEditor
               match={match}
               onRename={(playerId, name) => {

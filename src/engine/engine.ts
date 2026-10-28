@@ -204,7 +204,16 @@ export function inningsState(match: Match, index: number, target: number | null)
       continue;
     }
     if (e.type === 'retire') {
-      batter(e.batter).retired = true;
+      const line = batter(e.batter);
+      if (e.out) {
+        s.wickets += 1;
+        // Between overs it goes with the over just bowled.
+        const o = s.overs[s.overs.length - 1].length === 0 && s.overTotals.length > 1 ? s.overTotals.length - 2 : s.overTotals.length - 1;
+        s.overTotals[o].wickets += 1;
+        line.out = { kind: 'retiredout', bowler: null };
+        line.retired = false;
+        s.fallOfWickets.push({ wicket: s.wickets, runs: s.runs, over: oversText(s.legalBalls), player: line.id });
+      } else line.retired = true;
       s.partnerships.push({ batters: [s.striker, s.nonStriker], ...s.partnership });
       if (s.striker === e.batter) s.striker = null;
       if (s.nonStriker === e.batter) s.nonStriker = null;
@@ -529,7 +538,7 @@ export function playerName(match: Match, id: string | null | undefined): string 
 }
 
 export function dismissal(match: Match, line: BatterLine): string {
-  if (line.retired) return 'retired';
+  if (line.retired) return 'retired hurt';
   if (!line.out) return 'not out';
   const b = playerName(match, line.out.bowler);
   const f = playerName(match, line.out.fielder);
@@ -546,8 +555,10 @@ export function dismissal(match: Match, line: BatterLine): string {
       return `hit wicket b ${b}`;
     case 'runout':
       return f ? `run out (${f})` : 'run out';
+    case 'retiredout':
+      return 'retired out';
     default:
-      return 'retired';
+      return 'retired hurt';
   }
 }
 
@@ -721,6 +732,44 @@ export function replaceOver(match: Match, inningsIndex: number, overIndex: numbe
   return next;
 }
 
+/** A batter who retired in an innings: between balls (a retire event) or recorded on a delivery. */
+export type Retirement = { event: number; batter: string; out: boolean; over: string };
+
+/** Every retirement in an innings, in order, with the overs bowled when it happened. */
+export function retirements(match: Match, inningsIndex: number): Retirement[] {
+  const events = match.innings[inningsIndex]?.events ?? [];
+  const found: Retirement[] = [];
+  events.forEach((e, k) => {
+    const retire = e.type === 'retire' ? { batter: e.batter, out: Boolean(e.out) } : null;
+    const onBall = e.type === 'ball' && e.wicket?.kind.startsWith('retired') ? { batter: e.wicket.playerOut, out: e.wicket.kind === 'retiredout' } : null;
+    const r = retire ?? onBall;
+    if (r) found.push({ event: k, ...r, over: oversText(legalBallsTo(match, inningsIndex, k)) });
+  });
+  return found;
+}
+
+/**
+ * Make a retirement hurt (not a wicket, they can come back) or out (a wicket, and they're done). Retired out can't be
+ * for someone who came back to bat later. The new match, or why it can't be done.
+ */
+export function setRetirement(match: Match, inningsIndex: number, eventIndex: number, out: boolean): Match | string {
+  const events = match.innings[inningsIndex]?.events ?? [];
+  const e = events[eventIndex];
+  let next: InningsEvent;
+  if (e?.type === 'retire') next = out ? { ...e, out: true } : { type: 'retire', batter: e.batter };
+  else if (e?.type === 'ball' && e.wicket?.kind.startsWith('retired')) next = { ...e, wicket: { ...e.wicket, kind: out ? 'retiredout' : 'retired' } };
+  else return 'That isn’t a retirement.';
+  const batter = e.type === 'retire' ? e.batter : e.wicket!.playerOut;
+  if (out && events.some((x, k) => k > eventIndex && x.type === 'batter' && x.batter === batter)) {
+    return `${playerName(match, batter)} came back to bat later, so can’t be retired out.`;
+  }
+  const fixed: Match = {
+    ...match,
+    innings: match.innings.map((inn, i) => (i === inningsIndex ? { ...inn, events: events.map((x, k) => (k === eventIndex ? next : x)) } : inn)),
+  };
+  return fitsTogether(fixed) ? fixed : 'That would end the innings before balls scored after it (one wicket too many).';
+}
+
 /** Every delivery in an innings came while the innings was live (a bowler on, the over and innings not over). */
 function inPlayThroughout(match: Match, inningsIndex: number, target: number | null): boolean {
   const events = match.innings[inningsIndex].events;
@@ -819,7 +868,7 @@ export function describeEvent(match: Match, e: InningsEvent, striker: string | n
     case 'swap':
       return 'strike swap';
     case 'retire':
-      return `${playerName(match, e.batter)} retiring`;
+      return `${playerName(match, e.batter)} retiring${e.out ? ' out' : ''}`;
     case 'endInnings':
       return 'end of innings';
     case 'penalty':

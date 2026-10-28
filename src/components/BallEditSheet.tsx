@@ -20,6 +20,8 @@ const WICKET_EDIT_KINDS: { value: WicketKind; label: string }[] = [
   { value: 'runout', label: 'Run out' },
   { value: 'stumped', label: 'Stumped' },
   { value: 'hitwicket', label: 'Hit wicket' },
+  { value: 'retired', label: 'Retired hurt' },
+  { value: 'retiredout', label: 'Retired out' },
 ];
 
 /**

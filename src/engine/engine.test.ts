@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addEvent, addPlayer, movePlayer, renamePlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, replaceOver, setOvers, startSuperOver, undo, type OverBall } from './engine.ts';
+import { addEvent, addPlayer, movePlayer, renamePlayer, describeEvent, dismissal, highlights, matchState, newMatch, oversLeft, replaceBall, replaceOver, retirements, setOvers, setRetirement, startSuperOver, undo, type OverBall } from './engine.ts';
 import { momChoices, playerOfTheMatch } from './stats.ts';
 import type { BallEvent, InningsEvent, Match, Rules, Team } from './types.ts';
 
@@ -161,6 +161,49 @@ test('retired batter can come back later and is not a wicket', () => {
   s = matchState(m).innings[0];
   assert.equal(s.striker, 'a1');
   assert.equal(dismissal(m, s.batters[0]), 'not out');
+});
+
+test('retired out is a wicket to no bowler, and they can’t come back', () => {
+  let m = play(start(setup()), ball(3), { type: 'retire', batter: 'a2', out: true });
+  const s = matchState(m).innings[0];
+  assert.equal(s.wickets, 1);
+  assert.equal(s.bowlers[0].wickets, 0);
+  assert.equal(s.fallOfWickets[0].player, 'a2');
+  assert.equal(s.overTotals[0].wickets, 1);
+  assert.ok(!s.available.includes('a2'));
+  assert.equal(dismissal(m, s.batters.find((b) => b.id === 'a2')!), 'retired out');
+  assert.equal(describeEvent(m, { type: 'retire', batter: 'a2', out: true }, null), 'a2 retiring out');
+  m = play(m, { type: 'retire', batter: 'a1' });
+  assert.equal(dismissal(m, matchState(m).innings[0].batters[0]), 'retired hurt');
+});
+
+test('a retirement is switched between hurt and out on the scorecard', () => {
+  let m = play(start(setup()), ball(1), { type: 'retire', batter: 'a1' }, { type: 'batter', batter: 'a3' }, ball(0));
+  assert.deepEqual(retirements(m, 0), [{ event: 3, batter: 'a1', out: false, over: '0.1' }]);
+  const out = setRetirement(m, 0, 3, true);
+  assert.ok(typeof out !== 'string');
+  assert.equal(matchState(out).innings[0].wickets, 1);
+  const back = setRetirement(out, 0, 3, false);
+  assert.ok(typeof back !== 'string');
+  assert.deepEqual(back.innings[0].events[3], { type: 'retire', batter: 'a1' });
+  // Someone who came back to bat can't have been retired out.
+  m = play(m, ball(0, undefined, { kind: 'bowled', playerOut: 'a2' }), { type: 'batter', batter: 'a1' });
+  assert.match(setRetirement(m, 0, 3, true) as string, /came back/);
+  assert.equal(typeof setRetirement(m, 0, 2, true), 'string');
+});
+
+test('a wicket can be fixed into a retirement on its ball', () => {
+  const m = play(start(setup()), ball(0, undefined, { kind: 'bowled', playerOut: 'a1' }));
+  const hurt = replaceBall(m, 0, 2, ball(0, undefined, { kind: 'retired', playerOut: 'a1' }));
+  let s = matchState(hurt).innings[0];
+  assert.equal(s.wickets, 0);
+  assert.ok(s.available.includes('a1'));
+  assert.deepEqual(retirements(hurt, 0).map((r) => r.out), [false]);
+  const out = setRetirement(hurt, 0, 2, true);
+  assert.ok(typeof out !== 'string');
+  s = matchState(out).innings[0];
+  assert.equal(s.wickets, 1);
+  assert.equal(s.bowlers[0].wickets, 0);
 });
 
 test('strike can be swapped by hand', () => {

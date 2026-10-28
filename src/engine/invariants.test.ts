@@ -35,7 +35,7 @@ function checkMatch(m: Match) {
     assert.equal(s.overTotals.reduce((n, o) => n + o.wickets, 0), s.wickets, `${where}: wickets per over`);
     const bowlerWickets = s.bowlers.reduce((n, b) => n + b.wickets, 0);
     const notTheBowlers = s.batters.filter((b) => b.out && (b.out.kind === 'runout' || b.out.kind === 'retired')).length;
-    assert.equal(bowlerWickets, s.wickets - s.batters.filter((b) => b.out?.kind === 'runout').length, `${where}: bowlers' wickets`);
+    assert.equal(bowlerWickets, s.wickets - s.batters.filter((b) => b.out?.kind === 'runout' || b.out?.kind === 'retiredout').length, `${where}: bowlers' wickets`);
     assert.ok(notTheBowlers >= 0);
     assert.equal(s.partnerships.reduce((n, p) => n + p.runs, 0), s.runs - s.extras.penalty, `${where}: partnerships`);
     for (const b of s.batters) assert.ok(b.fours * 4 + b.sixes * 6 <= b.runs, `${where}: boundaries within runs`);
@@ -203,7 +203,7 @@ export function randomMatch(seed: number): Played {
       case 'live': {
         const roll = r();
         if (roll < 0.02) m = addEvent(m, { type: 'swap' });
-        else if (roll < 0.03 && s.striker) m = addEvent(m, { type: 'retire', batter: s.striker });
+        else if (roll < 0.03 && s.striker) m = addEvent(m, { type: 'retire', batter: s.striker, out: roll < 0.025 || undefined });
         else if (roll < 0.035) m = addEvent(m, { type: 'penalty', runs: 5 });
         else if (roll < 0.04) m = addEvent(m, { type: 'deadBall' });
         else if (roll < 0.043) m = addEvent(m, { type: 'endInnings' });

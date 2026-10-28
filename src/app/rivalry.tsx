@@ -21,7 +21,8 @@ const HOW: Record<WicketKind, string> = {
   runout: 'Run out',
   stumped: 'Stumped',
   hitwicket: 'Hit wicket',
-  retired: 'Retired',
+  retired: 'Retired hurt',
+  retiredout: 'Retired out',
 };
 
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {

@@ -250,7 +250,7 @@ function* faced(matches: Match[]) {
       const bat = sideOf(m, d.striker);
       const bowl = sideOf(m, d.bowler);
       if (!bat || !bowl) continue;
-      const out = Boolean(d.ball.wicket && d.ball.wicket.playerOut === d.striker && d.ball.wicket.kind !== 'runout' && d.ball.wicket.kind !== 'retired');
+      const out = Boolean(d.ball.wicket && d.ball.wicket.playerOut === d.striker && d.ball.wicket.kind !== 'runout' && !d.ball.wicket.kind.startsWith('retired'));
       // Byes and leg byes aren't the batter's runs.
       const runs = !d.ball.extra || d.ball.extra === 'noball' ? d.ball.runs : 0;
       yield { m, d, bat, bowl, out, runs };

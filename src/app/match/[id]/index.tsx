@@ -150,7 +150,7 @@ function Stat({ label, value, hot }: { label: string; value: string; hot?: boole
 
 // ─── Crease ──────────────────────────────────────────────────────────────────
 
-function Crease({ match, s, onSwap }: { match: Match; s: InningsState; onSwap: () => void }) {
+function Crease({ match, s, onSwap, onRetire }: { match: Match; s: InningsState; onSwap: () => void; onRetire: (batter: string) => void }) {
   const bowler = s.bowlers.find((b) => b.id === s.bowler);
   const batters = [s.striker, s.nonStriker].filter((id): id is string => id !== null);
 
@@ -168,6 +168,9 @@ function Crease({ match, s, onSwap }: { match: Match; s: InningsState; onSwap: (
                   {playerName(match, id)}
                 </Text>
                 {onStrike && <MaterialCommunityIcons name="cricket" size={15} color={colors.accentInk} />}
+                <PressableScale accessibilityLabel={`Retire ${playerName(match, id)}`} hitSlop={8} onPress={() => onRetire(id)} style={styles.retire}>
+                  <Text style={styles.retireText}>Retire</Text>
+                </PressableScale>
               </View>
               <Text style={styles.batterMeta}>
                 {b?.fours ?? 0}×4   {b?.sixes ?? 0}×6   SR {b && b.balls ? ((b.runs * 100) / b.balls).toFixed(0) : '–'}
@@ -699,11 +702,17 @@ const KINDS: { value: WicketKind; label: string }[] = [
   { value: 'retired', label: 'Retired' },
 ];
 
+const RETIRE_HOW = [
+  { value: 'hurt', label: 'Retired hurt' },
+  { value: 'out', label: 'Retired out' },
+] as const;
+
 function WicketSheet({
   visible,
   match,
   s,
   preset,
+  retiring,
   onClose,
   onConfirm,
 }: {
@@ -711,6 +720,8 @@ function WicketSheet({
   match: Match;
   s: InningsState;
   preset: Extra | null;
+  /** Opened from a batter's Retire: straight to retiring them. */
+  retiring?: string | null;
   onClose: () => void;
   onConfirm: (e: InningsEvent) => void;
 }) {
@@ -719,15 +730,17 @@ function WicketSheet({
   const [fielder, setFielder] = useState<string | undefined>();
   const [runs, setRuns] = useState('0');
   const [delivery, setDelivery] = useState<'legal' | 'wide' | 'noball'>('legal');
+  const [retireHow, setRetireHow] = useState<'hurt' | 'out'>('hurt');
 
   useEffect(() => {
     if (!visible) return;
-    setKind(s.freeHit || preset === 'noball' ? 'runout' : preset === 'wide' ? 'stumped' : 'bowled');
-    setWho('striker');
+    setKind(retiring ? 'retired' : s.freeHit || preset === 'noball' ? 'runout' : preset === 'wide' ? 'stumped' : 'bowled');
+    setWho(retiring && retiring === s.nonStriker ? 'nonStriker' : 'striker');
+    setRetireHow('hurt');
     setFielder(undefined);
     setRuns('0');
     setDelivery(preset === 'wide' || preset === 'noball' ? preset : 'legal');
-  }, [visible, preset]);
+  }, [visible, preset, retiring]);
 
   const keeper = match.keepers?.[s.bowlingTeam.id];
   useEffect(() => {
@@ -743,7 +756,7 @@ function WicketSheet({
     if (!outId) return;
     if (kind === 'retired') {
       // Retiring happens between balls, so it isn't a delivery.
-      onConfirm({ type: 'retire', batter: outId });
+      onConfirm(retireHow === 'out' ? { type: 'retire', batter: outId, out: true } : { type: 'retire', batter: outId });
       return;
     }
     const extra = deliveries && delivery !== 'legal' ? delivery : undefined;
@@ -756,7 +769,7 @@ function WicketSheet({
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Wicket">
+    <Sheet visible={visible} onClose={onClose} title={kind === 'retired' ? 'Retire a batter' : 'Wicket'}>
       <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
         <View style={styles.wrap}>
           {KINDS.map((k) => (
@@ -783,6 +796,18 @@ function WicketSheet({
                 { value: 'nonStriker', label: playerName(match, s.nonStriker) },
               ]}
             />
+          </>
+        )}
+
+        {kind === 'retired' && (
+          <>
+            <Text style={styles.sheetLabel}>How</Text>
+            <Segmented value={retireHow} onChange={setRetireHow} options={[...RETIRE_HOW]} />
+            <Text style={styles.editNote}>
+              {retireHow === 'hurt'
+                ? `Not a wicket. ${playerName(match, outId)} keeps their runs and can come back in later, when a wicket falls.`
+                : `Counts as a wicket, but not to any bowler. ${playerName(match, outId)} can’t bat again this innings.`}
+            </Text>
           </>
         )}
 
@@ -823,7 +848,7 @@ function WicketSheet({
         <Button
           variant="danger"
           icon={kind === 'retired' ? 'walk' : 'close-circle'}
-          label={kind === 'retired' ? `Retire ${playerName(match, outId)}` : `${playerName(match, outId)} is out`}
+          label={kind === 'retired' ? `Retire ${playerName(match, outId)}${retireHow === 'out' ? ' out' : ' hurt'}` : `${playerName(match, outId)} is out`}
           onPress={confirm}
           style={{ marginTop: space.sm }}
         />
@@ -854,6 +879,7 @@ export default function LiveMatch() {
   const insets = useSafeAreaInsets();
   const [openers, setOpeners] = useState<string[]>([]);
   const [wicketFor, setWicketFor] = useState<Extra | null | undefined>(undefined);
+  const [retiring, setRetiring] = useState<string | null>(null);
   const [moment, setMoment] = useState<Moment | null>(null);
   const [editing, setEditing] = useState<BallView | null>(null);
   const [menu, setMenu] = useState(false);
@@ -1152,7 +1178,15 @@ export default function LiveMatch() {
 
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, gap: space.md, paddingBottom: space.xl }}>
         {!(freshChase && s.status === 'openers') && !state.result && <Scoreboard match={match} s={s} index={index} />}
-        {s.striker && !state.result && <Crease match={match} s={s} onSwap={() => push({ type: 'swap' })} />}
+        {s.striker && !state.result && <Crease
+            match={match}
+            s={s}
+            onSwap={() => push({ type: 'swap' })}
+            onRetire={(id) => {
+              setRetiring(id);
+              setWicketFor(null);
+            }}
+          />}
         {live && <ThisOver s={s} onEdit={setEditing} />}
         {!state.result && s.status !== 'openers' && <OverChart s={s} />}
         {body}
@@ -1263,9 +1297,14 @@ export default function LiveMatch() {
         match={match}
         s={s}
         preset={wicketFor ?? null}
-        onClose={() => setWicketFor(undefined)}
+        retiring={retiring}
+        onClose={() => {
+          setWicketFor(undefined);
+          setRetiring(null);
+        }}
         onConfirm={(e) => {
           setWicketFor(undefined);
+          setRetiring(null);
           push(e, 320);
         }}
       />
@@ -1329,6 +1368,8 @@ const styles = StyleSheet.create({
   batter: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.md, paddingRight: space.lg, gap: space.md },
   strikeBar: { width: 4, alignSelf: 'stretch', backgroundColor: 'transparent', borderTopRightRadius: 2, borderBottomRightRadius: 2 },
   batterName: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  retire: { marginLeft: space.xs, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderHi },
+  retireText: { color: colors.muted, fontSize: 11, fontFamily: font.semibold },
   name: { color: colors.muted, fontSize: 17, fontFamily: font.bold, flexShrink: 1 },
   batterMeta: { color: colors.faint, fontSize: 12, fontFamily: font.semibold, marginTop: 2, ...type.num },
   batterRuns: { color: colors.muted, fontSize: 40, lineHeight: 44, fontFamily: font.posterBlack, ...type.num },

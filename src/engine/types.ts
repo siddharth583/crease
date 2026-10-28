@@ -30,7 +30,7 @@ export type Rules = {
 
 export type Extra = 'wide' | 'noball' | 'bye' | 'legbye';
 
-export type WicketKind = 'bowled' | 'caught' | 'lbw' | 'runout' | 'stumped' | 'hitwicket' | 'retired';
+export type WicketKind = 'bowled' | 'caught' | 'lbw' | 'runout' | 'stumped' | 'hitwicket' | 'retired' | 'retiredout';
 
 export type BallEvent = {
   type: 'ball';
@@ -54,8 +54,11 @@ export type InningsEvent =
   | { type: 'swap' }
   /** Close the innings now: declared, ran out of time or light. */
   | { type: 'endInnings' }
-  /** Retired hurt between balls: not a wicket, and they can bat again later. */
-  | { type: 'retire'; batter: string }
+  /**
+   * A batter retires between balls. Retired hurt (the default) isn't a wicket and they can bat again later; retired out
+   * (`out`) is a wicket, credited to no bowler, and they're done.
+   */
+  | { type: 'retire'; batter: string; out?: boolean }
   /** Penalty runs to the batting side (usually 5), awarded by the umpire. */
   | { type: 'penalty'; runs: number }
   /** The umpire called dead ball: nothing counts, kept only for the record. */
