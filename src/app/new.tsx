@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
-import { Animated, KeyboardAvoidingView, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, KeyboardAvoidingView, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, useToast } from '../components/ui.tsx';
 import { TossScene, type TossResult } from '../components/TossScene.tsx';
@@ -73,7 +73,7 @@ const moved = (k: number, from: number, to: number) =>
   k === from ? to : from < to && k > from && k <= to ? k - 1 : from > to && k >= to && k < from ? k + 1 : k;
 
 /** The handle on a player row: hold it and drag the row up or down the list. */
-function Grip({ index, onStart, onMove, onEnd }: { index: number; onStart: (i: number) => void; onMove: (dy: number) => void; onEnd: (dy: number) => void }) {
+function Grip({ index, compact, onStart, onMove, onEnd }: { index: number; compact?: boolean; onStart: (i: number) => void; onMove: (dy: number) => void; onEnd: (dy: number) => void }) {
   // The responder is made once; it calls whatever the latest props are.
   const latest = useRef({ index, onStart, onMove, onEnd });
   latest.current = { index, onStart, onMove, onEnd };
@@ -91,7 +91,7 @@ function Grip({ index, onStart, onMove, onEnd }: { index: number; onStart: (i: n
   return (
     <View {...pan.panHandlers} accessibilityLabel={`Hold and drag to move player ${index + 1}`} style={styles.grip}>
       <Ionicons name="reorder-two" size={16} color={colors.faint} />
-      <Text style={styles.playerNum}>{index + 1}</Text>
+      {!compact && <Text style={styles.playerNum}>{index + 1}</Text>}
     </View>
   );
 }
@@ -120,6 +120,9 @@ function TeamEditor({
   other: string;
 }) {
   const [open, setOpen] = useState(false);
+  // A narrow phone: the slot number goes and the buttons slim down, so the name keeps room to be read.
+  const compact = useWindowDimensions().width < 380;
+  const mark = [styles.mark, compact && styles.markCompact];
   // The row being dragged, from its slot to where it would land, and how far it has moved.
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
   const dragging = useRef(drag);
@@ -211,13 +214,13 @@ function TeamEditor({
                   : drag && { transform: [{ translateY: (moved(i, drag.from, drag.to) - i) * ROW }] },
               ]}
             >
-              <Grip index={i} onStart={startDrag} onMove={moveDrag} onEnd={endDrag} />
+              <Grip index={i} compact={compact} onStart={startDrag} onMove={moveDrag} onEnd={endDrag} />
               <TextInput
                 value={p}
                 onChangeText={(v) => onChange({ ...draft, players: draft.players.map((x, j) => (j === i ? v : x)) })}
                 placeholder={`Player ${i + 1}`}
                 placeholderTextColor={colors.faint}
-                style={styles.playerInput}
+                style={[styles.playerInput, compact && styles.playerInputCompact]}
                 maxLength={24}
                 autoCapitalize="words"
                 returnKeyType="next"
@@ -226,7 +229,7 @@ function TeamEditor({
                 accessibilityLabel={`Make player ${i + 1} captain`}
                 accessibilityState={{ selected: draft.captain === i }}
                 onPress={() => onChange({ ...draft, captain: draft.captain === i ? undefined : i })}
-                style={[styles.mark, draft.captain === i && styles.markOn]}
+                style={[mark, draft.captain === i && styles.markOn]}
               >
                 <Text style={[styles.markText, draft.captain === i && styles.markTextOn]}>C</Text>
               </PressableScale>
@@ -234,7 +237,7 @@ function TeamEditor({
                 accessibilityLabel={`Make player ${i + 1} wicketkeeper`}
                 accessibilityState={{ selected: draft.keeper === i }}
                 onPress={() => onChange({ ...draft, keeper: draft.keeper === i ? undefined : i })}
-                style={[styles.mark, draft.keeper === i && styles.markOn]}
+                style={[mark, draft.keeper === i && styles.markOn]}
               >
                 <Text style={[styles.markText, draft.keeper === i && styles.markTextOn]}>WK</Text>
               </PressableScale>
@@ -242,7 +245,7 @@ function TeamEditor({
                 accessibilityLabel={p.trim() ? `Move ${p.trim()} to ${other}` : `Move player ${i + 1} to ${other}`}
                 disabled={!p.trim()}
                 onPress={() => onSwap(i)}
-                style={[styles.mark, !p.trim() && { opacity: 0.35 }]}
+                style={[mark, !p.trim() && { opacity: 0.35 }]}
               >
                 <Ionicons name="swap-vertical" size={16} color={colors.muted} />
               </PressableScale>
@@ -596,6 +599,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  markCompact: { width: 30 },
   markOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   markText: { color: colors.faint, fontSize: 11, fontFamily: font.heavy },
   markTextOn: { color: colors.onAccent },
@@ -643,7 +647,7 @@ const styles = StyleSheet.create({
     height: 46,
   },
   squadText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold, flex: 1 },
-  playerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  playerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   playerNum: { color: colors.faint, width: 18, textAlign: 'right', fontFamily: font.bold },
   grip: {
     flexDirection: 'row',
@@ -654,9 +658,12 @@ const styles = StyleSheet.create({
     // On the web: a drag here moves the row, not the page, and doesn't select text.
     ...(Platform.OS === 'web' ? ({ touchAction: 'none', userSelect: 'none', cursor: 'grab' } as object) : null),
   },
+  playerInputCompact: { paddingHorizontal: space.sm },
   lifted: { zIndex: 10, backgroundColor: colors.surfaceHi, borderRadius: radius.sm, ...edge },
   playerInput: {
     flex: 1,
+    // On a narrow phone the name gives way, so the C, WK and swap buttons stay on screen.
+    minWidth: 0,
     color: colors.text,
     fontSize: 15, fontFamily: font.regular,
     backgroundColor: colors.bg,
