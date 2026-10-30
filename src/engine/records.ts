@@ -1,5 +1,5 @@
 import { ballView, matchState, oversText, type BallView, type InningsState } from './engine.ts';
-import { careerStats, COMMON_TEAM, displayName, keyFor, playerOfTheMatch } from './stats.ts';
+import { battingAverage, careerStats, COMMON_TEAM, displayName, keyFor, playerOfTheMatch } from './stats.ts';
 import type { Match, Team, WicketKind } from './types.ts';
 
 // The record book: the best (and worst) of every saved match. Only the two main innings count, not super overs.
@@ -175,6 +175,27 @@ export function records(matches: Match[]) {
   };
   const played = (c: (typeof careers)[number]) => `in ${c.matches} match${c.matches === 1 ? '' : 'es'}`;
 
+  // What each bowler gave away ball by ball: dots (nothing off the ball at all), and wides and no-balls.
+  const given = new Map<string, { dots: number; wides: number; noballs: number }>();
+  const tallyOf = (key: string) => given.get(key) ?? (given.set(key, { dots: 0, wides: 0, noballs: 0 }), given.get(key)!);
+  for (const { m, s } of all) {
+    for (const b of s.bowlers) {
+      const side = sideOf(m, b.id);
+      if (!side) continue;
+      const g = tallyOf(side.key);
+      g.wides += b.wides;
+      g.noballs += b.noballs;
+    }
+    for (const d of s.log) {
+      const side = d.bowler ? sideOf(m, d.bowler) : null;
+      if (side && d.total === 0 && d.ball.extra !== 'wide' && d.ball.extra !== 'noball') tallyOf(side.key).dots += 1;
+    }
+  }
+  const bowlers = careers.filter((c) => c.bowling.balls);
+  const tally = (c: (typeof careers)[number]) => given.get(c.key) ?? { dots: 0, wides: 0, noballs: 0 };
+  const oversOf = (c: (typeof careers)[number]) => `${oversText(c.bowling.balls)} overs`;
+  const outs = (c: (typeof careers)[number]) => c.batting.innings - c.batting.notOuts;
+
   return {
     summary,
     mostRuns: top(careers.filter((c) => c.batting.runs), (c) => c.batting.runs).map((c) => ({ name: c.name, key: c.key, team: c.team, count: c.batting.runs, sub: `${played(c)} · best ${c.batting.highest}${c.batting.highestNotOut ? '*' : ''}` })),
@@ -201,6 +222,30 @@ export function records(matches: Match[]) {
       (c) => c.fielding.catches + c.fielding.runOuts + c.fielding.stumpings,
     ).map((c) => ({ name: c.name, key: c.key, team: c.team, count: c.fielding.catches + c.fielding.runOuts + c.fielding.stumpings, sub: [c.fielding.catches && `${c.fielding.catches} caught`, c.fielding.runOuts && `${c.fielding.runOuts} run out`, c.fielding.stumpings && `${c.fielding.stumpings} stumped`].filter(Boolean).join(' · ') })),
     mostMoM: top([...moms.values()], (x) => x.count),
+    bestAverage: top(careers.filter((c) => c.batting.innings >= 3 && outs(c) > 0), (c) => battingAverage(c) ?? 0).map((c) => ({
+      name: c.name,
+      key: c.key,
+      team: c.team,
+      rate: battingAverage(c) ?? 0,
+      sub: `${c.batting.runs} runs · out ${outs(c)} time${outs(c) === 1 ? '' : 's'} in ${c.batting.innings} innings`,
+    })),
+    mostDots: top(bowlers.filter((c) => tally(c).dots), (c) => tally(c).dots).map((c) => ({
+      name: c.name,
+      key: c.key,
+      team: c.team,
+      count: tally(c).dots,
+      sub: `${Math.round((tally(c).dots * 100) / c.bowling.balls)}% of ${c.bowling.balls} balls`,
+    })),
+    mostFoursConceded: top(bowlers.filter((c) => c.bowling.fours), (c) => c.bowling.fours).map((c) => ({ name: c.name, key: c.key, team: c.team, count: c.bowling.fours, sub: `${oversOf(c)} · ${played(c)}` })),
+    mostSixesConceded: top(bowlers.filter((c) => c.bowling.sixes), (c) => c.bowling.sixes).map((c) => ({ name: c.name, key: c.key, team: c.team, count: c.bowling.sixes, sub: `${oversOf(c)} · ${played(c)}` })),
+    mostExtras: top(bowlers.filter((c) => tally(c).wides + tally(c).noballs), (c) => tally(c).wides + tally(c).noballs).map((c) => ({
+      name: c.name,
+      key: c.key,
+      team: c.team,
+      count: tally(c).wides + tally(c).noballs,
+      sub: `${tally(c).wides} wide${tally(c).wides === 1 ? '' : 's'} · ${tally(c).noballs} no-ball${tally(c).noballs === 1 ? '' : 's'} · ${played(c)}`,
+    })),
+    dearestSpells: top(bowling, (x) => x.runs * 1000 - x.wickets, 3),
   };
 }
 

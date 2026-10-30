@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleSeason } from '../demo/sampleSeason.ts';
 import { matchState } from './engine.ts';
+import { careerStats } from './stats.ts';
 import { BALLS_TO_CALL, headToHead, matchups, records, rivalry, rivalryContext, verdict } from './records.ts';
 
 const { matches } = sampleSeason(new Date('2026-10-23T12:00:00Z'));
@@ -15,6 +16,25 @@ test('the record book from the sample season', () => {
   assert.ok(r.partnerships[0].runs > 0 && r.partnerships[0].names.includes('&'));
   assert.ok(r.highestTotals[0].runs >= r.lowestTotals[0].runs);
   assert.equal(r.mostMoM.reduce((n, x) => n + x.count, 0), 6, 'one Man of the Match per finished game');
+});
+
+test('the bowlers’ records: boundaries conceded, dots, wides and no-balls, the dearest spells', () => {
+  const r = records(matches);
+  const careers = careerStats(matches);
+  const fours = careers.reduce((n, c) => n + c.bowling.fours, 0);
+  // Every four hit was off someone: the leader can't have conceded more than were hit.
+  assert.ok(r.mostFoursConceded[0].count > 0 && r.mostFoursConceded[0].count <= fours);
+  assert.equal(fours, careers.reduce((n, c) => n + c.batting.fours, 0));
+  assert.ok(r.mostSixesConceded.every((x, i, xs) => i === 0 || xs[i - 1].count >= x.count));
+  for (const x of r.mostDots) {
+    const balls = careers.find((c) => c.key === x.key)!.bowling.balls;
+    assert.ok(x.count <= balls, `${x.name}: no more dots than balls`);
+  }
+  const extras = matchState(matches[0]).innings.flatMap((s) => s.bowlers).reduce((n, b) => n + b.wides + b.noballs, 0);
+  assert.ok(extras === 0 || r.mostExtras.length > 0);
+  assert.equal(r.dearestSpells.length, 3);
+  assert.ok(r.dearestSpells[0].runs >= r.dearestSpells[2].runs);
+  for (const x of r.bestAverage) assert.ok(x.rate > 0 && /out \d+ time/.test(x.sub));
 });
 
 test('head to head adds up', () => {

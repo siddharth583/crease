@@ -100,11 +100,12 @@ export function recordBookHtml(matches: Match[]): string {
   const batting = [
     board('Most runs', r.mostRuns.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: String(x.count) }))),
     board('Highest scores', r.highScores.map((x) => ({ title: x.name, sub: `${x.balls} balls v ${x.vs} · ${day(x.date)}`, value: `${x.runs}${x.notOut ? '*' : ''}` }))),
-    board('Fastest innings (15+ balls)', r.fastest.map((x) => ({ title: x.name, sub: `${x.runs} off ${x.balls} v ${x.vs}`, value: `${((x.runs * 100) / x.balls).toFixed(0)} SR` }))),
+    board('Best average (3+ innings)', r.bestAverage.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: x.rate.toFixed(1) }))),
     board('Best strike rate (30+ balls)', r.bestStrikeRate.map((x) => ({ title: x.name, sub: x.sub, value: x.rate.toFixed(0) }))),
+    board('Fastest innings (15+ balls)', r.fastest.map((x) => ({ title: x.name, sub: `${x.runs} off ${x.balls} v ${x.vs}`, value: `${((x.runs * 100) / x.balls).toFixed(0)} SR` }))),
+    board('Biggest partnerships', r.partnerships.map((x) => ({ title: x.names, sub: `${x.balls} balls · ${x.team} v ${x.vs}`, value: String(x.runs) }))),
     board('Most sixes', r.mostSixes.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: String(x.count) }))),
     board('Most fours', r.mostFours.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: String(x.count) }))),
-    board('Biggest partnerships', r.partnerships.map((x) => ({ title: x.names, sub: `${x.balls} balls · ${x.team} v ${x.vs}`, value: String(x.runs) }))),
     board('Most Man of the Match awards', r.mostMoM.map((x) => ({ title: x.name, sub: x.team, value: `${x.count}×` }))),
   ];
 
@@ -112,6 +113,10 @@ export function recordBookHtml(matches: Match[]): string {
     board('Most wickets', r.mostWickets.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: String(x.count) }))),
     board('Best bowling', r.bestBowling.map((x) => ({ title: x.name, sub: `${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: `${x.wickets}/${x.runs}` }))),
     board('Best economy (6+ overs)', r.bestEconomy.map((x) => ({ title: x.name, sub: x.sub, value: x.rate.toFixed(2) }))),
+    board('Most dot balls', r.mostDots.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: String(x.count) }))),
+    board('Most fours conceded', r.mostFoursConceded.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: String(x.count) }))),
+    board('Most sixes conceded', r.mostSixesConceded.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: String(x.count) }))),
+    board('Most wides & no-balls', r.mostExtras.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: String(x.count) }))),
     board('Catches, run-outs & stumpings', r.mostDismissals.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: String(x.count) }))),
   ];
 
@@ -131,6 +136,7 @@ export function recordBookHtml(matches: Match[]): string {
     board('Highest totals', r.highestTotals.map((x) => ({ title: x.team, sub: `${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: `${x.runs}/${x.wickets}` }))),
     board('Lowest totals', r.lowestTotals.map((x) => ({ title: x.team, sub: `${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: `${x.runs}/${x.wickets}` }))),
     board('Hall of shame: most ducks', r.mostDucks.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: `${x.count}×` }))),
+    board('Hall of shame: most expensive spells', r.dearestSpells.map((x) => ({ title: x.name, sub: `${x.wickets}/${x.runs} off ${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: `${x.runs} runs` }))),
   ];
 
   const nameCell = (name: string, team: string) => `<td class="name"><div class="who">${esc(name)}</div><div class="how">${esc(team)}</div></td>`;

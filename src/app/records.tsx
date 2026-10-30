@@ -180,22 +180,27 @@ export default function Records() {
               items={r.highScores.map((x) => ({ title: x.name, sub: `${plural(x.balls, 'ball')} v ${x.vs} · ${day(x.date)}`, value: x.runs, display: `${x.runs}${x.notOut ? '*' : ''}`, onPress: openPlayer(x.key) }))}
             />
             <Board
-              label="Fastest innings (15+ balls)"
-              icon="flash"
-              items={r.fastest.map((x) => ({ title: x.name, sub: `${x.runs} off ${x.balls} v ${x.vs} · ${day(x.date)}`, value: (x.runs * 100) / x.balls, display: ((x.runs * 100) / x.balls).toFixed(0), unit: ' SR', onPress: openPlayer(x.key) }))}
+              label="Best average (3+ innings)"
+              icon="analytics"
+              items={r.bestAverage.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: x.rate, display: x.rate.toFixed(1), onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Best strike rate (30+ balls)"
               icon="speedometer"
               items={r.bestStrikeRate.map((x) => ({ title: x.name, sub: x.sub, value: x.rate, display: x.rate.toFixed(0), unit: ' SR', onPress: openPlayer(x.key) }))}
             />
-            <Board label="Most sixes" icon="rocket" items={r.mostSixes.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
-            <Board label="Most fours" icon="arrow-forward-circle" items={r.mostFours.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
+            <Board
+              label="Fastest innings (15+ balls)"
+              icon="flash"
+              items={r.fastest.map((x) => ({ title: x.name, sub: `${x.runs} off ${x.balls} v ${x.vs} · ${day(x.date)}`, value: (x.runs * 100) / x.balls, display: ((x.runs * 100) / x.balls).toFixed(0), unit: ' SR', onPress: openPlayer(x.key) }))}
+            />
             <Board
               label="Biggest partnerships"
               icon="people"
               items={r.partnerships.map((x) => ({ title: x.names, sub: `${plural(x.balls, 'ball')} · ${x.team} v ${x.vs} · ${day(x.date)}`, value: x.runs, display: String(x.runs), onPress: openMatch(x.matchId) }))}
             />
+            <Board label="Most sixes" icon="rocket" items={r.mostSixes.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
+            <Board label="Most fours" icon="arrow-forward-circle" items={r.mostFours.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
             <Board label="Most Man of the Match awards" icon="star" items={r.mostMoM.map((x) => ({ title: x.name, sub: x.team, value: x.count, display: String(x.count), unit: '×', onPress: openPlayer(x.key) }))} />
           </>
         )}
@@ -213,6 +218,23 @@ export default function Records() {
               icon="lock-closed"
               lowIsBest
               items={r.bestEconomy.map((x) => ({ title: x.name, sub: x.sub, value: x.rate, display: x.rate.toFixed(2), unit: ' a over', onPress: openPlayer(x.key) }))}
+            />
+            <Board label="Most dot balls" icon="ellipse-outline" items={r.mostDots.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
+            <Board
+              label="Most fours conceded"
+              icon="arrow-forward-circle"
+              items={r.mostFoursConceded.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))}
+            />
+            <Board
+              label="Most sixes conceded"
+              icon="rocket"
+              items={r.mostSixesConceded.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))}
+            />
+            <Board
+              label="Most wides & no-balls"
+              icon="warning"
+              empty="Not a wide or no-ball yet."
+              items={r.mostExtras.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Most catches, run-outs & stumpings"
@@ -326,6 +348,11 @@ export default function Records() {
               icon="egg-outline"
               empty="No ducks yet. Everyone’s got off the mark."
               items={r.mostDucks.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), unit: '×', onPress: openPlayer(x.key) }))}
+            />
+            <Board
+              label="Hall of shame: most expensive spells"
+              icon="cash-outline"
+              items={r.dearestSpells.map((x) => ({ title: x.name, sub: `${x.wickets}/${x.runs} off ${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: x.runs, display: String(x.runs), unit: ' runs', onPress: openPlayer(x.key) }))}
             />
           </>
         )}
