@@ -13,12 +13,12 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 'es'}`
 /** Export one match or all of them as a file, and import files others shared, reporting back through a toast. */
 export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) {
   const { matches, savedTeams, importMatches } = useMatches();
-  const { squad, auctions, importSquad } = useSquad();
+  const { squad, auctions, lineups, importSquad } = useSquad();
 
   /** Everything on this phone in one file: every match, the saved sides, the squad and the auctions. */
   const exportEverything = useCallback(async () => {
     try {
-      const result = await saveTextFile(fullBackupFileName(), JSON.stringify(makeBackup(matches, savedTeams, { squad, auctions })));
+      const result = await saveTextFile(fullBackupFileName(), JSON.stringify(makeBackup(matches, savedTeams, { squad, auctions, lineups })));
       const what = `${plural(matches.length, 'match')}, ${squad.length} players${auctions.length ? `, ${auctions.length} auction${auctions.length === 1 ? '' : 's'}` : ''}`;
       if (result === 'downloaded') notify(`Backup saved to your downloads: ${what}`);
       if (result === 'shared') notify(`Backup ready to send: ${what}`);
@@ -27,7 +27,7 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
       notify('Couldn’t make the backup. Try again.', 'error');
       return false;
     }
-  }, [matches, savedTeams, squad, auctions, notify]);
+  }, [matches, savedTeams, squad, auctions, lineups, notify]);
 
   const exportMatches = useCallback(
     async (which: Match[]) => {
@@ -116,15 +116,16 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
       const text = await pickTextFile();
       if (text === null) return;
       const file = parseBackup(text);
-      if (!file.matches.length && !file.squad?.length) return notify('There are no matches in that file.', 'info');
+      if (!file.matches.length && !file.squad?.length && !file.lineups.length) return notify('There are no matches in that file.', 'info');
       // The squad first: it's how a player is known as one person on either side when their matches are counted.
-      const fromSquad = importSquad(file.squad, file.auctions);
+      const fromSquad = importSquad(file.squad, file.auctions, file.lineups);
       const { added, updated } = importMatches(file.matches, file.teams);
       const parts = [
         added && `${plural(added, 'match')} added`,
         updated && `${plural(updated, 'match')} updated`,
         fromSquad.players && `${fromSquad.players} squad player${fromSquad.players === 1 ? '' : 's'} added or updated`,
         fromSquad.auctions && `${fromSquad.auctions} auction${fromSquad.auctions === 1 ? '' : 's'} added`,
+        fromSquad.lineups && `${fromSquad.lineups} saved line-up${fromSquad.lineups === 1 ? '' : 's'} added`,
       ].filter(Boolean);
       notify(parts.length ? `${parts.join(', ')}. ${done}` : 'You already have everything in that file.', parts.length ? 'success' : 'info');
     } catch (e) {

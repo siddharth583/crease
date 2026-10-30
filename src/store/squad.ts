@@ -4,13 +4,14 @@ import { Platform } from 'react-native';
 import type { Auction } from '../engine/auction.ts';
 import { mergeAuctions, mergeSquad } from '../engine/backup.ts';
 import { DEFAULT_SQUAD, TEAMS_REVISION, updateSquad, type SquadPlayer } from '../engine/squad.ts';
+import type { SavedLineup } from '../engine/teams.ts';
 import { setRegulars } from '../engine/stats.ts';
 
-// The squad and the auctions, kept on this phone. Read synchronously at start-up, like the preferences, so the
+// The squad, the auctions and the saved line-ups, kept on this phone. Read synchronously at start-up, like the preferences, so the
 // regulars are known before any stats are worked out.
 
 /** `revision`: which version of the usual sides the squad was last brought up to. */
-type Saved = { squad: SquadPlayer[]; auctions: Auction[]; revision?: number };
+type Saved = { squad: SquadPlayer[]; auctions: Auction[]; lineups?: SavedLineup[]; revision?: number };
 
 const KEY = 'crease.squad.v1';
 const fileFor = () => new File(Paths.document, 'crease-squad.json');
@@ -35,9 +36,9 @@ function read(): Saved {
     // New sides since this phone last looked: rename and add the players they bring, once.
     if ((saved.revision ?? 1) < TEAMS_REVISION) {
       squad = updateSquad(squad);
-      write({ squad, auctions: saved.auctions ?? [], revision: TEAMS_REVISION });
+      write({ squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION });
     }
-    return { squad, auctions: saved.auctions ?? [], revision: TEAMS_REVISION };
+    return { squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION };
   } catch {
     // An unreadable squad is kept aside before the defaults are ever saved over it.
     try {
@@ -80,8 +81,11 @@ type SquadStore = {
   auctions: Auction[];
   saveAuction: (a: Auction) => void;
   deleteAuction: (id: string) => void;
-  /** A full backup's squad and auctions, merged in: how many players joined or changed, and auctions added. */
-  importSquad: (squad: SquadPlayer[] | null, auctions: Auction[]) => { players: number; auctions: number };
+  lineups: SavedLineup[];
+  saveLineup: (l: SavedLineup) => void;
+  deleteLineup: (id: string) => void;
+  /** A full backup's squad, auctions and line-ups, merged in: how many players joined or changed, and what was added. */
+  importSquad: (squad: SquadPlayer[] | null, auctions: Auction[], lineups?: SavedLineup[]) => { players: number; auctions: number; lineups: number };
 };
 
 const SquadContext = createContext<SquadStore | null>(null);
@@ -104,21 +108,29 @@ export function SquadProvider({ children }: { children: ReactNode }) {
     [update],
   );
   const deleteAuction = useCallback((id: string) => update((s) => ({ ...s, auctions: s.auctions.filter((x) => x.id !== id) })), [update]);
+  const saveLineup = useCallback((l: SavedLineup) => update((s) => ({ ...s, lineups: [l, ...(s.lineups ?? []).filter((x) => x.id !== l.id)] })), [update]);
+  const deleteLineup = useCallback((id: string) => update((s) => ({ ...s, lineups: (s.lineups ?? []).filter((x) => x.id !== id) })), [update]);
   const importSquad = useCallback(
-    (squad: SquadPlayer[] | null, auctions: Auction[]) => {
+    (squad: SquadPlayer[] | null, auctions: Auction[], lineups: SavedLineup[] = []) => {
       // Counted against what's here now; merged again against whatever is there when it lands.
       const s = latest.current;
       const players = squad ? mergeSquad(s.squad, squad) : null;
       const added = mergeAuctions(s.auctions, auctions).added;
-      if ((players && players.added + players.updated) || added)
-        update((now) => ({ ...now, squad: squad ? mergeSquad(now.squad, squad).squad : now.squad, auctions: mergeAuctions(now.auctions, auctions).auctions }));
-      return { players: players ? players.added + players.updated : 0, auctions: added };
+      const kept = mergeAuctions(s.lineups ?? [], lineups).added;
+      if ((players && players.added + players.updated) || added || kept)
+        update((now) => ({
+          ...now,
+          squad: squad ? mergeSquad(now.squad, squad).squad : now.squad,
+          auctions: mergeAuctions(now.auctions, auctions).auctions,
+          lineups: mergeAuctions(now.lineups ?? [], lineups).auctions,
+        }));
+      return { players: players ? players.added + players.updated : 0, auctions: added, lineups: kept };
     },
     [update],
   );
   return createElement(
     SquadContext.Provider,
-    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, importSquad } },
+    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, lineups: state.lineups ?? [], saveLineup, deleteLineup, importSquad } },
     children,
   );
 }

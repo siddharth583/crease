@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { sampleSeason } from '../demo/sampleSeason.ts';
 import { DEFAULT_SQUAD } from './squad.ts';
 import { setRegulars } from './stats.ts';
-import { evenSides, fillSides, nameKey, sideStrength, strengthOf, strengths, type Strength } from './teams.ts';
+import { applyFix, evenSides, fillSides, gap, nameKey, rebalance, recentResults, sideStrength, strengthOf, strengths, type Strength } from './teams.ts';
 
 // As the app does at start-up: the squad's names are the same people whichever side they play for.
 setRegulars(DEFAULT_SQUAD.map((p) => p.name));
@@ -20,6 +20,9 @@ test('a player’s strength leans on form, and a newcomer plays to their stars',
   // Mahika joined after the sample season: three stars all round make a 6.
   assert.equal(strengthOf(table, 'mahika kaushik ').power, 6);
   assert.equal(strengthOf(table, 'Someone New').guest, true);
+  // A first name alone is that squad player, when only one has it; not when it could be several.
+  assert.equal(strengthOf(table, 'Mahika').name, 'Mahika Kaushik');
+  assert.equal(strengthOf(table, 'Singh').guest, true);
 });
 
 test('two even sides from everyone, a keeper each, and Shuffle gives another fair pair', () => {
@@ -58,4 +61,46 @@ test('a side’s strength sums up its players', () => {
   const s = sideStrength(['Siddharth Singh', 'Rajeev'].map((n) => strengthOf(table, n)));
   assert.equal(s.players[0].name, 'Siddharth Singh');
   assert.ok(s.power > 0 && s.bat >= 1 && s.bowl >= 1);
+});
+
+const names = (xs: Strength[]) => xs.map((p) => p.name);
+const gapOf = (sides: [string[], string[]]) => gap(sides[0].map((n) => strengthOf(table, n)), sides[1].map((n) => strengthOf(table, n)));
+
+test('after a player is sent across, the fix sends someone else back and leaves that player where they were put', () => {
+  const split = evenSides(everyone, 2);
+  const sides: [string[], string[]] = [names(split.sides[0]), names(split.sides[1])];
+  // Move the strongest of the first side across: the second is now two bigger and stronger.
+  const star = split.sides[0][0].name;
+  const edited = applyFix(sides, { kind: 'move', player: star, to: 1 });
+  assert.equal(edited[1].length - edited[0].length, 2);
+  assert.equal(rebalance(sides, table), null, 'an even split needs no fix');
+  const r = rebalance(edited, table, [star])!;
+  assert.equal(r.fix.kind, 'move');
+  assert.ok(r.fix.kind === 'move' && r.fix.to === 0 && r.fix.player !== star);
+  const fixed = applyFix(edited, r.fix);
+  assert.equal(fixed[0].length, fixed[1].length);
+  assert.ok(gapOf(fixed) < gapOf(edited));
+  assert.ok(fixed[1].includes(star));
+});
+
+test('after a lopsided swap, the fix is another swap that leaves the two swapped players alone', () => {
+  const split = evenSides(everyone, 2);
+  const sides: [string[], string[]] = [names(split.sides[0]), names(split.sides[1])];
+  const strong = [...split.sides[0]].sort((a, b) => b.power - a.power)[0].name;
+  const weak = [...split.sides[1]].sort((a, b) => a.power - b.power)[0].name;
+  const edited = applyFix(sides, { kind: 'swap', players: [strong, weak] });
+  const r = rebalance(edited, table, [strong, weak])!;
+  assert.ok(r, 'a fix is offered');
+  assert.equal(r.fix.kind, 'swap');
+  assert.ok(r.fix.kind === 'swap' && !r.fix.players.includes(strong) && !r.fix.players.includes(weak));
+  assert.ok(gapOf(applyFix(edited, r.fix)) < gapOf(edited));
+});
+
+test('a side’s recent results, newest first', () => {
+  const res = recentResults(matches, 'Copan Strikers');
+  const other = recentResults(matches, 'copan royals');
+  assert.equal(res.length, 5);
+  assert.ok(res.every((r) => r === 'W' || r === 'L' || r === 'T'));
+  // The same games from the other side: each win one side's is the other's loss.
+  assert.deepEqual(other.map((r) => (r === 'W' ? 'L' : r === 'L' ? 'W' : 'T')), res);
 });

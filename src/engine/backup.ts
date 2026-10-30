@@ -1,6 +1,7 @@
 import type { Auction } from './auction.ts';
 import { matchState } from './engine.ts';
 import type { SquadPlayer } from './squad.ts';
+import type { SavedLineup } from './teams.ts';
 import type { Match, Team } from './types.ts';
 
 // A match file holds whole matches (every ball), never totals: the stats are worked out again from the balls on
@@ -20,9 +21,11 @@ export type Backup = {
   /** A full backup only. */
   squad?: SquadPlayer[];
   auctions?: Auction[];
+  /** Line-ups kept from Teams › Recommend. */
+  lineups?: SavedLineup[];
 };
 
-export function makeBackup(matches: Match[], teams: Team[], extra?: { squad: SquadPlayer[]; auctions: Auction[] }): Backup {
+export function makeBackup(matches: Match[], teams: Team[], extra?: { squad: SquadPlayer[]; auctions: Auction[]; lineups?: SavedLineup[] }): Backup {
   return { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: new Date().toISOString(), matches, teams, ...extra };
 }
 
@@ -87,12 +90,17 @@ function looksLikeSquadPlayer(p: unknown): p is SquadPlayer {
   return isObject(p) && typeof p.id === 'string' && typeof p.name === 'string' && p.name.trim() !== '' && typeof p.role === 'string' && isRating(p.bat) && isRating(p.bowl) && isRating(p.field);
 }
 
+function looksLikeLineup(l: unknown): l is SavedLineup {
+  const side = (s: unknown) => isObject(s) && typeof s.name === 'string' && Array.isArray(s.players) && s.players.every((p) => typeof p === 'string');
+  return isObject(l) && typeof l.id === 'string' && typeof l.createdAt === 'number' && Array.isArray(l.sides) && l.sides.length === 2 && l.sides.every(side);
+}
+
 function looksLikeAuction(a: unknown): a is Auction {
   return isObject(a) && typeof a.id === 'string' && typeof a.createdAt === 'number' && Array.isArray(a.sides) && Array.isArray(a.roster) && Array.isArray(a.events);
 }
 
 /** Reads a match file or a full backup. Throws an Error with a message fit to show the person. */
-export function parseBackup(text: string): { matches: Match[]; teams: Team[]; skipped: number; squad: SquadPlayer[] | null; auctions: Auction[] } {
+export function parseBackup(text: string): { matches: Match[]; teams: Team[]; skipped: number; squad: SquadPlayer[] | null; auctions: Auction[]; lineups: SavedLineup[] } {
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -109,7 +117,8 @@ export function parseBackup(text: string): { matches: Match[]; teams: Team[]; sk
   const teams = Array.isArray(data.teams) ? data.teams.filter(looksLikeTeam) : [];
   const squad = Array.isArray(data.squad) ? data.squad.filter(looksLikeSquadPlayer) : null;
   const auctions = Array.isArray(data.auctions) ? data.auctions.filter(looksLikeAuction) : [];
-  return { matches, teams, skipped: data.matches.length - matches.length, squad, auctions };
+  const lineups = Array.isArray(data.lineups) ? data.lineups.filter(looksLikeLineup) : [];
+  return { matches, teams, skipped: data.matches.length - matches.length, squad, auctions, lineups };
 }
 
 const nameOf = (p: { name: string }) => p.name.trim().toLowerCase();
@@ -140,8 +149,8 @@ export function mergeSquad(existing: SquadPlayer[], incoming: SquadPlayer[]) {
   return { squad, added, updated };
 }
 
-/** A backup's auctions join the phone's; one the phone already has (same id) is kept as it is. Newest first. */
-export function mergeAuctions(existing: Auction[], incoming: Auction[]) {
+/** A backup's auctions (or saved line-ups) join the phone's; one already here (same id) is kept as it is. Newest first. */
+export function mergeAuctions<T extends { id: string; createdAt: number }>(existing: T[], incoming: T[]) {
   const have = new Set(existing.map((a) => a.id));
   const fresh = incoming.filter((a) => !have.has(a.id));
   return { auctions: [...existing, ...fresh].sort((a, b) => b.createdAt - a.createdAt), added: fresh.length };
