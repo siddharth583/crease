@@ -66,9 +66,10 @@ export type InningsState = {
   overTotals: { runs: number; wickets: number }[];
   /** The bowlers of each over in the order they bowled in it (two when one couldn't finish it), in step with `overs`. */
   overBowlers: string[][];
-  partnership: { runs: number; balls: number };
+  /** `by`: each batter's runs off the bat in it (the rest of `runs` is extras). */
+  partnership: { runs: number; balls: number; by: Record<string, number> };
   /** Every partnership in order; the last one is still going while the innings is. */
-  partnerships: { batters: [string | null, string | null]; runs: number; balls: number }[];
+  partnerships: { batters: [string | null, string | null]; runs: number; balls: number; by: Record<string, number> }[];
   /** Ball by ball, for the commentary and batter-against-bowler records. */
   log: DeliveryLog[];
   available: string[];
@@ -154,7 +155,7 @@ export function inningsState(match: Match, index: number, target: number | null)
     overs: [[]],
     overTotals: [{ runs: 0, wickets: 0 }],
     overBowlers: [[]],
-    partnership: { runs: 0, balls: 0 },
+    partnership: { runs: 0, balls: 0, by: {} },
     partnerships: [],
     log: [],
     available: [],
@@ -220,7 +221,7 @@ export function inningsState(match: Match, index: number, target: number | null)
       s.partnerships.push({ batters: [s.striker, s.nonStriker], ...s.partnership });
       if (s.striker === e.batter) s.striker = null;
       if (s.nonStriker === e.batter) s.nonStriker = null;
-      s.partnership = { runs: 0, balls: 0 };
+      s.partnership = { runs: 0, balls: 0, by: {} };
       continue;
     }
     if (e.type === 'swap') {
@@ -265,6 +266,7 @@ export function inningsState(match: Match, index: number, target: number | null)
       }
       if (!e.extra || e.extra === 'noball') {
         striker.runs += e.runs;
+        s.partnership.by[striker.id] = (s.partnership.by[striker.id] ?? 0) + e.runs;
         if (e.runs === 4) striker.fours += 1;
         if (e.runs === 6) striker.sixes += 1;
       }
@@ -332,7 +334,7 @@ export function inningsState(match: Match, index: number, target: number | null)
       s.partnerships.push({ batters: [s.striker ?? out.id, s.nonStriker], ...s.partnership });
       if (s.striker === out.id) s.striker = null;
       if (s.nonStriker === out.id) s.nonStriker = null;
-      s.partnership = { runs: 0, balls: 0 };
+      s.partnership = { runs: 0, balls: 0, by: {} };
     }
 
     const bowlersWicket = e.wicket && BOWLER_WICKETS.includes(e.wicket.kind);

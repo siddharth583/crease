@@ -113,7 +113,7 @@ function inningsHtml(match: Match, s: InningsState, label: string, tint: string,
       const marks = `${match.captains?.[s.battingTeam.id] === b.id ? '<span class="mark">c</span>' : ''}${match.keepers?.[s.battingTeam.id] === b.id ? '<span class="mark">wk</span>' : ''}`;
       return `<tr${b.runs === topRuns && b.runs > 0 ? ' class="top"' : ''}>
         <td class="name"><div class="who">${esc(playerName(match, b.id))}${notOut ? '<span class="no">*</span>' : ''}${marks}</div><div class="how${notOut ? ' live' : ''}">${esc(dismissal(match, b))}</div></td>
-        <td class="runs"><b>${b.runs}</b><div class="share"><span style="width:${(b.runs / topRuns) * 100}%;background:${tint}"></span></div></td><td>${b.balls}</td><td>${b.fours}</td><td>${b.sixes}</td><td class="dim">${sr(b.runs, b.balls)}</td>
+        <td class="runs"><b>${b.runs}</b></td><td>${b.balls}</td><td>${b.fours}</td><td>${b.sixes}</td><td class="dim">${sr(b.runs, b.balls)}</td>
       </tr>`;
     })
     .join('');
@@ -309,8 +309,6 @@ export const REPORT_HEAD = `<link rel="preconnect" href="https://fonts.googleapi
   .how { color: var(--muted); font-size: 9px; margin-top: 1px; font-weight: 400; }
   .how.live { color: var(--volt-ink); font-weight: 600; }
   td.runs b { font-size: 13px; font-weight: 800; }
-  .share { height: 3px; border-radius: 2px; background: #EEF0EA; margin: 3px 0 0 auto; width: 42px; overflow: hidden; display: flex; justify-content: flex-end; }
-  .share span { display: block; height: 100%; border-radius: 2px; }
   tr.top td { background: #FAFBF7; }
   .dim { color: var(--muted); }
   tr.foot td { background: var(--soft); border-bottom: 0; padding-top: 6px; padding-bottom: 6px; }

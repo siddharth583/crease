@@ -4,7 +4,7 @@ import { useMemo, useState, type ComponentProps } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BallChip, Card, Chip, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../components/ui.tsx';
-import { CountUp, GrowBar, Tug } from '../components/motion.tsx';
+import { CountUp, Tug } from '../components/motion.tsx';
 import { FaceOff } from '../components/FaceOff.tsx';
 import { BALLS_TO_CALL, headToHead, matchups, records, rivalryContext, teamNames, verdict } from '../engine/records.ts';
 import { useMatches } from '../store/matches.tsx';
@@ -22,10 +22,8 @@ type Item = { title: string; sub: string; value: number; display: string; unit?:
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
 /** One record: the holder on a card of their own, the chasers under it with a bar against the top mark. */
-function Board({ label, icon, items, empty, lowIsBest }: { label: string; icon: IconName; items: Item[]; empty?: string; lowIsBest?: boolean }) {
+function Board({ label, icon, items, empty }: { label: string; icon: IconName; items: Item[]; empty?: string }) {
   const [first, ...rest] = items;
-  const best = first?.value ?? 1;
-  const share = (v: number) => Math.max(0.06, Math.min(1, lowIsBest ? best / Math.max(v, 0.01) : v / Math.max(best, 0.01)));
   return (
     <FadeIn>
       <SectionLabel>{label}</SectionLabel>
@@ -66,7 +64,6 @@ function Board({ label, icon, items, empty, lowIsBest }: { label: string; icon: 
                     {x.unit ? <Text style={styles.unit}>{x.unit}</Text> : null}
                   </Text>
                 </View>
-                <GrowBar share={share(x.value)} delay={120 + i * 70} trackStyle={styles.track} style={styles.fill} />
                 <Text style={styles.sub} numberOfLines={1}>
                   {x.sub}
                 </Text>
@@ -216,7 +213,6 @@ export default function Records() {
             <Board
               label="Best economy (6+ overs)"
               icon="lock-closed"
-              lowIsBest
               items={r.bestEconomy.map((x) => ({ title: x.name, sub: x.sub, value: x.rate, display: x.rate.toFixed(2), unit: ' a over', onPress: openPlayer(x.key) }))}
             />
             <Board label="Most dot balls" icon="ellipse-outline" items={r.mostDots.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
@@ -340,7 +336,6 @@ export default function Records() {
             <Board
               label="Lowest totals"
               icon="thermometer-outline"
-              lowIsBest
               items={r.lowestTotals.map((x) => ({ title: x.team, sub: `${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: x.runs, display: `${x.runs}/${x.wickets}`, onPress: openMatch(x.matchId) }))}
             />
             <Board
@@ -480,8 +475,6 @@ const styles = StyleSheet.create({
   sub: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 3 },
   value: { fontFamily: font.posterBlack, fontSize: 20, color: colors.text, ...type.num },
   unit: { fontFamily: font.poster, fontSize: 13, color: colors.faint },
-  track: { height: 4, borderRadius: 2, backgroundColor: colors.border, marginTop: 5, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 2, backgroundColor: colors.accentInk, opacity: 0.7 },
   overRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: 1, borderTopColor: colors.border },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   tug: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2, backgroundColor: colors.border },

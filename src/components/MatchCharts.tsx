@@ -75,31 +75,56 @@ export function RunRace({ state }: { state: MatchState }) {
 export function Partnerships({ match, s }: { match: Match; s: InningsState }) {
   const list = s.partnerships.filter((p) => p.runs || p.balls);
   if (!list.length) return null;
-  const peak = Math.max(...list.map((p) => p.runs), 1);
+  // Two colours, and a batter keeps theirs from one stand to the next: the one coming in takes the other.
+  const sides = [colors.accent, colors.violet];
+  let held: Record<string, number> = {};
+  const pairs = list.map((p) => {
+    const ids = p.batters.filter((id): id is string => Boolean(id));
+    const stays = ids.find((id) => held[id] !== undefined);
+    const side = (id: string) => (stays === undefined ? ids.indexOf(id) : id === stays ? held[stays] : 1 - held[stays]);
+    held = Object.fromEntries(ids.map((id) => [id, side(id)]));
+    return ids.map((id) => ({ id, runs: p.by[id] ?? 0, side: side(id), color: sides[side(id)] })).sort((a, b) => a.side - b.side);
+  });
   return (
     <>
       <SectionLabel>Partnerships</SectionLabel>
-      <Card style={{ gap: space.sm }}>
-        {list.map((p, i) => (
-          <View key={i}>
-            <View style={styles.pRow}>
-              <Text style={styles.pWicket}>{i + 1}</Text>
-              <Text style={styles.pNames} numberOfLines={1}>
-                {p.batters
-                  .filter(Boolean)
-                  .map((id) => playerName(match, id))
-                  .join(' & ')}
-              </Text>
-              <Text style={styles.pRuns}>
-                {p.runs}
-                <Text style={styles.pBalls}> ({p.balls})</Text>
-              </Text>
+      <Card style={{ gap: space.md }}>
+        {list.map((p, i) => {
+          // Each batter's share of the stand in their colour, extras in grey.
+          const pair = pairs[i];
+          const extras = Math.max(0, p.runs - pair.reduce((n, x) => n + x.runs, 0));
+          return (
+            <View key={i}>
+              <View style={styles.pRow}>
+                <Text style={styles.pWicket}>{i + 1}</Text>
+                <Text style={styles.pRuns}>
+                  {p.runs}
+                  <Text style={styles.pBalls}> ({p.balls})</Text>
+                </Text>
+                {extras > 0 && <Text style={styles.pExtras}>incl. {extras} extra{extras === 1 ? '' : 's'}</Text>}
+              </View>
+              <View style={styles.pSplit}>
+                {p.runs > 0 ? (
+                  [...pair, { id: 'extras', runs: extras, color: ink(0.2) }]
+                    .filter((x) => x.runs > 0)
+                    .map((x) => <View key={x.id} style={{ flex: x.runs, backgroundColor: x.color }} />)
+                ) : (
+                  <View style={{ flex: 1, backgroundColor: ink(0.08) }} />
+                )}
+              </View>
+              <View style={styles.pPair}>
+                {pair.map((x, k) => (
+                  <View key={x.id} style={[styles.pBatter, (k === 1 || x.side === 1) && { justifyContent: 'flex-end' }]}>
+                    <View style={[styles.pDot, { backgroundColor: x.color }]} />
+                    <Text style={styles.pNames} numberOfLines={1}>
+                      {playerName(match, x.id)} <Text style={styles.pOwn}>{x.runs}</Text>
+                    </Text>
+                  </View>
+                ))}
+              </View>
             </View>
-            <View style={styles.track}>
-              <View style={[styles.fill, { width: `${(p.runs / peak) * 100}%` }]} />
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </Card>
     </>
   );
@@ -177,11 +202,15 @@ const styles = StyleSheet.create({
   legendText: { color: colors.muted, fontSize: 12, fontFamily: font.semibold },
   pRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
   pWicket: { width: 16, color: colors.faint, fontFamily: font.posterBlack, fontSize: 16 },
-  pNames: { flex: 1, color: colors.text, fontSize: 14, fontFamily: font.bold },
+  pNames: { flexShrink: 1, color: colors.text, fontSize: 13, fontFamily: font.semibold },
+  pOwn: { fontFamily: font.posterBlack, ...type.num },
+  pExtras: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
+  pSplit: { flexDirection: 'row', gap: 2, height: 8, borderRadius: 4, overflow: 'hidden', marginTop: 6, marginLeft: 24 },
+  pPair: { flexDirection: 'row', justifyContent: 'space-between', gap: space.md, marginTop: 6, marginLeft: 24 },
+  pBatter: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pDot: { width: 8, height: 8, borderRadius: 4 },
   pRuns: { fontFamily: font.posterBlack, fontSize: 16, color: colors.text, ...type.num },
   pBalls: { fontFamily: font.poster, fontSize: 13, color: colors.faint },
-  track: { height: 6, borderRadius: 3, backgroundColor: ink(0.08), marginTop: 4, marginLeft: 24, overflow: 'hidden' },
-  fill: { height: '100%', backgroundColor: colors.accent, borderRadius: 3 },
   count: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
   over: { paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: 1, borderTopColor: colors.border, gap: 4 },
   overTitle: { ...type.label, fontSize: 10, color: colors.muted, marginBottom: 2 },

@@ -39,6 +39,9 @@ function checkMatch(m: Match) {
     assert.ok(notTheBowlers >= 0);
     assert.equal(s.partnerships.reduce((n, p) => n + p.runs, 0), s.runs - s.extras.penalty, `${where}: partnerships`);
     for (const b of s.batters) assert.ok(b.fours * 4 + b.sixes * 6 <= b.runs, `${where}: boundaries within runs`);
+    // Each batter's runs, partnership by partnership, add up to their score; the rest of a stand is extras.
+    for (const b of s.batters) assert.equal(s.partnerships.reduce((n, p) => n + (p.by[b.id] ?? 0), 0), b.runs, `${where}: ${b.id}'s runs across partnerships`);
+    for (const p of s.partnerships) assert.ok(Object.values(p.by).reduce((n, r) => n + r, 0) <= p.runs, `${where}: a stand's batters within its runs`);
     // Every boundary hit is one a bowler conceded (balls with no bowler on aren't anyone's).
     const sum = (xs: { fours: number; sixes: number }[]) => xs.reduce((n, x) => [n[0] + x.fours, n[1] + x.sixes], [0, 0]);
     if (s.log.every((d) => d.bowler)) assert.deepEqual(sum(s.bowlers), sum(s.batters), `${where}: boundaries conceded = boundaries hit`);
