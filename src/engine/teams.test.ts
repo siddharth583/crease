@@ -104,3 +104,16 @@ test('a side’s recent results, newest first', () => {
   // The same games from the other side: each win one side's is the other's loss.
   assert.deepEqual(other.map((r) => (r === 'W' ? 'L' : r === 'L' ? 'W' : 'T')), res);
 });
+
+test('a line-up picture names both sides, marks the captain first and escapes names', async () => {
+  const { lineupFileName, lineupHtml } = await import('./lineup.ts');
+  const sides: [{ name: string; players: string[]; captain?: string }, { name: string; players: string[] }] = [
+    { name: 'Copan <Strikers>', players: ['Rajeev', 'Siddharth Singh'], captain: 'Rajeev' },
+    { name: 'Copan Royals', players: ['Nihal Walia'] },
+  ];
+  const html = lineupHtml(sides, table, new Date(2026, 9, 30));
+  assert.ok(html.includes('Copan &lt;Strikers&gt;') && !html.includes('<Strikers>'));
+  // The captain heads their side even though Siddharth is stronger.
+  assert.ok(html.indexOf('Rajeev <i>C</i>') < html.indexOf('Siddharth Singh'));
+  assert.equal(lineupFileName(sides, new Date(2026, 9, 30)), 'Copan Strikers vs Copan Royals - Line-up - 30 Oct 2026.png');
+});

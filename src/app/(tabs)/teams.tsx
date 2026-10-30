@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { NameSuggestions } from '../../components/NameSuggestions.tsx';
 import { FormBadge } from '../../components/Ratings.tsx';
-import { Button, Card, Chip, FadeIn, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../../components/ui.tsx';
+import { Button, Card, Chip, FadeIn, PressableScale, Screen, SectionLabel, Segmented, useToast, type IconName } from '../../components/ui.tsx';
+import { lineupFileName, lineupHtml } from '../../engine/lineup.ts';
 import { DEFAULT_SQUAD } from '../../engine/squad.ts';
 import {
   applyFix,
@@ -22,6 +23,7 @@ import {
 } from '../../engine/teams.ts';
 import type { Team } from '../../engine/types.ts';
 import { newId, useMatches } from '../../store/matches.tsx';
+import { saveReportImage } from '../../store/files.ts';
 import { useSquad } from '../../store/squad.ts';
 import { colors, font, radius, space, type } from '../../theme.ts';
 
@@ -214,6 +216,21 @@ function StrengthView({ table }: { table: Map<string, Strength> }) {
   );
 }
 
+/** One action under the sides: an icon, its words for screen readers. `primary` is the one in volt. */
+function Action({ icon, label, onPress, primary, armed, disabled }: { icon: IconName; label: string; onPress: () => void; primary?: boolean; armed?: boolean; disabled?: boolean }) {
+  return (
+    <PressableScale
+      accessibilityLabel={label}
+      disabled={disabled}
+      scaleTo={0.9}
+      onPress={onPress}
+      style={[styles.action, primary && styles.actionPrimary, armed && styles.actionArmed, disabled && { opacity: 0.35 }]}
+    >
+      <Ionicons name={icon} size={primary ? 24 : 20} color={primary || armed ? colors.onAccent : colors.text} />
+    </PressableScale>
+  );
+}
+
 /** How a fix reads: "send Rajeev to Copan Strikers" or "swap Rajeev and Chirag Taneja". */
 function fixText(fix: Fix, names: [string, string]) {
   return fix.kind === 'move' ? `send ${fix.player} to ${names[fix.to]}` : `swap ${fix.players[0]} and ${fix.players[1]}`;
@@ -221,7 +238,21 @@ function fixText(fix: Fix, names: [string, string]) {
 const fixPlayers = (fix: Fix) => (fix.kind === 'move' ? [fix.player] : fix.players);
 
 /** One kept line-up: its sides on today's form, and what can be done with it. */
-function LineupCard({ l, table, onStart, onEdit, onDelete }: { l: SavedLineup; table: Map<string, Strength>; onStart: () => void; onEdit: () => void; onDelete: () => void }) {
+function LineupCard({
+  l,
+  table,
+  onStart,
+  onEdit,
+  onShare,
+  onDelete,
+}: {
+  l: SavedLineup;
+  table: Map<string, Strength>;
+  onStart: () => void;
+  onEdit: () => void;
+  onShare: () => void;
+  onDelete: () => void;
+}) {
   const [arming, setArming] = useState(false);
   const s = l.sides.map((side) => sideStrength(side.players.map((n) => strengthOf(table, n))));
   return (
@@ -245,6 +276,7 @@ function LineupCard({ l, table, onStart, onEdit, onDelete }: { l: SavedLineup; t
       <View style={styles.wrap}>
         <Chip icon="play" label="Start a match" onPress={onStart} />
         <Chip icon="create-outline" label="Edit" onPress={onEdit} />
+        <Chip icon="share-outline" label="Share" onPress={onShare} />
         <Chip icon="trash-outline" tone="danger" selected={arming} label={arming ? 'Tap again to delete' : 'Delete'} onPress={() => (arming ? onDelete() : setArming(true))} />
       </View>
     </Card>
@@ -405,6 +437,19 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
     toast.show('Line-up loaded: change it below.', 'info');
   };
 
+  /** The line-up as a picture, to post in the group. */
+  const share = async (sides: SideDraft[]) => {
+    try {
+      toast.show('Making the picture…', 'info');
+      const pair = sides as [SideDraft, SideDraft];
+      const result = await saveReportImage(lineupFileName(pair), lineupHtml(pair, table));
+      if (result === 'downloaded') toast.show('Line-up picture saved to your downloads', 'success');
+      if (result === 'shared') toast.show('Line-up picture ready to send', 'success');
+    } catch {
+      toast.show('Couldn’t make the picture. Try again.', 'error');
+    }
+  };
+
   const tagged = suggestion ? fixPlayers(suggestion.fix) : [];
   return (
     <View style={{ gap: space.md }}>
@@ -509,16 +554,31 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
               />
             );
           })}
-          <Button icon="play" label="Start a match with these sides" onPress={() => start(current())} />
-          <Button variant="ghost" icon="bookmark-outline" label="Save this line-up for later" onPress={keep} />
-          {edited && <Button variant="ghost" icon="arrow-undo-outline" label="Back to the suggestion" onPress={fresh} />}
-          <Button variant="ghost" icon="shuffle" label={edited ? 'Shuffle: start again from a new split' : 'Shuffle: another even split'} onPress={() => (setSeed((s) => s + 1), fresh())} />
-          <Button
-            variant="ghost"
-            icon="save-outline"
-            label={saving ? `Tap again: ${names[0]} and ${names[1]} change` : `Make these the new ${names[0]} and ${names[1]}`}
-            onPress={() => (saving ? save() : setSaving(true))}
-          />
+          <View style={styles.actions}>
+            <Action primary icon="play" label="Start a match with these sides" onPress={() => start(current())} />
+            <Action icon="bookmark-outline" label="Save this line-up for later" onPress={keep} />
+            <Action icon="share-outline" label="Share the line-up as a picture" onPress={() => share(current())} />
+            <Action icon="arrow-undo-outline" label="Back to the suggestion" disabled={!edited} onPress={() => (fresh(), toast.show('Back to the suggestion', 'info'))} />
+            <Action
+              icon="shuffle"
+              label={edited ? 'Shuffle: start again from a new split' : 'Shuffle: another even split'}
+              onPress={() => {
+                setSeed((s) => s + 1);
+                fresh();
+                toast.show('Another even split', 'info');
+              }}
+            />
+            <Action
+              icon="save-outline"
+              armed={saving}
+              label={saving ? `Tap again: ${names[0]} and ${names[1]} change` : `Make these the new ${names[0]} and ${names[1]}`}
+              onPress={() => {
+                if (saving) return save();
+                setSaving(true);
+                toast.show(`Tap again to make these the new ${names[0]} and ${names[1]}`, 'info');
+              }}
+            />
+          </View>
         </>
       ) : (
         <Card>
@@ -536,6 +596,7 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
               table={table}
               onStart={() => start(l.sides)}
               onEdit={() => load(l)}
+              onShare={() => share(l.sides)}
               onDelete={() => {
                 deleteLineup(l.id);
                 toast.show('Line-up deleted', 'info');
@@ -617,6 +678,10 @@ const styles = StyleSheet.create({
   mark: { color: colors.accentInk, fontSize: 10, fontFamily: font.heavy },
 
   hidden: { display: 'none' },
+  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  action: { width: 46, height: 46, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.border },
+  actionPrimary: { width: 58, height: 58, backgroundColor: colors.accent, borderColor: colors.accent },
+  actionArmed: { backgroundColor: colors.gold, borderColor: colors.gold },
   markDim: { color: colors.faint, fontSize: 10, fontFamily: font.heavy },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.gold },
   tagText: { color: colors.onAccent, fontSize: 10, fontFamily: font.bold },
