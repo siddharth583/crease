@@ -5,7 +5,7 @@ import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { NameSuggestions } from '../../components/NameSuggestions.tsx';
 import { FormBadge } from '../../components/Ratings.tsx';
 import { Button, Card, Chip, FadeIn, PressableScale, Screen, SectionLabel, Segmented, useToast, type IconName } from '../../components/ui.tsx';
-import { lineupFileName, lineupHtml } from '../../engine/lineup.ts';
+import { LINEUP_IMAGE, lineupFileName, lineupHtml } from '../../engine/lineup.ts';
 import { DEFAULT_SQUAD } from '../../engine/squad.ts';
 import {
   applyFix,
@@ -122,6 +122,7 @@ function SideCard({
               {p.name}
               {isCaptain(p.name) ? <Text style={styles.mark}>{'\u00A0\u00A0'}C</Text> : null}
               {p.keeper ? <Text style={styles.mark}>{'\u00A0\u00A0'}WK</Text> : null}
+              {p.keepsSometimes ? <Text style={styles.markDim}>{'\u00A0\u00A0'}(WK)</Text> : null}
               {p.guest ? <Text style={styles.markDim}>{'\u00A0\u00A0'}GUEST</Text> : null}
             </Text>
             {isTagged(p.name) && (
@@ -442,7 +443,7 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
     try {
       toast.show('Making the picture…', 'info');
       const pair = sides as [SideDraft, SideDraft];
-      const result = await saveReportImage(lineupFileName(pair), lineupHtml(pair, table));
+      const result = await saveReportImage(lineupFileName(pair), lineupHtml(pair, table), LINEUP_IMAGE);
       if (result === 'downloaded') toast.show('Line-up picture saved to your downloads', 'success');
       if (result === 'shared') toast.show('Line-up picture ready to send', 'success');
     } catch {

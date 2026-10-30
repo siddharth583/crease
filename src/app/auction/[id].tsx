@@ -59,7 +59,7 @@ function Results({ a, s }: { a: Auction; s: AuctionState }) {
                     <Text style={styles.resultName} numberOfLines={1}>
                       {p.name}
                       {j === 0 ? <Text style={styles.cap}>{'\u00A0\u00A0'}CAPTAIN</Text> : null}
-                      {p.keeper ? <Text style={styles.wk}>{'\u00A0\u00A0'}WK</Text> : null}
+                      {p.keeper ? <Text style={styles.wk}>{'\u00A0\u00A0'}{p.keeper === 'sometimes' ? '(WK)' : 'WK'}</Text> : null}
                     </Text>
                     <Text style={styles.resultRole}>{ROLE_LABEL[p.role]}</Text>
                   </View>

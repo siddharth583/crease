@@ -114,6 +114,26 @@ test('a line-up picture names both sides, marks the captain first and escapes na
   const html = lineupHtml(sides, table, new Date(2026, 9, 30));
   assert.ok(html.includes('Copan &lt;Strikers&gt;') && !html.includes('<Strikers>'));
   // The captain heads their side even though Siddharth is stronger.
-  assert.ok(html.indexOf('Rajeev <i>C</i>') < html.indexOf('Siddharth Singh'));
+  const cap = html.indexOf('Rajeev <i class="lu-c">C</i>');
+  assert.ok(cap > 0 && cap < html.indexOf('Siddharth Singh'));
   assert.equal(lineupFileName(sides, new Date(2026, 9, 30)), 'Copan Strikers vs Copan Royals - Line-up - 30 Oct 2026.png');
+});
+
+test('the club’s keepers: Nihal, Rishav and Nitin keep; Ashwani only when a side has none of them', async () => {
+  const { setUsualKeepers } = await import('./squad.ts');
+  const old = DEFAULT_SQUAD.map((p) => (p.name === 'Navjot Singh' ? { ...p, keeper: true as const } : p.name === 'Rishav Bhattacharjee' ? { ...p, keeper: undefined } : p));
+  const fixed = setUsualKeepers(old);
+  const keeper = (name: string) => fixed.find((p) => p.name === name)!.keeper;
+  assert.equal(keeper('Rishav Bhattacharjee'), true);
+  assert.equal(keeper('Ashwani Singh'), 'sometimes');
+  assert.equal(keeper('Navjot Singh'), undefined);
+  assert.equal(fixed.filter((p) => p.keeper === true).length, 3);
+  // With the three regulars playing, each side gets one of them.
+  const split = evenSides(everyone, 4);
+  for (const side of split.sides) assert.ok(side.some((p) => p.keeper), 'a regular keeper each');
+  // With just one regular there, Ashwani keeps for the other side.
+  const few = everyone.filter((p) => !['Rishav Bhattacharjee', 'Nitin Parmar'].includes(p.name));
+  const [a, b] = evenSides(few, 1).sides;
+  const keeps = (side: Strength[]) => side.some((p) => p.keeper || p.keepsSometimes);
+  assert.ok(keeps(a) && keeps(b), 'Nihal one side, Ashwani the other');
 });

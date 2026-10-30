@@ -73,7 +73,7 @@ function PlayerRow({
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.name} numberOfLines={1}>
             {p.name}
-            {p.keeper ? <Text style={styles.wk}>{'\u00A0\u00A0'}WK</Text> : null}
+            {p.keeper ? <Text style={styles.wk}>{'\u00A0\u00A0'}{p.keeper === 'sometimes' ? '(WK)' : 'WK'}</Text> : null}
           </Text>
           <View style={styles.mini}>
             <View style={styles.cat}>

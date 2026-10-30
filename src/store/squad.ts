@@ -3,7 +3,7 @@ import { createContext, createElement, useCallback, useContext, useRef, useState
 import { Platform } from 'react-native';
 import type { Auction } from '../engine/auction.ts';
 import { mergeAuctions, mergeSquad } from '../engine/backup.ts';
-import { DEFAULT_SQUAD, TEAMS_REVISION, updateSquad, type SquadPlayer } from '../engine/squad.ts';
+import { DEFAULT_SQUAD, setUsualKeepers, TEAMS_REVISION, updateSquad, type SquadPlayer } from '../engine/squad.ts';
 import type { SavedLineup } from '../engine/teams.ts';
 import { setRegulars } from '../engine/stats.ts';
 
@@ -11,7 +11,8 @@ import { setRegulars } from '../engine/stats.ts';
 // regulars are known before any stats are worked out.
 
 /** `revision`: which version of the usual sides the squad was last brought up to. */
-type Saved = { squad: SquadPlayer[]; auctions: Auction[]; lineups?: SavedLineup[]; revision?: number };
+/** `keepers`: the club's keepers have been set on this squad (once; after that the squad screen decides). */
+type Saved = { squad: SquadPlayer[]; auctions: Auction[]; lineups?: SavedLineup[]; revision?: number; keepers?: number };
 
 const KEY = 'crease.squad.v1';
 const fileFor = () => new File(Paths.document, 'crease-squad.json');
@@ -36,9 +37,14 @@ function read(): Saved {
     // New sides since this phone last looked: rename and add the players they bring, once.
     if ((saved.revision ?? 1) < TEAMS_REVISION) {
       squad = updateSquad(squad);
-      write({ squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION });
+      write({ squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION, keepers: saved.keepers });
     }
-    return { squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION };
+    // The club's keepers, set once on a squad saved before they were known.
+    if (raw && !saved.keepers) {
+      squad = setUsualKeepers(squad);
+      write({ squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION, keepers: 1 });
+    }
+    return { squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION, keepers: 1 };
   } catch {
     // An unreadable squad is kept aside before the defaults are ever saved over it.
     try {
@@ -53,7 +59,7 @@ function read(): Saved {
     } catch {
       writable = false;
     }
-    return { squad: DEFAULT_SQUAD, auctions: [], revision: TEAMS_REVISION };
+    return { squad: DEFAULT_SQUAD, auctions: [], revision: TEAMS_REVISION, keepers: 1 };
   }
 }
 

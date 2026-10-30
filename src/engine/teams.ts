@@ -23,7 +23,10 @@ export type Strength = {
   form: number | null;
   bat: number;
   bowl: number;
+  /** A regular keeper. */
   keeper: boolean;
+  /** Keeps when no regular keeper is there. */
+  keepsSometimes?: boolean;
   /** Not in the squad: an average player until they are. */
   guest?: boolean;
 };
@@ -48,7 +51,8 @@ export function strengths(matches: Match[], squad: SquadPlayer[]): Map<string, S
       form,
       bat: p.bat,
       bowl: p.bowl,
-      keeper: Boolean(p.keeper || p.role === 'wk'),
+      keeper: p.keeper === true || p.role === 'wk',
+      keepsSometimes: p.keeper === 'sometimes',
     });
   }
   return out;
@@ -103,9 +107,12 @@ export function sideStrength(players: Strength[]): SideStrength {
  */
 export function gap(a: Strength[], b: Strength[], keepers = [...a, ...b].filter((p) => p.keeper).length): number {
   const sum = (xs: Strength[], f: (p: Strength) => number) => xs.reduce((s, p) => s + f(p), 0);
-  const kA = a.filter((p) => p.keeper).length;
-  const kB = b.filter((p) => p.keeper).length;
-  const keeperMiss = keepers >= 2 && (kA === 0 || kB === 0) ? 2 : 0;
+  // A regular keeper each when there are two to go round; failing that, someone who sometimes keeps.
+  const keeps = (p: Strength) => p.keeper || (keepers < 2 && Boolean(p.keepsSometimes));
+  const all = keepers >= 2 ? keepers : [...a, ...b].filter(keeps).length;
+  const kA = a.filter(keeps).length;
+  const kB = b.filter(keeps).length;
+  const keeperMiss = all >= 2 && (kA === 0 || kB === 0) ? 2 : 0;
   const bowlers = Math.abs(a.filter((p) => p.bowl >= 3).length - b.filter((p) => p.bowl >= 3).length);
   return Math.abs(sum(a, (p) => p.power) - sum(b, (p) => p.power)) + keeperMiss + bowlers * 0.4 + Math.abs(sum(a, (p) => p.bat) - sum(b, (p) => p.bat)) * 0.1;
 }

@@ -16,8 +16,8 @@ export type SquadPlayer = {
   bat: Rating;
   bowl: Rating;
   field: Rating;
-  /** Keeps wicket for whichever side picks them. */
-  keeper?: boolean;
+  /** Keeps wicket for whichever side picks them; 'sometimes' when a regular keeper isn't there. */
+  keeper?: boolean | 'sometimes';
   /** Price band in the auction; worked out from the role when not set. */
   category?: Category;
   /** Stars kept as set here, rather than worked out from their matches. */
@@ -44,16 +44,16 @@ export const DEFAULT_SQUAD: SquadPlayer[] = (
   [
     { name: 'Siddharth Singh', role: 'ar', bat: 5, bowl: 5, field: 5 },
     { name: 'Anshul Rana', role: 'ar', bat: 4, bowl: 4, field: 4 },
-    { name: 'Rishav Bhattacharjee', role: 'ar', bat: 3, bowl: 3, field: 3 },
+    { name: 'Rishav Bhattacharjee', role: 'ar', bat: 3, bowl: 3, field: 3, keeper: true },
     { name: 'Nitin Parmar', role: 'bat', bat: 3, bowl: 1, field: 4, keeper: true },
     { name: 'Harleen Singh', role: 'ar', bat: 2, bowl: 4, field: 4 },
     { name: 'Satnoor Singh', role: 'bat', bat: 2, bowl: 1, field: 2, category: 'other' },
     { name: 'Moses Wiliams', role: 'bat', bat: 2, bowl: 1, field: 2, category: 'other' },
     { name: 'Supreet Guleria', role: 'bat', bat: 2, bowl: 1, field: 2, category: 'other' },
     { name: 'Nihal Walia', role: 'wk', bat: 5, bowl: 5, field: 5, keeper: true },
-    { name: 'Ashwani Singh', role: 'ar', bat: 4, bowl: 4, field: 4 },
+    { name: 'Ashwani Singh', role: 'ar', bat: 4, bowl: 4, field: 4, keeper: 'sometimes' },
     { name: 'Karandeep Singh', role: 'bowl', bat: 1, bowl: 4, field: 3 },
-    { name: 'Navjot Singh', role: 'bat', bat: 3, bowl: 1, field: 3, keeper: true },
+    { name: 'Navjot Singh', role: 'bat', bat: 3, bowl: 1, field: 3 },
     { name: 'Chirag Taneja', role: 'ar', bat: 3, bowl: 3, field: 3 },
     { name: 'Charanjeet', role: 'ar', bat: 2, bowl: 2, field: 2, category: 'other' },
     { name: 'Rajeev', role: 'bat', bat: 2, bowl: 1, field: 2, category: 'other' },
@@ -92,6 +92,7 @@ const SIDES: { id: string; name: string; players: string[]; captain: string; kee
     name: 'Copan Royals',
     players: ['Ashwani Singh', 'Rishav Bhattacharjee', 'Siddharth Singh', 'Anshul Rana', 'Ajayvir Singh Ghai', 'Vivek Kumar', 'Charanjeet', 'Supreet Guleria', 'Sejal Chauhan', 'Rajeev'],
     captain: 'Ashwani Singh',
+    keeper: 'Rishav Bhattacharjee',
   },
 ];
 
@@ -133,6 +134,24 @@ export function renameSides(match: Match): Match {
   const series = match.series && { ...match.series, name: renameSide(match.series.name) };
   const same = teams.every((t, i) => t === match.teams[i]) && series?.name === match.series?.name;
   return same ? match : { ...match, teams, ...(series ? { series } : {}) };
+}
+
+/** Who keeps wicket, as the club told us (30 Oct 2026): Nihal, Rishav and Nitin; Ashwani sometimes. */
+const USUAL_KEEPERS: Record<string, true | 'sometimes'> = {
+  'nihal walia': true,
+  'rishav bhattacharjee': true,
+  'nitin parmar': true,
+  'ashwani singh': 'sometimes',
+};
+
+/** A saved squad with the club's keepers, once: everyone else stops being one. */
+export function setUsualKeepers(squad: SquadPlayer[]): SquadPlayer[] {
+  return squad.map((p) => {
+    const keeps = USUAL_KEEPERS[p.name.trim().toLowerCase()];
+    const next: SquadPlayer = { ...p, keeper: keeps };
+    if (!keeps) delete next.keeper;
+    return next;
+  });
 }
 
 /** A saved squad brought up to date: renamed players get their full names, and new regulars join. */

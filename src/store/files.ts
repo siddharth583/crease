@@ -103,11 +103,11 @@ function scopedStyles(doc: Document, scope: string): string {
  * The report laid out for drawing on the app's own page: its content in a box of the page's width, with its styles
  * scoped to that box, and its fonts loaded.
  */
-async function reportBox(html: string): Promise<HTMLDivElement> {
+async function reportBox(html: string, width = PAGE_WIDTH, background = '#fff'): Promise<HTMLDivElement> {
   // Read the report's styles and content from a frame of its own.
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
-  Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: `${PAGE_WIDTH}px`, height: '100px', border: '0' });
+  Object.assign(frame.style, { position: 'fixed', left: '-10000px', top: '0', width: `${width}px`, height: '100px', border: '0' });
   document.body.appendChild(frame);
   const box = document.createElement('div');
   try {
@@ -116,7 +116,7 @@ async function reportBox(html: string): Promise<HTMLDivElement> {
     doc.write(html);
     doc.close();
     box.className = 'crease-pdf';
-    Object.assign(box.style, { width: `${PAGE_WIDTH}px`, background: '#fff' });
+    Object.assign(box.style, { width: `${width}px`, background });
     box.innerHTML = `<style>${scopedStyles(doc, '.crease-pdf')}</style>${doc.body.innerHTML}`;
   } finally {
     frame.remove();
@@ -178,10 +178,18 @@ const MAX_PIXELS = 16_000_000;
  * Saves an HTML report as one PNG picture, the whole report top to bottom, downloaded under its name. Web only: the
  * phone app shares its PDF instead.
  */
-export async function saveReportImage(name: string, html: string): Promise<SaveResult> {
+/**
+ * A report as a picture. `width`, `background` and `padding` let a picture made for phones (the line-up) be narrow and
+ * dark; on the web it goes to the phone's share sheet where there is one, and downloads otherwise.
+ */
+export async function saveReportImage(
+  name: string,
+  html: string,
+  { width = PAGE_WIDTH, background = '#ffffff', padding = 24, share = false }: { width?: number; background?: string; padding?: number; share?: boolean } = {},
+): Promise<SaveResult> {
   if (Platform.OS !== 'web') return savePdf(name.replace(/\.png$/i, '.pdf'), html);
-  const box = await reportBox(html);
-  box.style.padding = '24px';
+  const box = await reportBox(html, width, background);
+  box.style.padding = `${padding}px`;
   box.style.boxSizing = 'content-box';
   const holder = document.createElement('div');
   holder.setAttribute('aria-hidden', 'true');
@@ -192,8 +200,20 @@ export async function saveReportImage(name: string, html: string): Promise<SaveR
     const { default: html2canvas } = await import('html2canvas-pro');
     const area = box.offsetWidth * box.offsetHeight;
     const scale = Math.min(2, Math.sqrt(MAX_PIXELS / Math.max(area, 1)));
-    const canvas = await html2canvas(box, { scale, backgroundColor: '#ffffff', useCORS: true });
+    const canvas = await html2canvas(box, { scale, backgroundColor: background, useCORS: true });
     const blob = await new Promise<Blob>((ok, fail) => canvas.toBlob((b) => (b ? ok(b) : fail(new Error('No picture'))), 'image/png'));
+    if (share) {
+      const file = new globalThis.File([blob], name, { type: 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file] });
+          return 'shared';
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled';
+          // The share sheet can refuse (the tap was too long ago): download it instead.
+        }
+      }
+    }
     download(blob, name);
     return 'downloaded';
   } finally {

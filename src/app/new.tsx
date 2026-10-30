@@ -50,7 +50,8 @@ function draftFrom(team: Team, match?: Match): Draft {
 function draftsFromAuction(a: Auction): [Draft, Draft] {
   return auctionState(a).sides.map((side) => {
     const players = side.players.map((id) => rosterPlayer(a, id));
-    const keeper = players.findIndex((p) => p.keeper);
+    const regular = players.findIndex((p) => p.keeper === true);
+    const keeper = regular >= 0 ? regular : players.findIndex((p) => p.keeper);
     return { name: side.name, players: players.map((p) => p.name), captain: 0, keeper: keeper >= 0 ? keeper : undefined };
   }) as [Draft, Draft];
 }
