@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { FormBadge } from '../../components/Ratings.tsx';
-import { Button, Card, Chip, FadeIn, Screen, SectionLabel, Segmented, useToast } from '../../components/ui.tsx';
+import { Button, Card, Chip, FadeIn, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../../components/ui.tsx';
 import { DEFAULT_SQUAD } from '../../engine/squad.ts';
-import { evenSides, nameKey, sideStrength, strengthOf, strengths, type SideStrength, type Strength } from '../../engine/teams.ts';
+import { evenSides, nameKey, sideStrength, strengthOf, strengths, type SideStrength, type Split, type Strength } from '../../engine/teams.ts';
 import type { Team } from '../../engine/types.ts';
 import { newId, useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
@@ -15,17 +15,31 @@ import { colors, font, radius, space, type } from '../../theme.ts';
 
 const TINTS = [colors.accentInk, colors.violet];
 
-/** A side's strength in a few numbers, then its players best first. */
-function SideCard({ name, s, tint, captain, note }: { name: string; s: SideStrength; tint: string; captain?: string; note?: string }) {
+/** Changing a recommended side: rename it, pick a player to swap, or send one to the other side. */
+type SideEdit = { other: string; picked: string | null; onRename: (name: string) => void; onPick: (player: string) => void; onMove: (player: string) => void };
+
+/** A side's strength in a few numbers, then its players best first. With `edit`, the side can be changed. */
+function SideCard({ name, s, tint, captain, note, edit }: { name: string; s: SideStrength; tint: string; captain?: string; note?: string; edit?: SideEdit }) {
   const isCaptain = (n: string) => Boolean(captain) && nameKey(captain!) === nameKey(n);
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
       <View style={styles.sideHead}>
         <View style={[styles.sideBar, { backgroundColor: tint }]} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.sideName} numberOfLines={1}>
-            {name}
-          </Text>
+          {edit ? (
+            <TextInput
+              value={name}
+              onChangeText={edit.onRename}
+              style={[styles.sideName, styles.sideNameInput]}
+              maxLength={28}
+              autoCapitalize="words"
+              accessibilityLabel={`Rename ${name}`}
+            />
+          ) : (
+            <Text style={styles.sideName} numberOfLines={1}>
+              {name}
+            </Text>
+          )}
           <Text style={styles.sideMeta}>
             {s.players.length} players{note ? ` · ${note}` : ''}
           </Text>
@@ -52,8 +66,10 @@ function SideCard({ name, s, tint, captain, note }: { name: string; s: SideStren
           </View>
         ))}
       </View>
-      {[...s.players].sort((p, q) => Number(isCaptain(q.name)) - Number(isCaptain(p.name))).map((p, i) => (
-        <View key={p.name} style={[styles.player, i === 0 && { borderTopWidth: 0 }]}>
+      {[...s.players].sort((p, q) => Number(isCaptain(q.name)) - Number(isCaptain(p.name))).map((p, i) => {
+        const picked = edit?.picked !== null && edit?.picked !== undefined && nameKey(edit.picked) === nameKey(p.name);
+        const row = (
+          <>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.playerName} numberOfLines={1}>
               {p.name}
@@ -66,8 +82,32 @@ function SideCard({ name, s, tint, captain, note }: { name: string; s: SideStren
           </View>
           {p.form !== null && <FormBadge form={p.form} />}
           <Text style={styles.playerPower}>{p.power.toFixed(1)}</Text>
-        </View>
-      ))}
+          </>
+        );
+        const rowStyle = [styles.player, i === 0 && { borderTopWidth: 0 }, picked && styles.picked];
+        // The row picks the player; ⇅ sits beside it (a button can't hold another).
+        return edit ? (
+          <View key={p.name} style={[rowStyle, { paddingVertical: 0 }]}>
+            <PressableScale
+              scaleTo={0.99}
+              accessibilityLabel={picked ? `${p.name}, picked: tap a player in ${edit.other} to swap` : `Pick ${p.name} to swap`}
+              accessibilityState={{ selected: picked }}
+              onPress={() => edit.onPick(p.name)}
+              wrapStyle={{ flex: 1, minWidth: 0 }}
+              style={styles.pickArea}
+            >
+              {row}
+            </PressableScale>
+            <PressableScale accessibilityLabel={`Move ${p.name} to ${edit.other}`} hitSlop={6} onPress={() => edit.onMove(p.name)} style={styles.move}>
+              <Ionicons name="swap-vertical" size={16} color={colors.muted} />
+            </PressableScale>
+          </View>
+        ) : (
+          <View key={p.name} style={rowStyle}>
+            {row}
+          </View>
+        );
+      })}
     </Card>
   );
 }
@@ -131,10 +171,51 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
   const [captains, setCaptains] = useState<string[]>([]);
   const [seed, setSeed] = useState(1);
   const [saving, setSaving] = useState(false);
-  const playing = everyone.filter((p) => !out.has(nameKey(p.name)));
-  const caps = captains.filter((c) => playing.some((p) => nameKey(p.name) === nameKey(c)));
+  // Changes made to the suggestion, kept only while it's the same suggestion (Shuffle or a new pick starts afresh).
+  const [edit, setEdit] = useState<{ base: Split; sides: [string[], string[]] } | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [renamed, setRenamed] = useState<[string?, string?]>([]);
+  const playing = useMemo(() => everyone.filter((p) => !out.has(nameKey(p.name))), [everyone, out]);
+  const caps = useMemo(() => captains.filter((c) => playing.some((p) => nameKey(p.name) === nameKey(c))), [captains, playing]);
+  // Worked out again only when who's playing, the captains or the shuffle change: not on every redraw, or edits would go.
   const split = useMemo(() => (playing.length >= 2 ? evenSides(playing, seed, [caps[0], caps[1]]) : null), [playing, seed, caps]);
-  const names: [string, string] = [savedTeams[0]?.name ?? 'Team A', savedTeams[1]?.name ?? 'Team B'];
+  const names: [string, string] = [renamed[0] ?? savedTeams[0]?.name ?? 'Team A', renamed[1] ?? savedTeams[1]?.name ?? 'Team B'];
+  const edited = Boolean(split && edit?.base === split);
+  const lists: [string[], string[]] | null = split ? (edited ? edit!.sides : [split.sides[0].map((p) => p.name), split.sides[1].map((p) => p.name)]) : null;
+  const strength = lists ? (lists.map((l) => sideStrength(l.map((n) => strengthOf(table, n)))) as [SideStrength, SideStrength]) : null;
+  // How far apart the sides are, on the same out-of-10 strength the cards show.
+  const apart = strength ? Math.round(Math.abs(strength[0].power - strength[1].power) * 10) / 10 : 0;
+  const ahead = strength && strength[0].power > strength[1].power ? 0 : 1;
+  /** Each side's captain: whichever picked captain is on it now. */
+  const captainOf = (i: number) => caps.find((c) => lists?.[i].some((n) => nameKey(n) === nameKey(c)));
+  const sideOf = (name: string) => (lists![0].some((n) => nameKey(n) === nameKey(name)) ? 0 : 1);
+  const change = (next: [string[], string[]]) => {
+    setEdit({ base: split!, sides: next });
+    setSaving(false);
+  };
+  /** Send one player to the other side. */
+  const move = (name: string) => {
+    const from = sideOf(name);
+    const next: [string[], string[]] = [[...lists![0]], [...lists![1]]];
+    next[from] = next[from].filter((n) => nameKey(n) !== nameKey(name));
+    next[1 - from].push(name);
+    if (!next[from].length) return toast.show('A side needs at least one player.', 'info');
+    if (next[1 - from].length > 11) return toast.show(`${names[1 - from]} already have 11. Swap two players instead.`, 'info');
+    change(next);
+    setPicked(null);
+    toast.show(`${name} moved to ${names[1 - from]}`, 'info');
+  };
+  /** Pick a player, then one on the other side: they change places. */
+  const pick = (name: string) => {
+    if (!picked || sideOf(picked) === sideOf(name)) return setPicked(picked && nameKey(picked) === nameKey(name) ? null : name);
+    const a = sideOf(picked);
+    const next: [string[], string[]] = [[...lists![0]], [...lists![1]]];
+    next[a] = next[a].map((n) => (nameKey(n) === nameKey(picked) ? name : n));
+    next[1 - a] = next[1 - a].map((n) => (nameKey(n) === nameKey(name) ? picked : n));
+    change(next);
+    setPicked(null);
+    toast.show(`${picked} and ${name} swapped`, 'info');
+  };
 
   const toggle = (name: string) => {
     const k = nameKey(name);
@@ -151,24 +232,27 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
     setSaving(false);
   };
 
-  /** The sides as the match setup takes them: captain first, the first keeper keeping. */
+  /** The sides as they stand, as the match setup takes them: captain first, the first keeper keeping. */
   const drafts = () =>
-    split!.sides.map((side, i) => {
-      const keeper = side.findIndex((p) => p.keeper);
-      return { name: names[i], players: side.map((p) => p.name), captain: caps[i] ? 0 : undefined, keeper: keeper >= 0 ? keeper : undefined };
+    lists!.map((list, i) => {
+      const cap = captainOf(i);
+      const players = cap ? [cap, ...list.filter((n) => nameKey(n) !== nameKey(cap))] : list;
+      const keeper = players.findIndex((n) => strengthOf(table, n).keeper);
+      return { name: names[i].trim() || (i ? 'Team B' : 'Team A'), players, captain: cap ? 0 : undefined, keeper: keeper >= 0 ? keeper : undefined };
     });
 
   /** Save them as the two usual sides, keeping each side's and each player's id where they were already there. */
   const save = () => {
-    const teams = split!.sides.map((side, i): Team => {
-      const was = savedTeams.find((t) => nameKey(t.name) === nameKey(names[i]));
+    const teams = drafts().map((d, i): Team => {
+      const was = savedTeams.find((t) => nameKey(t.name) === nameKey(d.name)) ?? savedTeams[i];
+      const side = d.players.map((n) => strengthOf(table, n));
       const players = side.map((p) => ({
         id: was?.players.find((x) => nameKey(x.name) === nameKey(p.name))?.id ?? newId(),
         name: p.name,
         role: squad.find((s) => nameKey(s.name) === nameKey(p.name))?.role ?? DEFAULT_SQUAD.find((s) => nameKey(s.name) === nameKey(p.name))?.role,
       }));
       const idOf = (name?: string) => players.find((p) => name && nameKey(p.name) === nameKey(name))?.id;
-      return { id: was?.id ?? newId(), name: names[i], players, captain: idOf(caps[i]), keeper: idOf(side.find((p) => p.keeper)?.name) };
+      return { id: was?.id ?? newId(), name: d.name, players, captain: idOf(captainOf(i)), keeper: idOf(side.find((p) => p.keeper)?.name) };
     });
     rememberTeams(teams);
     setSaving(false);
@@ -198,27 +282,56 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
         </View>
       </Card>
 
-      {split ? (
+      {split && lists && strength ? (
         <>
-          <SectionLabel>Two even sides</SectionLabel>
+          <SectionLabel right={edited ? <Text style={styles.count}>Edited by you</Text> : undefined}>Two even sides</SectionLabel>
           <Card style={styles.even}>
-            <Ionicons name="scale-outline" size={22} color={colors.accentInk} />
+            <Ionicons name={edited && apart >= 0.4 ? 'warning-outline' : 'scale-outline'} size={22} color={edited && apart >= 0.4 ? colors.gold : colors.accentInk} />
             <View style={{ flex: 1 }}>
               <Text style={styles.evenTitle}>
-                {split.strength[0].power.toFixed(1)} v {split.strength[1].power.toFixed(1)}
+                {strength[0].power.toFixed(1)} v {strength[1].power.toFixed(1)}
               </Text>
               <Text style={styles.hint}>
-                {split.gap < 0.5 ? 'As even as they come.' : `${split.gap.toFixed(1)} apart in strength altogether: the closest split there is.`}{' '}
-                {split.strength[0].keepers && split.strength[1].keepers ? 'A keeper each, ' : ''}
-                {split.strength[0].bowlers} and {split.strength[1].bowlers} bowlers.
-                {playing.length % 2 ? ` ${names[0]} have a player more, so their players are a little weaker.` : ''}
+                {apart < 0.2
+                  ? edited
+                    ? 'Still as even as they come. '
+                    : 'As even as they come. '
+                  : edited
+                  ? `${names[ahead]} are ${apart.toFixed(1)} stronger${apart >= 0.4 ? ': not quite even any more' : ''}. `
+                  : `${names[ahead]} are ${apart.toFixed(1)} stronger, the closest these players split. `}
+                {strength[0].keepers && strength[1].keepers ? 'A keeper each, ' : ''}
+                {strength[0].bowlers} and {strength[1].bowlers} bowlers.
+                {lists[0].length !== lists[1].length ? ` ${lists[0].length > lists[1].length ? names[0] : names[1]} have ${Math.abs(lists[0].length - lists[1].length) === 1 ? 'a player' : `${Math.abs(lists[0].length - lists[1].length)} players`} more.` : ''}
               </Text>
             </View>
           </Card>
-          {split.sides.map((side, i) => (
-            <SideCard key={i} name={names[i]} s={split.strength[i]} tint={TINTS[i]} captain={caps[i]} note={caps[i] ? `led by ${caps[i]}` : undefined} />
-          ))}
-          <Button variant="ghost" icon="shuffle" label="Shuffle: another even split" onPress={() => setSeed((s) => s + 1)} />
+          <Text style={styles.hint}>
+            {picked
+              ? `${picked} picked: tap a player in ${names[1 - sideOf(picked)]} to swap them, or ${picked} again to let go.`
+              : 'To change the sides, tap a player and then one on the other side to swap them, or ⇅ to send one across. Tap a side’s name to rename it.'}
+          </Text>
+          {lists.map((_, i) => {
+            const cap = captainOf(i);
+            return (
+              <SideCard
+                key={i}
+                name={names[i]}
+                s={strength[i]}
+                tint={TINTS[i]}
+                captain={cap}
+                note={cap ? `led by ${cap}` : undefined}
+                edit={{
+                  other: names[1 - i],
+                  picked,
+                  onRename: (name) => setRenamed((r) => (i ? [r[0], name] : [name, r[1]])),
+                  onPick: pick,
+                  onMove: move,
+                }}
+              />
+            );
+          })}
+          {edited && <Button variant="ghost" icon="arrow-undo-outline" label="Back to the suggestion" onPress={() => (setEdit(null), setPicked(null))} />}
+          <Button variant="ghost" icon="shuffle" label={edited ? 'Shuffle: start again from a new split' : 'Shuffle: another even split'} onPress={() => (setSeed((s) => s + 1), setPicked(null))} />
           <Button icon="play" label="Start a match with these sides" onPress={() => router.push({ pathname: '/new', params: { sides: JSON.stringify(drafts()) } })} />
           <Button
             variant="ghost"
@@ -281,6 +394,10 @@ const styles = StyleSheet.create({
   sideHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, paddingLeft: 0 },
   sideBar: { width: 4, alignSelf: 'stretch', borderTopRightRadius: 2, borderBottomRightRadius: 2 },
   sideName: { color: colors.text, fontSize: 20, fontFamily: font.posterBlack },
+  sideNameInput: { padding: 0, borderBottomWidth: 1, borderBottomColor: colors.borderHi },
+  picked: { backgroundColor: colors.accentDim },
+  pickArea: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: 10 },
+  move: { width: 30, height: 30, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderHi, alignItems: 'center', justifyContent: 'center' },
   sideMeta: { color: colors.faint, fontSize: 12, fontFamily: font.medium, marginTop: 2 },
   power: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 32, ...type.num },
   powerOf: { fontSize: 14, color: colors.faint },
