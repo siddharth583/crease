@@ -1,7 +1,8 @@
 import { File, Paths } from 'expo-file-system';
-import { createContext, createElement, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, createElement, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import type { Auction } from '../engine/auction.ts';
+import { mergeAuctions, mergeSquad } from '../engine/backup.ts';
 import { DEFAULT_SQUAD, TEAMS_REVISION, updateSquad, type SquadPlayer } from '../engine/squad.ts';
 import { setRegulars } from '../engine/stats.ts';
 
@@ -79,12 +80,16 @@ type SquadStore = {
   auctions: Auction[];
   saveAuction: (a: Auction) => void;
   deleteAuction: (id: string) => void;
+  /** A full backup's squad and auctions, merged in: how many players joined or changed, and auctions added. */
+  importSquad: (squad: SquadPlayer[] | null, auctions: Auction[]) => { players: number; auctions: number };
 };
 
 const SquadContext = createContext<SquadStore | null>(null);
 
 export function SquadProvider({ children }: { children: ReactNode }) {
   const [state, set] = useState<Saved>(startup);
+  const latest = useRef(state);
+  latest.current = state;
   const update = useCallback((fn: (s: Saved) => Saved) => {
     set((s) => {
       const next = fn(s);
@@ -99,9 +104,21 @@ export function SquadProvider({ children }: { children: ReactNode }) {
     [update],
   );
   const deleteAuction = useCallback((id: string) => update((s) => ({ ...s, auctions: s.auctions.filter((x) => x.id !== id) })), [update]);
+  const importSquad = useCallback(
+    (squad: SquadPlayer[] | null, auctions: Auction[]) => {
+      // Counted against what's here now; merged again against whatever is there when it lands.
+      const s = latest.current;
+      const players = squad ? mergeSquad(s.squad, squad) : null;
+      const added = mergeAuctions(s.auctions, auctions).added;
+      if ((players && players.added + players.updated) || added)
+        update((now) => ({ ...now, squad: squad ? mergeSquad(now.squad, squad).squad : now.squad, auctions: mergeAuctions(now.auctions, auctions).auctions }));
+      return { players: players ? players.added + players.updated : 0, auctions: added };
+    },
+    [update],
+  );
   return createElement(
     SquadContext.Provider,
-    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction } },
+    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, importSquad } },
     children,
   );
 }

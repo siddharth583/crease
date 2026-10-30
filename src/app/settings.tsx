@@ -14,7 +14,7 @@ export default function SettingsScreen() {
   const { prefs, setPrefs } = usePrefs();
   const { matches } = useMatches();
   const toast = useToast();
-  const { exportMatches, exportAs, importFile } = useMatchFiles(toast.show);
+  const { exportEverything, exportAs, importFile } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState(false);
 
   const backedUp = prefs.lastBackup
@@ -47,20 +47,25 @@ export default function SettingsScreen() {
 
         <SectionLabel>Matches</SectionLabel>
         <Card style={{ gap: space.md }}>
-          <Text style={styles.body}>{backedUp}. A backup is one match file with every match; keep it in Google Drive or send it to yourself.</Text>
+          <Text style={styles.body}>
+            {backedUp}. A backup is one file with everything: every match ball by ball, your saved sides, the squad (roles,
+            keepers, stars) and the auctions. Keep it in Google Drive or send it to yourself.
+          </Text>
           <Button
             variant="ghost"
-            label="Back up all matches"
+            label="Back up everything"
             icon="cloud-upload-outline"
-            disabled={!matches.length}
             onPress={async () => {
-              await exportMatches(matches);
-              setPrefs({ lastBackup: Date.now() });
+              if (await exportEverything()) setPrefs({ lastBackup: Date.now() });
             }}
           />
-          <Button variant="ghost" label="Export as PDF or file" icon="document-text-outline" disabled={!matches.length} onPress={() => setExporting(true)} />
-          <Button variant="ghost" label="Import a match file" icon="push-outline" onPress={() => importFile()} />
-          <Text style={styles.note}>Import a match or a backup someone sent you. Matches you already have aren’t added twice.</Text>
+          <Button variant="ghost" label="Export matches as PDF or file" icon="document-text-outline" disabled={!matches.length} onPress={() => setExporting(true)} />
+          <Button variant="ghost" label="Import a backup or match file" icon="push-outline" onPress={() => importFile()} />
+          <Text style={styles.note}>
+            A backup brings everything back on any phone: the matches, and from them every scorecard, record, rating and form,
+            plus the squad and auctions. It adds to what’s here: nothing is added twice, and a match only changes if the
+            file’s copy is newer.
+          </Text>
         </Card>
       </ScrollView>
       <ExportSheet

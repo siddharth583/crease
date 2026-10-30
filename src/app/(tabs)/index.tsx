@@ -250,7 +250,7 @@ function ResultRow({ match, onMore }: { match: Match; onMore: () => void }) {
 export default function Home() {
   const { matches, deleteMatch, ready, importMatches } = useMatches();
   const toast = useToast();
-  const { exportMatches } = useMatchFiles(toast.show);
+  const { exportEverything } = useMatchFiles(toast.show);
   const { prefs, setPrefs } = usePrefs();
   // Remind once a week that a lost phone shouldn't mean lost matches.
   const backupDue = matches.length >= 2 && (!prefs.lastBackup || Date.now() - prefs.lastBackup > 7 * 86_400_000);
@@ -297,8 +297,7 @@ export default function Home() {
               </View>
               <PressableScale
                 onPress={async () => {
-                  await exportMatches(matches);
-                  setPrefs({ lastBackup: Date.now() });
+                  if (await exportEverything()) setPrefs({ lastBackup: Date.now() });
                 }}
                 style={styles.backupButton}
               >

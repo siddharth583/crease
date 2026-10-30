@@ -1,8 +1,12 @@
+import type { Auction } from './auction.ts';
 import { matchState } from './engine.ts';
+import type { SquadPlayer } from './squad.ts';
 import type { Match, Team } from './types.ts';
 
 // A match file holds whole matches (every ball), never totals: the stats are worked out again from the balls on
-// whichever phone imports it, so one file is enough to carry every player's and team's numbers.
+// whichever phone imports it, so one file is enough to carry every player's and team's numbers. A full backup also
+// carries what the balls can't: the squad (roles, keepers, stars, who's the same person on either side) and the
+// auctions. Those are extra fields, so older match files still import and older apps still read the matches.
 
 export const BACKUP_APP = 'crease';
 export const BACKUP_VERSION = 1;
@@ -13,11 +17,17 @@ export type Backup = {
   exportedAt: string;
   matches: Match[];
   teams: Team[];
+  /** A full backup only. */
+  squad?: SquadPlayer[];
+  auctions?: Auction[];
 };
 
-export function makeBackup(matches: Match[], teams: Team[]): Backup {
-  return { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: new Date().toISOString(), matches, teams };
+export function makeBackup(matches: Match[], teams: Team[], extra?: { squad: SquadPlayer[]; auctions: Auction[] }): Backup {
+  return { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: new Date().toISOString(), matches, teams, ...extra };
 }
+
+/** The full backup: everything on this phone in one file. */
+export const fullBackupFileName = (when = new Date()) => `Crease Backup - ${fileDate(when)}.json`;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -71,8 +81,18 @@ function looksLikeMatch(m: unknown): m is Match {
   }
 }
 
-/** Reads a match file. Throws an Error with a message fit to show the person. */
-export function parseBackup(text: string): { matches: Match[]; teams: Team[]; skipped: number } {
+const isRating = (n: unknown) => typeof n === 'number' && n >= 1 && n <= 5;
+
+function looksLikeSquadPlayer(p: unknown): p is SquadPlayer {
+  return isObject(p) && typeof p.id === 'string' && typeof p.name === 'string' && p.name.trim() !== '' && typeof p.role === 'string' && isRating(p.bat) && isRating(p.bowl) && isRating(p.field);
+}
+
+function looksLikeAuction(a: unknown): a is Auction {
+  return isObject(a) && typeof a.id === 'string' && typeof a.createdAt === 'number' && Array.isArray(a.sides) && Array.isArray(a.roster) && Array.isArray(a.events);
+}
+
+/** Reads a match file or a full backup. Throws an Error with a message fit to show the person. */
+export function parseBackup(text: string): { matches: Match[]; teams: Team[]; skipped: number; squad: SquadPlayer[] | null; auctions: Auction[] } {
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -87,7 +107,44 @@ export function parseBackup(text: string): { matches: Match[]; teams: Team[]; sk
   }
   const matches = data.matches.filter(looksLikeMatch);
   const teams = Array.isArray(data.teams) ? data.teams.filter(looksLikeTeam) : [];
-  return { matches, teams, skipped: data.matches.length - matches.length };
+  const squad = Array.isArray(data.squad) ? data.squad.filter(looksLikeSquadPlayer) : null;
+  const auctions = Array.isArray(data.auctions) ? data.auctions.filter(looksLikeAuction) : [];
+  return { matches, teams, skipped: data.matches.length - matches.length, squad, auctions };
+}
+
+const nameOf = (p: { name: string }) => p.name.trim().toLowerCase();
+
+/**
+ * A backup's squad on top of the phone's: a player the file has (by name) takes the file's role, keeper and stars,
+ * keeping this phone's id; players only the file has join; players only this phone has stay.
+ */
+export function mergeSquad(existing: SquadPlayer[], incoming: SquadPlayer[]) {
+  const mine = new Map(existing.map((p) => [nameOf(p), p]));
+  let added = 0;
+  let updated = 0;
+  const squad = existing.map((p) => {
+    const theirs = incoming.find((x) => nameOf(x) === nameOf(p));
+    if (!theirs) return p;
+    const next = { ...theirs, id: p.id };
+    if (JSON.stringify(next) !== JSON.stringify(p)) updated++;
+    return next;
+  });
+  for (const p of incoming) {
+    if (mine.has(nameOf(p))) continue;
+    // A new player whose id this phone already uses for someone else gets one of their own.
+    const id = squad.some((x) => x.id === p.id) ? `${p.id}-${squad.length + 1}` : p.id;
+    squad.push({ ...p, id });
+    mine.set(nameOf(p), p);
+    added++;
+  }
+  return { squad, added, updated };
+}
+
+/** A backup's auctions join the phone's; one the phone already has (same id) is kept as it is. Newest first. */
+export function mergeAuctions(existing: Auction[], incoming: Auction[]) {
+  const have = new Set(existing.map((a) => a.id));
+  const fresh = incoming.filter((a) => !have.has(a.id));
+  return { auctions: [...existing, ...fresh].sort((a, b) => b.createdAt - a.createdAt), added: fresh.length };
 }
 
 const ballsIn = (m: Match) => m.innings.reduce((n, i) => n + i.events.length, 0);
