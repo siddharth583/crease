@@ -234,6 +234,8 @@ export default function PlayerProfile() {
               ['Overs', bowlingOvers(c)],
               ['Average', fmt(bowlingAverage(c))],
               ['Maidens', c.bowling.maidens],
+              ['Fours conceded', c.bowling.fours],
+              ['Sixes conceded', c.bowling.sixes],
             ]}
           />
         ) : (

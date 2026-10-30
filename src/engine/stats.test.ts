@@ -79,6 +79,9 @@ test('bowling, best figures and fielding', () => {
   assert.equal(sam.bowling.runs, 12);
   assert.equal(bestFigures(sam), '1/2');
   assert.equal(economy(sam), 6);
+  // Rohit's four and six in the first game were off Sam.
+  assert.equal(sam.bowling.fours, 1);
+  assert.equal(sam.bowling.sixes, 1);
   assert.equal(stats.find((c) => c.name === 'Jos')!.fielding.catches, 1);
 });
 

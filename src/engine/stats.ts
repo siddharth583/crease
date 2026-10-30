@@ -31,7 +31,7 @@ export type Career = {
     fifties: number;
     ducks: number;
   };
-  bowling: { innings: number; balls: number; runs: number; wickets: number; maidens: number; best: { wickets: number; runs: number } | null };
+  bowling: { innings: number; balls: number; runs: number; wickets: number; maidens: number; fours: number; sixes: number; best: { wickets: number; runs: number } | null };
   fielding: { catches: number; runOuts: number; stumpings: number };
   history: MatchLine[];
 };
@@ -100,7 +100,7 @@ export function careerStats(matches: Match[]): Career[] {
             team: team.name.trim(),
             matches: 0,
             batting: { innings: 0, notOuts: 0, runs: 0, balls: 0, fours: 0, sixes: 0, highest: 0, highestNotOut: false, fifties: 0, ducks: 0 },
-            bowling: { innings: 0, balls: 0, runs: 0, wickets: 0, maidens: 0, best: null },
+            bowling: { innings: 0, balls: 0, runs: 0, wickets: 0, maidens: 0, fours: 0, sixes: 0, best: null },
             fielding: { catches: 0, runOuts: 0, stumpings: 0 },
             history: [],
           };
@@ -167,6 +167,8 @@ export function careerStats(matches: Match[]): Career[] {
         c.bowling.runs += bw.runs;
         c.bowling.wickets += bw.wickets;
         c.bowling.maidens += bw.maidens;
+        c.bowling.fours += bw.fours;
+        c.bowling.sixes += bw.sixes;
         const best = c.bowling.best;
         if (!best || bw.wickets > best.wickets || (bw.wickets === best.wickets && bw.runs < best.runs))
           c.bowling.best = { wickets: bw.wickets, runs: bw.runs };

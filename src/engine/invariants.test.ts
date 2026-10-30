@@ -39,6 +39,9 @@ function checkMatch(m: Match) {
     assert.ok(notTheBowlers >= 0);
     assert.equal(s.partnerships.reduce((n, p) => n + p.runs, 0), s.runs - s.extras.penalty, `${where}: partnerships`);
     for (const b of s.batters) assert.ok(b.fours * 4 + b.sixes * 6 <= b.runs, `${where}: boundaries within runs`);
+    // Every boundary hit is one a bowler conceded (balls with no bowler on aren't anyone's).
+    const sum = (xs: { fours: number; sixes: number }[]) => xs.reduce((n, x) => [n[0] + x.fours, n[1] + x.sixes], [0, 0]);
+    if (s.log.every((d) => d.bowler)) assert.deepEqual(sum(s.bowlers), sum(s.batters), `${where}: boundaries conceded = boundaries hit`);
     // Only when the side can bowl the innings under the limit (otherwise the app lifts it for the last overs).
     const room = (m.rules.maxOversPerBowler ?? 0) * s.bowlingTeam.players.length + Math.min(m.rules.extraOverBowlers ?? 0, s.bowlingTeam.players.length);
     if (m.rules.maxOversPerBowler && room * 6 >= s.maxBalls) {

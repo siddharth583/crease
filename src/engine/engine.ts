@@ -21,6 +21,9 @@ export type BowlerLine = {
   maidens: number;
   wides: number;
   noballs: number;
+  /** Boundaries hit off them: off the bat, as the batter is credited (byes and wides aren't). */
+  fours: number;
+  sixes: number;
 };
 
 export type BallTone = 'dot' | 'run' | 'four' | 'six' | 'wicket' | 'extra';
@@ -172,7 +175,7 @@ export function inningsState(match: Match, index: number, target: number | null)
   };
   const bowler = (id: string) => {
     let line = s.bowlers.find((b) => b.id === id);
-    if (!line) s.bowlers.push((line = { id, balls: 0, runs: 0, wickets: 0, maidens: 0, wides: 0, noballs: 0 }));
+    if (!line) s.bowlers.push((line = { id, balls: 0, runs: 0, wickets: 0, maidens: 0, wides: 0, noballs: 0, fours: 0, sixes: 0 }));
     return line;
   };
   const swap = () => ([s.striker, s.nonStriker] = [s.nonStriker, s.striker]);
@@ -280,6 +283,10 @@ export function inningsState(match: Match, index: number, target: number | null)
       if (legal) line.balls += 1;
       if (e.extra === 'wide') line.wides += 1;
       if (e.extra === 'noball') line.noballs += 1;
+      if (!e.extra || e.extra === 'noball') {
+        if (e.runs === 4) line.fours += 1;
+        if (e.runs === 6) line.sixes += 1;
+      }
       const these = s.overBowlers[s.overBowlers.length - 1];
       if (!these.includes(bowlerId)) these.push(bowlerId);
     }
