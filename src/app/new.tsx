@@ -5,6 +5,7 @@ import { Animated, KeyboardAvoidingView, PanResponder, Platform, Pressable, Scro
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, useToast } from '../components/ui.tsx';
 import { TossScene, type TossResult } from '../components/TossScene.tsx';
+import { NameSuggestions } from '../components/NameSuggestions.tsx';
 import { auctionState, rosterPlayer, type Auction } from '../engine/auction.ts';
 import { newMatch } from '../engine/engine.ts';
 import { seriesState } from '../engine/stats.ts';
@@ -105,6 +106,7 @@ function TeamEditor({
   onDragging,
   onSwap,
   other,
+  otherNames,
 }: {
   label: string;
   draft: Draft;
@@ -118,8 +120,12 @@ function TeamEditor({
   onSwap: (slot: number) => void;
   /** The other side's name, for the swap button. */
   other: string;
+  /** The other side's players: not suggested for this one. */
+  otherNames: string[];
 }) {
   const [open, setOpen] = useState(false);
+  // The slot being typed in, for its name suggestions. Kept a moment after it loses focus, so a suggestion can be tapped.
+  const [typing, setTyping] = useState<number | null>(null);
   // A narrow phone: the slot number goes and the buttons slim down, so the name keeps room to be read.
   const compact = useWindowDimensions().width < 380;
   const mark = [styles.mark, compact && styles.markCompact];
@@ -205,8 +211,9 @@ function TeamEditor({
       {open && (
         <View style={{ gap: space.sm }}>
           {draft.players.map((p, i) => (
+            // The row being dragged rides over the others.
+            <View key={i} style={[{ gap: space.sm }, drag && i === drag.from && { zIndex: 10 }]}>
             <Animated.View
-              key={i}
               style={[
                 styles.playerRow,
                 drag && i === drag.from
@@ -218,6 +225,8 @@ function TeamEditor({
               <TextInput
                 value={p}
                 onChangeText={(v) => onChange({ ...draft, players: draft.players.map((x, j) => (j === i ? v : x)) })}
+                onFocus={() => setTyping(i)}
+                onBlur={() => setTimeout(() => setTyping((t) => (t === i ? null : t)), 250)}
                 placeholder={`Player ${i + 1}`}
                 placeholderTextColor={colors.faint}
                 style={[styles.playerInput, compact && styles.playerInputCompact]}
@@ -250,6 +259,19 @@ function TeamEditor({
                 <Ionicons name="swap-vertical" size={16} color={colors.muted} />
               </PressableScale>
             </Animated.View>
+            {typing === i && !drag && (
+              <View style={styles.suggestions}>
+                <NameSuggestions
+                  value={p}
+                  taken={[...draft.players.filter((_, j) => j !== i), ...otherNames]}
+                  onPick={(name) => {
+                    onChange({ ...draft, players: draft.players.map((x, j) => (j === i ? name : x)) });
+                    setTyping(null);
+                  }}
+                />
+              </View>
+            )}
+            </View>
           ))}
           <Text style={styles.help}>
             Hold ≡ and drag a player to change the order. Leave a slot empty if the side is short. Tap C for the captain, WK for the
@@ -516,13 +538,13 @@ export default function NewMatch() {
             </PressableScale>
           )}
           <View style={{ gap: space.md }}>
-            <TeamEditor label="Team A" draft={teams[0]} saved={savedFor(0)} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} onDragging={setLocked} onSwap={(i) => swap(0, i)} other={names[1]} />
+            <TeamEditor label="Team A" draft={teams[0]} saved={savedFor(0)} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} onDragging={setLocked} onSwap={(i) => swap(0, i)} other={names[1]} otherNames={teams[1].players} />
             <View style={styles.vs} pointerEvents="none">
               <View style={styles.vsBadge}>
                 <Text style={styles.vsText}>vs</Text>
               </View>
             </View>
-            <TeamEditor label="Team B" draft={teams[1]} saved={savedFor(1)} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} onDragging={setLocked} onSwap={(i) => swap(1, i)} other={names[0]} />
+            <TeamEditor label="Team B" draft={teams[1]} saved={savedFor(1)} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} onDragging={setLocked} onSwap={(i) => swap(1, i)} other={names[0]} otherNames={teams[0].players} />
           </View>
 
           <Card style={{ gap: space.sm, marginTop: space.md }}>
@@ -536,6 +558,7 @@ export default function NewMatch() {
               maxLength={24}
               autoCapitalize="words"
             />
+            <NameSuggestions value={common} taken={[...teams[0].players, ...teams[1].players]} onPick={setCommon} />
             {common.trim() ? (
               <Text style={styles.help}>{common.trim()} bats and bowls for both teams; their stats count once.</Text>
             ) : null}
@@ -658,6 +681,7 @@ const styles = StyleSheet.create({
     // On the web: a drag here moves the row, not the page, and doesn't select text.
     ...(Platform.OS === 'web' ? ({ touchAction: 'none', userSelect: 'none', cursor: 'grab' } as object) : null),
   },
+  suggestions: { marginLeft: 32 },
   playerInputCompact: { paddingHorizontal: space.sm },
   lifted: { zIndex: 10, backgroundColor: colors.surfaceHi, borderRadius: radius.sm, ...edge },
   playerInput: {

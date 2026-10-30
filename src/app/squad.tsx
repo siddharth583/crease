@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NameSuggestions } from '../components/NameSuggestions.tsx';
 import { Stars } from '../components/Stars.tsx';
 import { Button, Card, FadeIn, IconButton, PressableScale, Screen, SectionLabel, Segmented, ToggleRow, useToast } from '../components/ui.tsx';
 import { CATEGORIES, CATEGORY_LABEL, categoryOf, overall, ROLE_LABEL, type Category, type SquadPlayer } from '../engine/squad.ts';
@@ -177,6 +178,7 @@ export default function SquadScreen() {
             />
             <IconButton icon="add" label="Add to squad" active={Boolean(name.trim())} disabled={!name.trim()} onPress={add} />
           </Card>
+          <NameSuggestions value={name} taken={squad.map((p) => p.name)} onPick={setName} />
 
           <SectionLabel right={<Text style={styles.hint}>Tap to edit</Text>}>Best first</SectionLabel>
           <View style={{ gap: space.sm }}>

@@ -19,6 +19,7 @@ function useScreenAwake() {
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BallEditSheet, fixBall } from '../../../components/BallEditSheet.tsx';
+import { NameSuggestions } from '../../../components/NameSuggestions.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { ShareCardSheet } from '../../../components/ShareCard.tsx';
 import {
@@ -398,6 +399,7 @@ function MatchMenu({
             autoCapitalize="words"
             maxLength={24}
           />
+          <NameSuggestions value={lateName} taken={match.teams.flatMap((t) => t.players.map((p) => p.name))} onPick={setLateName} />
           <Button variant="ghost" label="Add to the side" icon="person-add-outline" disabled={!lateName.trim()} onPress={() => onAddPlayer(lateTeam, lateName.trim())} />
         </Card>
 

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { NameSuggestions } from '../../components/NameSuggestions.tsx';
 import { FormBadge } from '../../components/Ratings.tsx';
 import { Button, Card, Chip, FadeIn, PressableScale, Screen, SectionLabel, Segmented, useToast } from '../../components/ui.tsx';
 import { DEFAULT_SQUAD } from '../../engine/squad.ts';
@@ -432,6 +433,7 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
           />
           <Chip icon="person-add-outline" label="Add" disabled={!guestDraft.trim()} onPress={addGuest} />
         </View>
+        <NameSuggestions value={guestDraft} taken={playing.map((p) => p.name)} onPick={setGuestDraft} />
       </Card>
 
       <SectionLabel right={<Text style={styles.count}>{caps.length ? `${caps.length} of 2` : 'Optional'}</Text>}>Captains</SectionLabel>

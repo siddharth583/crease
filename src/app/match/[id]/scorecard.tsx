@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NameSuggestions } from '../../../components/NameSuggestions.tsx';
 import { OverEditSheet } from '../../../components/OverEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
@@ -265,13 +266,14 @@ function MomSheet({ match, visible, onClose, onPick }: { match: Match; visible: 
 }
 
 /** One player's name, editable: saved when they finish typing, put back if left empty. */
-function NameField({ name, onSave }: { name: string; onSave: (name: string) => void }) {
+function NameField({ name, taken, onSave }: { name: string; taken: string[]; onSave: (name: string) => void }) {
   const [draft, setDraft] = useState(name);
   const save = () => {
     if (!draft.trim()) setDraft(name);
     else if (draft.trim() !== name) onSave(draft);
   };
   return (
+    <View style={{ gap: space.sm }}>
     <TextInput
       value={draft}
       onChangeText={setDraft}
@@ -284,6 +286,17 @@ function NameField({ name, onSave }: { name: string; onSave: (name: string) => v
       placeholderTextColor={colors.faint}
       accessibilityLabel={`Rename ${name}`}
     />
+    {draft.trim() !== name && (
+      <NameSuggestions
+        value={draft}
+        taken={taken}
+        onPick={(picked) => {
+          setDraft(picked);
+          onSave(picked);
+        }}
+      />
+    )}
+    </View>
   );
 }
 
@@ -300,7 +313,12 @@ function NamesEditor({ match, onRename }: { match: Match; onRename: (playerId: s
             {t.players
               .filter((p) => !(p.common && t !== match.teams[0]))
               .map((p) => (
-                <NameField key={p.id} name={p.name} onSave={(name) => onRename(p.id, name)} />
+                <NameField
+                  key={p.id}
+                  name={p.name}
+                  taken={match.teams.flatMap((x) => x.players.filter((o) => o.id !== p.id).map((o) => o.name))}
+                  onSave={(name) => onRename(p.id, name)}
+                />
               ))}
           </View>
         ))}

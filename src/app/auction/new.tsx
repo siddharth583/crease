@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, tap } from '../../components/ui.tsx';
+import { NameSuggestions } from '../../components/NameSuggestions.tsx';
 import { auctionState, DEFAULT_BASES, money, moneyShort, newAuction, reserveFor, type AuctionSettings } from '../../engine/auction.ts';
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_NAME, categoryOf, overall, type Category, type SquadPlayer } from '../../engine/squad.ts';
 import { ratedSquad } from '../../engine/ratings.ts';
@@ -156,6 +157,7 @@ export default function NewAuction() {
               />
               <IconButton icon="add" label="Add guest" active={Boolean(guest.trim())} disabled={!guest.trim()} onPress={addGuest} />
             </View>
+            <NameSuggestions value={guest} taken={everyone.map((p) => p.name)} onPick={setGuest} />
           </Card>
 
           <SectionLabel>Captains</SectionLabel>
