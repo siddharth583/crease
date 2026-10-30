@@ -267,6 +267,12 @@ export default function Home() {
           <AppMark size={34} />
           <Text style={styles.brand}>crease</Text>
           <View style={{ flex: 1 }} />
+          {live.length > 0 && (
+            <PressableScale accessibilityLabel="New match" haptic="medium" onPress={() => router.push('/new')} style={styles.newMatch}>
+              <Ionicons name="add" size={18} color={colors.onAccent} />
+              <Text style={styles.newMatchText}>New match</Text>
+            </PressableScale>
+          )}
           <PressableScale accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={styles.gear}>
             <Ionicons name="settings-outline" size={18} color={colors.text} />
           </PressableScale>
@@ -373,6 +379,8 @@ const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: 130 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.xl },
   brand: { fontFamily: font.posterBlack, fontSize: 22, color: colors.text, letterSpacing: -0.6 },
+  newMatch: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 38, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: colors.accent },
+  newMatchText: { color: colors.onAccent, fontFamily: font.bold, fontSize: 14 },
   gear: {
     width: 38,
     height: 38,

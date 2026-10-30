@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, useToast } from '../components/ui.tsx';
@@ -11,6 +11,7 @@ import { seriesState } from '../engine/stats.ts';
 import type { Match, Rules, SeriesInfo, Team } from '../engine/types.ts';
 import { newId, useMatches } from '../store/matches.tsx';
 import { HOUSE_RULES } from '../engine/squad.ts';
+import { fillSides, strengths } from '../engine/teams.ts';
 import { useSquad } from '../store/squad.ts';
 import { colors, edge, radius, space, font } from '../theme.ts';
 
@@ -51,6 +52,17 @@ function draftsFromAuction(a: Auction): [Draft, Draft] {
     const keeper = players.findIndex((p) => p.keeper);
     return { name: side.name, players: players.map((p) => p.name), captain: 0, keeper: keeper >= 0 ? keeper : undefined };
   }) as [Draft, Draft];
+}
+
+/** Sides from the Teams tab: `[{ name, players, captain?, keeper? }, …]`, or null when they can't be read. */
+function draftsFromParam(json: string): [Draft, Draft] | null {
+  try {
+    const sides = JSON.parse(json) as Draft[];
+    if (!Array.isArray(sides) || sides.length !== 2 || !sides.every((s) => typeof s.name === 'string' && Array.isArray(s.players))) return null;
+    return sides.map((s) => ({ name: s.name, players: s.players.map(String).slice(0, 11), captain: s.captain, keeper: s.keeper })) as [Draft, Draft];
+  } catch {
+    return null;
+  }
 }
 
 /** A player row's height and the gap under it: how far a dragged row travels to swap places with the next. */
@@ -255,11 +267,13 @@ function TeamEditor({
 
 export default function NewMatch() {
   const insets = useSafeAreaInsets();
-  const { rematch, series: continueSeries, auction } = useLocalSearchParams<{ rematch?: string; series?: string; auction?: string }>();
+  const { rematch, series: continueSeries, auction, sides } = useLocalSearchParams<{ rematch?: string; series?: string; auction?: string; sides?: string }>();
   const { savedTeams, rememberTeams, saveMatch, matches } = useMatches();
-  const { auctions, saveAuction } = useSquad();
+  const { auctions, saveAuction, squad } = useSquad();
   const fromAuction = auction ? auctions.find((a) => a.id === auction) : undefined;
-  const [auctionDrafts] = useState(() => (fromAuction ? draftsFromAuction(fromAuction) : null));
+  // Sides made on the Teams tab arrive whole, like an auction's.
+  const [auctionDrafts] = useState(() => (fromAuction ? draftsFromAuction(fromAuction) : sides ? draftsFromParam(sides) : null));
+  const table = useMemo(() => strengths(matches, squad), [matches, squad]);
   const source: Match | undefined = rematch ? matches.find((m) => m.id === rematch) : undefined;
   const last: Match | undefined = matches[0];
   const [size, setSize] = useState(
@@ -297,11 +311,22 @@ export default function NewMatch() {
   // A saved team picked for one side isn't offered to the other.
   const savedFor = (side: 0 | 1) => savedTeams.filter((t) => t.name.trim().toLowerCase() !== teams[1 - side].name.trim().toLowerCase());
   const setSizeAll = (n: number) => {
+    const grown = teams.map((t) => resize(t.players, n)) as [string[], string[]];
+    // More players a side: once the squad is being used, its players not on either side are shared out, the weaker
+    // side (on form) taking the best one left each time.
+    const known = (name: string) => table.has(name.trim().toLowerCase());
+    const joined = n > size && teams.some((t) => t.players.some(known)) ? fillSides(grown, n, [...table.values()], table) : [[], []];
+    const filled = grown.map((players, i) => {
+      const add = [...joined[i]];
+      return players.map((p) => (p.trim() || !add.length ? p : add.shift()!));
+    });
     setSize(n);
     setTeams(([a, b]) => [
-      { ...a, players: resize(a.players, n) },
-      { ...b, players: resize(b.players, n) },
+      { ...a, players: filled[0] },
+      { ...b, players: filled[1] },
     ]);
+    const added = joined.map((j, i) => (j.length ? `${j.join(', ')} to ${names[i]}` : '')).filter(Boolean);
+    if (added.length) toast.show(`Added ${added.join(' and ')}, to keep the sides even`, 'info');
   };
   const setSquad = (side: 0 | 1, d: Draft) => {
     const n = Math.min(11, Math.max(2, d.players.length));

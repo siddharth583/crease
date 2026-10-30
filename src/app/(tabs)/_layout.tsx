@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
@@ -15,9 +14,10 @@ const GAP = 4;
 const TABS: Record<string, { label: string; icon: IconName; iconOn: IconName }> = {
   index: { label: 'Matches', icon: 'albums-outline', iconOn: 'albums' },
   players: { label: 'Players', icon: 'podium-outline', iconOn: 'podium' },
+  teams: { label: 'Teams', icon: 'people-outline', iconOn: 'people' },
 };
 
-/** A floating capsule of tabs, with the one thing you come here to do (start a match) beside it in volt. */
+/** A floating capsule of tabs. A new match starts from the Matches tab. */
 function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const still = useReducedMotion();
@@ -59,15 +59,6 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
           );
         })}
       </View>
-      <PressableScale
-        accessibilityLabel="New match"
-        haptic="medium"
-        scaleTo={0.88}
-        onPress={() => router.push('/new')}
-        style={styles.fab}
-      >
-        <Ionicons name="add" size={30} color={colors.onAccent} />
-      </PressableScale>
     </View>
   );
 }
@@ -80,6 +71,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="players" />
+      <Tabs.Screen name="teams" />
     </Tabs>
   );
 }
@@ -132,13 +124,4 @@ const styles = StyleSheet.create({
   },
   tabLabel: { color: colors.faint, fontFamily: font.semibold, fontSize: 14 },
   tabLabelOn: { color: colors.text },
-  fab: {
-    width: 62,
-    height: 62,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...edge,
-  },
 });
