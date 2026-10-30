@@ -103,6 +103,8 @@ function TeamEditor({
   onSquad,
   saved,
   onDragging,
+  onSwap,
+  other,
 }: {
   label: string;
   draft: Draft;
@@ -112,6 +114,10 @@ function TeamEditor({
   saved: Team[];
   /** A row is being dragged: the page shouldn't scroll under it. */
   onDragging: (on: boolean) => void;
+  /** Send the player in this slot to the other side. */
+  onSwap: (slot: number) => void;
+  /** The other side's name, for the swap button. */
+  other: string;
 }) {
   const [open, setOpen] = useState(false);
   // The row being dragged, from its slot to where it would land, and how far it has moved.
@@ -232,11 +238,19 @@ function TeamEditor({
               >
                 <Text style={[styles.markText, draft.keeper === i && styles.markTextOn]}>WK</Text>
               </PressableScale>
+              <PressableScale
+                accessibilityLabel={p.trim() ? `Move ${p.trim()} to ${other}` : `Move player ${i + 1} to ${other}`}
+                disabled={!p.trim()}
+                onPress={() => onSwap(i)}
+                style={[styles.mark, !p.trim() && { opacity: 0.35 }]}
+              >
+                <Ionicons name="swap-vertical" size={16} color={colors.muted} />
+              </PressableScale>
             </Animated.View>
           ))}
           <Text style={styles.help}>
             Hold ≡ and drag a player to change the order. Leave a slot empty if the side is short. Tap C for the captain, WK for the
-            keeper.
+            keeper, and ⇅ to send a player to {other}.
           </Text>
           <View style={styles.pasteBox}>
             <TextInput
@@ -327,6 +341,32 @@ export default function NewMatch() {
     ]);
     const added = joined.map((j, i) => (j.length ? `${j.join(', ')} to ${names[i]}` : '')).filter(Boolean);
     if (added.length) toast.show(`Added ${added.join(' and ')}, to keep the sides even`, 'info');
+  };
+  /**
+   * A player changes sides: their slot here empties and they take the other side's first empty one, or join it as a
+   * player more when it's full. Captain and keeper marks stay with the players they were on.
+   */
+  const swap = (side: 0 | 1, slot: number) => {
+    const from = teams[side];
+    const to = teams[1 - side];
+    const name = from.players[slot].trim();
+    if (!name) return;
+    const left = [...from.players];
+    left.splice(slot, 1);
+    left.push('');
+    const shift = (at?: number) => (at === undefined || at === slot ? undefined : at > slot ? at - 1 : at);
+    const joined = [...to.players];
+    const gap = joined.findIndex((p) => !p.trim());
+    if (gap < 0 && joined.length >= 11) return toast.show(`${names[1 - side]} already have 11. Send someone the other way first.`, 'info');
+    if (gap >= 0) joined[gap] = name;
+    else joined.push(name);
+    const n = Math.min(11, Math.max(left.length, joined.length));
+    const next = [] as unknown as [Draft, Draft];
+    next[side] = { ...from, players: resize(left, n), captain: shift(from.captain), keeper: shift(from.keeper) };
+    next[1 - side] = { ...to, players: resize(joined, n) };
+    setSize(n);
+    setTeams(next);
+    toast.show(`${name} moved to ${names[1 - side]}`, 'info');
   };
   const setSquad = (side: 0 | 1, d: Draft) => {
     const n = Math.min(11, Math.max(2, d.players.length));
@@ -473,13 +513,13 @@ export default function NewMatch() {
             </PressableScale>
           )}
           <View style={{ gap: space.md }}>
-            <TeamEditor label="Team A" draft={teams[0]} saved={savedFor(0)} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} onDragging={setLocked} />
+            <TeamEditor label="Team A" draft={teams[0]} saved={savedFor(0)} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} onDragging={setLocked} onSwap={(i) => swap(0, i)} other={names[1]} />
             <View style={styles.vs} pointerEvents="none">
               <View style={styles.vsBadge}>
                 <Text style={styles.vsText}>vs</Text>
               </View>
             </View>
-            <TeamEditor label="Team B" draft={teams[1]} saved={savedFor(1)} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} onDragging={setLocked} />
+            <TeamEditor label="Team B" draft={teams[1]} saved={savedFor(1)} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} onDragging={setLocked} onSwap={(i) => swap(1, i)} other={names[0]} />
           </View>
 
           <Card style={{ gap: space.sm, marginTop: space.md }}>
