@@ -47,12 +47,14 @@ export async function pickTextFile(): Promise<string | null> {
   return new File(asset.uri).text();
 }
 
-/** Photos are kept this many pixels square: sharp on the player page, well under the club's 200 KB a photo. */
-const PHOTO_SIZE = 512;
+/** A photo's longest side is kept to this: as sharp as the original on any phone screen, and a phone camera's 4000px shot fits the club. */
+const PHOTO_MAX = 1600;
+/** What one photo may take in the club (a database entry holds about 1 MB). */
+const PHOTO_BYTES = 950_000;
 
 /**
- * Lets the person pick a picture and returns it cropped to the middle square and shrunk, as a JPEG data URL; null if
- * they backed out. Web only: the app's photos are set in the browser.
+ * Lets the person pick a picture and returns it whole (never cropped), at its own size unless it's bigger than
+ * `PHOTO_MAX`, as a high-quality JPEG data URL; null if they backed out. Web only: the app's photos are set in the browser.
  */
 export async function pickPhoto(): Promise<string | null> {
   if (Platform.OS !== 'web') throw new Error('Set photos in the web app.');
@@ -67,13 +69,24 @@ export async function pickPhoto(): Promise<string | null> {
       i.onerror = () => reject(new Error('That file isn’t a picture this browser can open.'));
       i.src = url;
     });
-    const side = Math.min(img.naturalWidth, img.naturalHeight);
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = PHOTO_SIZE;
-    const ctx = canvas.getContext('2d')!;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
-    return canvas.toDataURL('image/jpeg', 0.82);
+    // Only as small as it has to be: full quality first, then a touch less, then smaller, until it fits the club.
+    for (const [max, quality] of [
+      [PHOTO_MAX, 0.92],
+      [PHOTO_MAX, 0.85],
+      [1280, 0.85],
+      [1024, 0.82],
+    ] as const) {
+      const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d')!;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const photo = canvas.toDataURL('image/jpeg', quality);
+      if (photo.length <= PHOTO_BYTES) return photo;
+    }
+    throw new Error('That picture is too big to share. Try a smaller one.');
   } finally {
     if (asset.file) URL.revokeObjectURL(url);
   }

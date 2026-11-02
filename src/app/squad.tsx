@@ -14,7 +14,7 @@ import { FormBadge, RatingChips } from '../components/Ratings.tsx';
 import { newId, useMatches } from '../store/matches.tsx';
 import { pickPhoto, pickTextFile } from '../store/files.ts';
 import { useSquad } from '../store/squad.ts';
-import { parsePhotos, photoFor } from '../engine/photos.ts';
+import { parsePhotos, photoFor, photoKey } from '../engine/photos.ts';
 import { useAccess, usePhotos, useSetPhoto } from '../store/sync.tsx';
 import { colors, font, radius, space, type } from '../theme.ts';
 
@@ -200,7 +200,8 @@ function EmailLinker({ onLink }: { onLink: (text: string) => void }) {
 
 export default function SquadScreen() {
   const insets = useSafeAreaInsets();
-  const { squad, setSquad, importPhotos } = useSquad();
+  const { squad, setSquad } = useSquad();
+  const setPhoto = useSetPhoto();
   // Everyone sees the squad; only the admin changes it.
   const { admin } = useAccess();
   const { matches } = useMatches();
@@ -279,8 +280,16 @@ export default function SquadScreen() {
               if (text === null) return;
               const photos = parsePhotos(text);
               if (!photos) return toast.show('That isn’t a Crease photos file.', 'error');
-              const n = importPhotos(photos);
-              toast.show(n ? `${n} photo${n === 1 ? '' : 's'} added. Everyone in the club sees them.` : 'No photos in that file.', n ? 'success' : 'info');
+              const entries = Object.entries(photos);
+              if (!entries.length) return toast.show('No photos in that file.', 'info');
+              toast.show(`Adding ${entries.length} photos…`, 'info');
+              try {
+                // Each to its player: in the club on the live app (one entry each, full quality), here anywhere else.
+                for (const [key, photo] of entries) await setPhoto(squad.find((p) => photoKey(p.name) === key) ?? { name: key }, photo);
+                toast.show(`${entries.length} photos added. Everyone in the club sees them.`, 'success');
+              } catch {
+                toast.show('Some photos didn’t save. Try the import again.', 'error');
+              }
             }}
           />
           </>

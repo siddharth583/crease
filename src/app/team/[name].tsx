@@ -5,14 +5,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PlayerAvatar } from '../../components/Avatar.tsx';
 import { FormBadge } from '../../components/Ratings.tsx';
-import { Card, IconButton, PitchStripes, PressableScale, Screen, SectionLabel } from '../../components/ui.tsx';
+import { Card, IconButton, PageToneProvider, PitchStripes, PressableScale, Screen, SectionLabel, usePageTone } from '../../components/ui.tsx';
 import { headToHead, teamNames } from '../../engine/records.ts';
 import { keyFor } from '../../engine/stats.ts';
 import { teamProfile, type TeamLeader } from '../../engine/teamPage.ts';
 import { nameKey, sideStrength, strengthOf, strengths } from '../../engine/teams.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
-import { colors, font, hero, radius, space, teamTheme, type } from '../../theme.ts';
+import { colors, font, hero, ownTeamTheme, radius, space, teamTheme, type } from '../../theme.ts';
 
 // One side: its record and form, its squad with their form, who scores its runs and takes its wickets, its best and
 // worst totals, how it does against the other side, and every result. In the side's own colours.
@@ -22,6 +22,7 @@ const openPlayer = (key: string) => router.push({ pathname: '/player/[key]', par
 const day = (at: number) => new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
 function Leaders({ title, unit, rows }: { title: string; unit: string; rows: TeamLeader[] }) {
+  const teamInk = usePageTone()?.ink ?? colors.text;
   if (!rows.length) return null;
   return (
     <Card style={styles.board}>
@@ -35,7 +36,7 @@ function Leaders({ title, unit, rows }: { title: string; unit: string; rows: Tea
             </Text>
             {x.sub ? <Text style={styles.small}>{x.sub}</Text> : null}
           </View>
-          <Text style={[styles.leaderValue, i === 0 && styles.leaderTop]}>{x.value}</Text>
+          <Text style={[styles.leaderValue, i === 0 && [styles.leaderTop, { color: teamInk }]]}>{x.value}</Text>
         </PressableScale>
       ))}
     </Card>
@@ -62,166 +63,170 @@ export default function TeamScreen() {
     .sort((a, b) => b.h.played - a.h.played)[0];
   const winPct = t.played ? Math.round((t.won / t.played) * 100) : null;
 
+  const tone = ownTeamTheme(name) ?? null;
+  const tile = [styles.tile, tone && { backgroundColor: tone.card, borderColor: tone.line }];
   return (
-    <Screen>
-      <View style={styles.header}>
-        <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/teams'))} />
-      </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl, gap: space.md }}>
-        <LinearGradient colors={side.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
-          <PitchStripes tint="255,255,255" />
-          <View style={[styles.tag, { backgroundColor: side.accent }]}>
-            <Text style={[styles.tagText, { color: side.onAccent }]}>Team</Text>
-          </View>
-          <Text style={styles.name} numberOfLines={2}>
-            {t.name}
-          </Text>
-          <View style={styles.form}>
-            {t.results.slice(0, 5).map((r) => (
-              <View key={r.matchId} style={[styles.dot, r.outcome === 'W' ? { backgroundColor: side.accent } : r.outcome === 'L' ? styles.dotLoss : styles.dotTie]}>
-                <Text style={[styles.dotText, r.outcome === 'W' && { color: side.onAccent }]}>{r.outcome}</Text>
-              </View>
-            ))}
-            {t.streak && t.streak.count > 1 && (
-              <Text style={styles.streak}>
-                {t.streak.count} {t.streak.outcome === 'W' ? 'wins' : t.streak.outcome === 'L' ? 'losses' : 'ties'} in a row
-              </Text>
-            )}
-          </View>
-          <View style={styles.stats}>
-            {[
-              ['Played', String(t.played)],
-              ['Won', String(t.won)],
-              ['Lost', String(t.lost)],
-              ['Win %', winPct === null ? '–' : `${winPct}`],
-            ].map(([label, value]) => (
-              <View key={label} style={{ flex: 1, alignItems: 'center' }}>
-                <Text style={styles.statValue}>{value}</Text>
-                <Text style={styles.statLabel}>{label}</Text>
-              </View>
-            ))}
-          </View>
-        </LinearGradient>
-
-        {(t.highest || rival) && (
-          <View style={styles.tiles}>
-            {t.highest && (
-              <PressableScale scaleTo={0.97} onPress={() => openMatch(t.highest!.matchId)} style={styles.tile}>
-                <Text style={styles.tileValue}>
-                  {t.highest.runs}/{t.highest.wickets}
-                </Text>
-                <Text style={styles.small}>Highest total</Text>
-              </PressableScale>
-            )}
-            {t.lowest && (
-              <PressableScale scaleTo={0.97} onPress={() => openMatch(t.lowest!.matchId)} style={styles.tile}>
-                <Text style={styles.tileValue}>
-                  {t.lowest.runs}/{t.lowest.wickets}
-                </Text>
-                <Text style={styles.small}>Lowest total</Text>
-              </PressableScale>
-            )}
-            {t.averageScore !== null && (
-              <View style={styles.tile}>
-                <Text style={styles.tileValue}>{Math.round(t.averageScore)}</Text>
-                <Text style={styles.small}>Average score</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {rival && rival.h.played > 0 && (
-          <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/team/[name]', params: { name: rival.x } })}>
-            <Card style={styles.h2h}>
-              <Text style={styles.label}>Head to head</Text>
-              <View style={styles.h2hRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.h2hWins, { color: side.accent }]}>{rival.h.winsA}</Text>
-                  <Text style={styles.small} numberOfLines={1}>
-                    {t.name}
-                  </Text>
-                </View>
-                <Text style={styles.small}>{rival.h.ties ? `${rival.h.ties} tied` : 'vs'}</Text>
-                <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                  <Text style={[styles.h2hWins, { color: teamTheme(rival.x).accent }]}>{rival.h.winsB}</Text>
-                  <Text style={styles.small} numberOfLines={1}>
-                    {rival.x}
-                  </Text>
-                </View>
-              </View>
-            </Card>
-          </PressableScale>
-        )}
-
-        {players.length > 0 && (
-          <>
-            <SectionLabel right={together?.form != null ? <Text style={styles.small}>Form {together.form.toFixed(1)} together</Text> : undefined}>Squad</SectionLabel>
-            <Card style={{ gap: 0, paddingVertical: space.xs }}>
-              {players.map(({ p, s, key }, i) => (
-                <PressableScale key={p.id} scaleTo={0.98} onPress={() => openPlayer(key)} style={[styles.member, i > 0 && styles.divided]} accessibilityLabel={p.name}>
-                  <PlayerAvatar name={p.name} size={40} />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.leaderName} numberOfLines={1}>
-                      {p.name}
-                      {team?.captain === p.id ? <Text style={[styles.mark, { color: side.accent }]}>{'  '}C</Text> : null}
-                      {team?.keeper === p.id ? <Text style={styles.mark}>{'  '}WK</Text> : null}
-                    </Text>
-                    <Text style={styles.small}>
-                      Bat {s.bat} · Bowl {s.bowl}
-                      {s.guest ? ' · not in the squad' : ''}
-                    </Text>
-                  </View>
-                  {s.form != null && <FormBadge form={s.form} />}
-                </PressableScale>
-              ))}
-            </Card>
-          </>
-        )}
-
-        {(t.runs.length > 0 || t.wickets.length > 0) && <SectionLabel>Leaders</SectionLabel>}
-        <View style={styles.boards}>
-          <Leaders title="Most runs" unit="runs" rows={t.runs} />
-          <Leaders title="Most wickets" unit="wickets" rows={t.wickets} />
-          <Leaders title="Most sixes" unit="sixes" rows={t.sixes} />
-          <Leaders title="Most catches" unit="catches" rows={t.catches} />
+    <PageToneProvider value={tone}>
+      <Screen>
+        <View style={styles.header}>
+          <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/teams'))} />
         </View>
-
-        {t.results.length > 0 && (
-          <>
-            <SectionLabel right={<Text style={styles.small}>{t.results.length}</Text>}>Results</SectionLabel>
-            <Card style={{ gap: 0, paddingVertical: space.xs }}>
-              {t.results.map((r, i) => (
-                <PressableScale key={r.matchId} scaleTo={0.98} onPress={() => openMatch(r.matchId)} style={[styles.result, i > 0 && styles.divided]} accessibilityLabel={r.result}>
-                  <View style={[styles.dot, r.outcome === 'W' ? { backgroundColor: side.accent } : r.outcome === 'L' ? styles.dotLoss : styles.dotTie]}>
-                    <Text style={[styles.dotText, r.outcome === 'W' && { color: side.onAccent }]}>{r.outcome}</Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.leaderName} numberOfLines={1}>
-                      vs {r.opponent}
-                    </Text>
-                    <Text style={styles.small} numberOfLines={1}>
-                      {r.result}
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.score}>
-                      {r.score} <Text style={styles.small}>· {r.against}</Text>
-                    </Text>
-                    <Text style={styles.small}>{day(r.date)}</Text>
-                  </View>
-                </PressableScale>
+        <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl, gap: space.md }}>
+          <LinearGradient colors={side.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
+            <PitchStripes tint="255,255,255" />
+            <View style={[styles.tag, { backgroundColor: side.accent }]}>
+              <Text style={[styles.tagText, { color: side.onAccent }]}>Team</Text>
+            </View>
+            <Text style={styles.name} numberOfLines={2}>
+              {t.name}
+            </Text>
+            <View style={styles.form}>
+              {t.results.slice(0, 5).map((r) => (
+                <View key={r.matchId} style={[styles.dot, r.outcome === 'W' ? { backgroundColor: side.accent } : r.outcome === 'L' ? styles.dotLoss : styles.dotTie]}>
+                  <Text style={[styles.dotText, r.outcome === 'W' && { color: side.onAccent }]}>{r.outcome}</Text>
+                </View>
               ))}
-            </Card>
-          </>
-        )}
+              {t.streak && t.streak.count > 1 && (
+                <Text style={styles.streak}>
+                  {t.streak.count} {t.streak.outcome === 'W' ? 'wins' : t.streak.outcome === 'L' ? 'losses' : 'ties'} in a row
+                </Text>
+              )}
+            </View>
+            <View style={styles.stats}>
+              {[
+                ['Played', String(t.played)],
+                ['Won', String(t.won)],
+                ['Lost', String(t.lost)],
+                ['Win %', winPct === null ? '–' : `${winPct}`],
+              ].map(([label, value]) => (
+                <View key={label} style={{ flex: 1, alignItems: 'center' }}>
+                  <Text style={styles.statValue}>{value}</Text>
+                  <Text style={styles.statLabel}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          </LinearGradient>
 
-        {!t.played && !players.length && (
-          <Card>
-            <Text style={styles.small}>No matches for {name} yet.</Text>
-          </Card>
-        )}
-      </ScrollView>
-    </Screen>
+          {(t.highest || rival) && (
+            <View style={styles.tiles}>
+              {t.highest && (
+                <PressableScale scaleTo={0.97} onPress={() => openMatch(t.highest!.matchId)} style={tile}>
+                  <Text style={styles.tileValue}>
+                    {t.highest.runs}/{t.highest.wickets}
+                  </Text>
+                  <Text style={styles.small}>Highest total</Text>
+                </PressableScale>
+              )}
+              {t.lowest && (
+                <PressableScale scaleTo={0.97} onPress={() => openMatch(t.lowest!.matchId)} style={tile}>
+                  <Text style={styles.tileValue}>
+                    {t.lowest.runs}/{t.lowest.wickets}
+                  </Text>
+                  <Text style={styles.small}>Lowest total</Text>
+                </PressableScale>
+              )}
+              {t.averageScore !== null && (
+                <View style={tile}>
+                  <Text style={styles.tileValue}>{Math.round(t.averageScore)}</Text>
+                  <Text style={styles.small}>Average score</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {rival && rival.h.played > 0 && (
+            <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/team/[name]', params: { name: rival.x } })}>
+              <Card style={styles.h2h}>
+                <Text style={styles.label}>Head to head</Text>
+                <View style={styles.h2hRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.h2hWins, { color: side.accent }]}>{rival.h.winsA}</Text>
+                    <Text style={styles.small} numberOfLines={1}>
+                      {t.name}
+                    </Text>
+                  </View>
+                  <Text style={styles.small}>{rival.h.ties ? `${rival.h.ties} tied` : 'vs'}</Text>
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <Text style={[styles.h2hWins, { color: teamTheme(rival.x).accent }]}>{rival.h.winsB}</Text>
+                    <Text style={styles.small} numberOfLines={1}>
+                      {rival.x}
+                    </Text>
+                  </View>
+                </View>
+              </Card>
+            </PressableScale>
+          )}
+
+          {players.length > 0 && (
+            <>
+              <SectionLabel right={together?.form != null ? <Text style={[styles.small, tone && { color: tone.ink }]}>Form {together.form.toFixed(1)} together</Text> : undefined}>Squad</SectionLabel>
+              <Card style={{ gap: 0, paddingVertical: space.xs }}>
+                {players.map(({ p, s, key }, i) => (
+                  <PressableScale key={p.id} scaleTo={0.98} onPress={() => openPlayer(key)} style={[styles.member, i > 0 && styles.divided]} accessibilityLabel={p.name}>
+                    <PlayerAvatar name={p.name} size={40} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.leaderName} numberOfLines={1}>
+                        {p.name}
+                        {team?.captain === p.id ? <Text style={[styles.mark, { color: side.accent }]}>{'  '}C</Text> : null}
+                        {team?.keeper === p.id ? <Text style={styles.mark}>{'  '}WK</Text> : null}
+                      </Text>
+                      <Text style={styles.small}>
+                        Bat {s.bat} · Bowl {s.bowl}
+                        {s.guest ? ' · not in the squad' : ''}
+                      </Text>
+                    </View>
+                    {s.form != null && <FormBadge form={s.form} />}
+                  </PressableScale>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {(t.runs.length > 0 || t.wickets.length > 0) && <SectionLabel>Leaders</SectionLabel>}
+          <View style={styles.boards}>
+            <Leaders title="Most runs" unit="runs" rows={t.runs} />
+            <Leaders title="Most wickets" unit="wickets" rows={t.wickets} />
+            <Leaders title="Most sixes" unit="sixes" rows={t.sixes} />
+            <Leaders title="Most catches" unit="catches" rows={t.catches} />
+          </View>
+
+          {t.results.length > 0 && (
+            <>
+              <SectionLabel right={<Text style={styles.small}>{t.results.length}</Text>}>Results</SectionLabel>
+              <Card style={{ gap: 0, paddingVertical: space.xs }}>
+                {t.results.map((r, i) => (
+                  <PressableScale key={r.matchId} scaleTo={0.98} onPress={() => openMatch(r.matchId)} style={[styles.result, i > 0 && styles.divided]} accessibilityLabel={r.result}>
+                    <View style={[styles.dot, r.outcome === 'W' ? { backgroundColor: side.accent } : r.outcome === 'L' ? styles.dotLoss : styles.dotTie]}>
+                      <Text style={[styles.dotText, r.outcome === 'W' && { color: side.onAccent }]}>{r.outcome}</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.leaderName} numberOfLines={1}>
+                        vs {r.opponent}
+                      </Text>
+                      <Text style={styles.small} numberOfLines={1}>
+                        {r.result}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.score}>
+                        {r.score} <Text style={styles.small}>· {r.against}</Text>
+                      </Text>
+                      <Text style={styles.small}>{day(r.date)}</Text>
+                    </View>
+                  </PressableScale>
+                ))}
+              </Card>
+            </>
+          )}
+
+          {!t.played && !players.length && (
+            <Card>
+              <Text style={styles.small}>No matches for {name} yet.</Text>
+            </Card>
+          )}
+        </ScrollView>
+      </Screen>
+    </PageToneProvider>
   );
 }
 

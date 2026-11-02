@@ -152,16 +152,53 @@ export const type = {
   num: { fontVariant: ['tabular-nums' as const] },
 };
 
-/** A side's own colours, apart from the app's volt and green: its accent, the ink on it, and its panel's gradient. */
-export type TeamTheme = { accent: string; onAccent: string; hero: readonly [string, string, string]; soft: string };
-const TEAM_THEMES: Record<string, TeamTheme> = {
-  /** Ember orange on dark rust. */
-  'copan strikers': { accent: '#FF7A2F', onAccent: '#1C0B02', hero: ['#40200F', '#28140A', '#150B06'], soft: 'rgba(255,122,47,0.16)' },
-  /** Royal gold on deep navy. */
-  'copan royals': { accent: '#FFC940', onAccent: '#1A1302', hero: ['#1A2C57', '#10203F', '#0A1326'], soft: 'rgba(255,201,64,0.16)' },
+/**
+ * A side's own theme, apart from the app's volt and green, worn by its whole page: the panel's gradient, the haze at
+ * the top, the cards and their edges, and every highlight. `ink` is the accent as text, readable in day or night.
+ */
+export type TeamTheme = {
+  label: string;
+  accent: string;
+  onAccent: string;
+  ink: string;
+  hero: readonly [string, string, string];
+  soft: string;
+  glow: readonly [string, string];
+  card: string;
+  line: string;
 };
-/** A side's own colours, if it has them. */
+const tint = (rgb: string, a: number) => `rgba(${rgb},${a})`;
+function theme(label: string, accent: string, rgb: string, onAccent: string, ink: [day: string, night: string], hero: TeamTheme['hero'], card: [day: string, night: string]): TeamTheme {
+  return {
+    label,
+    accent,
+    onAccent,
+    ink: isDay ? ink[0] : ink[1],
+    hero,
+    soft: tint(rgb, 0.16),
+    glow: [tint(rgb, isDay ? 0.22 : 0.2), isDay ? 'rgba(242,243,238,0)' : 'rgba(9,12,10,0)'],
+    card: isDay ? card[0] : card[1],
+    line: tint(rgb, isDay ? 0.35 : 0.22),
+  };
+}
+const TEAM_THEMES: Record<string, TeamTheme> = {
+  /** Thunder: electric blue lightning in a slate storm. */
+  'copan strikers': theme('Thunder', '#4FC3FF', '79,195,255', '#04121C', ['#1A6FA6', '#7FD3FF'], ['#24344F', '#162238', '#0B121F'], ['#F4F9FD', '#111A27']),
+  /** Royal: gold on royal purple. */
+  'copan royals': theme('Royal', '#FFC940', '255,201,64', '#1A1302', ['#8A5E00', '#FFD56B'], ['#3D2066', '#281445', '#160B28'], ['#FBF7EE', '#1A1226']),
+};
+/** A side's own theme, if it has one. */
 export const ownTeamTheme = (name?: string | null): TeamTheme | undefined => TEAM_THEMES[(name ?? '').trim().toLowerCase()];
-/** A side's own colours; any other side (a one-off XI) plays in the app's own. */
+/** A side's own theme; any other side (a one-off XI) plays in the app's own. */
 export const teamTheme = (name?: string | null): TeamTheme =>
-  ownTeamTheme(name) ?? { accent: NIGHT.accent, onAccent: NIGHT.onAccent, hero: PITCH, soft: 'rgba(215,255,58,0.14)' };
+  ownTeamTheme(name) ?? {
+    label: 'Crease',
+    accent: colors.accent,
+    onAccent: colors.onAccent,
+    ink: colors.accentInk,
+    hero: PITCH,
+    soft: colors.accentDim,
+    glow: gradients.glow,
+    card: colors.surface,
+    line: colors.border,
+  };

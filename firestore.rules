@@ -61,12 +61,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Players' photos, kept under their email: everyone in the club sees them; each person sets or removes their own,
-    // the admin anyone's. Only a small picture is accepted.
+    // Players' photos, one entry each, at full quality: under a player's email (they set or remove their own) or, for a
+    // player with no email, under name:<their name> (the admin's). Everyone in the club sees them. Pictures only.
     match /clubs/copan/photos/{who} {
       allow read: if canRead();
       allow create, update: if (isAdmin() || (canRead() && email() == who))
-        && request.resource.data.photo is string && request.resource.data.photo.size() < 200000
+        && request.resource.data.photo is string && request.resource.data.photo.size() < 1000000
         && request.resource.data.photo.matches('data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+')
         && request.resource.data.by == email();
       allow delete: if isAdmin() || (signedIn() && email() == who);

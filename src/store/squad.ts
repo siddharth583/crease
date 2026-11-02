@@ -102,8 +102,7 @@ type SquadStore = {
   photos: Photos;
   /** A player's photo, or none to take it away. */
   setPhoto: (name: string, photo: string | null) => void;
-  /** A photos file's photos, added over any already here: how many. */
-  importPhotos: (photos: Photos) => number;
+
 };
 
 const SquadContext = createContext<SquadStore | null>(null);
@@ -142,14 +141,6 @@ export function SquadProvider({ children }: { children: ReactNode }) {
       }),
     [update],
   );
-  const importPhotos = useCallback(
-    (photos: Photos) => {
-      const n = Object.keys(photos).length;
-      if (n) update((s) => ({ ...s, photos: { ...(s.photos ?? {}), ...photos } }));
-      return n;
-    },
-    [update],
-  );
   const importSquad = useCallback(
     (squad: SquadPlayer[] | null, auctions: Auction[], lineups: SavedLineup[] = []) => {
       // Counted against what's here now; merged again against whatever is there when it lands.
@@ -170,7 +161,7 @@ export function SquadProvider({ children }: { children: ReactNode }) {
   );
   return createElement(
     SquadContext.Provider,
-    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, lineups: state.lineups ?? [], saveLineup, deleteLineup, importSquad, setShared, photos: state.photos ?? {}, setPhoto, importPhotos } },
+    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, lineups: state.lineups ?? [], saveLineup, deleteLineup, importSquad, setShared, photos: state.photos ?? {}, setPhoto } },
     children,
   );
 }

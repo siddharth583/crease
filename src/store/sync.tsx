@@ -29,7 +29,7 @@ export const CLUB_OWNER = 'siddharth@copancs.com';
 export const CLUB_DOMAIN = 'copancs.com';
 /** Only the live app syncs: a test copy's made-up matches must never reach the club. */
 export const LIVE_HOST = 'siddharth583.github.io';
-const SHARED = ['squad', 'teams', 'auctions', 'lineups', 'photos'] as const;
+const SHARED = ['squad', 'teams', 'auctions', 'lineups'] as const;
 type SharedKey = (typeof SHARED)[number];
 const LAST_KEY = 'crease.sync.v1';
 
@@ -56,10 +56,13 @@ type ClubSync = {
   cancelRequest: () => Promise<void>;
   /** The admin: yes makes them an editor; no tells them it wasn't approved this time. */
   answerRequest: (email: string, yes: boolean) => Promise<void>;
-  /** Photos people set for themselves (or the admin set for them), by email. */
-  ownPhotos: Record<string, string>;
-  /** Set or take away (null) the photo kept under this email: anyone their own, the admin anyone's. */
-  setOwnPhoto: (email: string, photo: string | null) => Promise<void>;
+  /**
+   * The club's photos, one entry a player, each at full quality: under a player's email (they can change it
+   * themselves) or, for a player with no email, under `name:` and their name (the admin's).
+   */
+  clubPhotos: Record<string, string>;
+  /** Set or take away (null) one: anyone their own, the admin anyone's. */
+  setClubPhoto: (id: string, photo: string | null) => Promise<void>;
 };
 
 /** What the phone and the club last agreed on, kept between visits. */
@@ -116,7 +119,7 @@ const Context = createContext<ClubSync | null>(null);
 export function SyncProvider({ children }: { children: ReactNode }) {
   const web = Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname === LIVE_HOST;
   const { ready, matches, savedTeams, fromClub, setTeams } = useMatches();
-  const { squad, auctions, lineups, photos, setShared } = useSquad();
+  const { squad, auctions, lineups, setShared } = useSquad();
   const [status, setStatus] = useState<SyncStatus>(web ? 'starting' : 'unavailable');
   const [user, setUser] = useState<ClubSync['user']>(null);
   const [role, setRole] = useState<ClubRole | null>(null);
@@ -125,11 +128,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [requests, setRequests] = useState<EditorRequest[]>([]);
   const [myRequest, setMyRequest] = useState<EditorRequest | null>(null);
-  const [ownPhotos, setOwnPhotos] = useState<Record<string, string>>({});
+  const [clubPhotos, setClubPhotos] = useState<Record<string, string>>({});
   // The club as last heard, and the phone as it is now, for the sync to compare whenever either changes.
   const remote = useRef<{ matches: Map<string, RemoteMatch> | null; shared: Partial<Record<SharedKey, string | null>> }>({ matches: null, shared: {} });
-  const local = useRef({ matches, shared: { squad, teams: savedTeams, auctions, lineups, photos } as Record<SharedKey, unknown> });
-  local.current = { matches, shared: { squad, teams: savedTeams, auctions, lineups, photos } };
+  const local = useRef({ matches, shared: { squad, teams: savedTeams, auctions, lineups } as Record<SharedKey, unknown> });
+  local.current = { matches, shared: { squad, teams: savedTeams, auctions, lineups } };
   const apply = useRef({ fromClub, setTeams, setShared });
   apply.current = { fromClub, setTeams, setShared };
   const last = useRef<Last>(web ? readLast() : { matches: {}, shared: {} });
@@ -311,7 +314,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           ),
         );
       }
-      // Photos people set for themselves. Quiet on failure: the rest of the sync doesn't depend on them.
+      // The players' photos. Quiet on failure: the rest of the sync doesn't depend on them.
       stops.push(
         fb.F.onSnapshot(
           fb.F.collection(fb.db, 'clubs', CLUB, 'photos'),
@@ -321,7 +324,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
               const photo = (d.data() as { photo?: string }).photo;
               if (photo) all[d.id] = photo;
             });
-            setOwnPhotos(all);
+            setClubPhotos(all);
           },
           () => {},
         ),
@@ -368,7 +371,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   // Anything changed on this phone: sync it.
   useEffect(() => {
     if (role) soon();
-  }, [role, matches, savedTeams, squad, auctions, lineups, photos, soon]);
+  }, [role, matches, savedTeams, squad, auctions, lineups, soon]);
 
   const signIn = useCallback(async () => {
     if (!web) return;
@@ -440,11 +443,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     [role, setMember],
   );
 
-  const setOwnPhoto = useCallback(
-    async (who: string, photo: string | null) => {
+  const setClubPhoto = useCallback(
+    async (id: string, photo: string | null) => {
       if (!web || !user) return;
       const fb = await firebase();
-      const ref = fb.F.doc(fb.db, 'clubs', CLUB, 'photos', who.trim().toLowerCase());
+      const ref = fb.F.doc(fb.db, 'clubs', CLUB, 'photos', id);
       if (photo) await fb.F.setDoc(ref, { photo, at: Date.now(), by: user.email });
       else await fb.F.deleteDoc(ref);
     },
@@ -452,8 +455,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<ClubSync>(
-    () => ({ status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, ownPhotos, setOwnPhoto }),
-    [status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, ownPhotos, setOwnPhoto],
+    () => ({ status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, clubPhotos, setClubPhoto }),
+    [status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, clubPhotos, setClubPhoto],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
@@ -477,38 +480,39 @@ export function useAccess() {
   return { admin, score, why };
 }
 
+/** Where a player's photo is kept in the club: under their email, or under their name when they have none. */
+export const photoId = (player: { name: string; email?: string }) => (player.email ? player.email.trim().toLowerCase() : `name:${photoKey(player.name)}`);
+
 /**
- * Every player's photo: the club's set (imported or set by the admin), and over it any a player set for themselves,
- * matched to them by the email on their squad entry.
+ * Every player's photo: the club's, by email or name, over any kept on this phone (a copy without the club sync, or
+ * before signing in).
  */
 export function usePhotos(): Photos {
   const { photos, squad } = useSquad();
-  const { ownPhotos } = useClubSync();
+  const { clubPhotos } = useClubSync();
   return useMemo(() => {
-    if (!Object.keys(ownPhotos).length) return photos;
+    if (!Object.keys(clubPhotos).length) return photos;
     const all = { ...photos };
+    for (const [id, photo] of Object.entries(clubPhotos)) if (id.startsWith('name:')) all[id.slice(5)] = photo;
     for (const p of squad) {
-      const own = p.email && ownPhotos[p.email.trim().toLowerCase()];
+      const own = p.email && clubPhotos[p.email.trim().toLowerCase()];
       if (own) all[photoKey(p.name)] = own;
     }
     return all;
-  }, [photos, squad, ownPhotos]);
+  }, [photos, squad, clubPhotos]);
 }
 
-/**
- * Set or take away a player's photo. On the live app a player with a club email keeps it under that email (their own
- * place, which they can change themselves); everyone else, and any copy without the club sync, in the club's set.
- */
+/** Set or take away a player's photo: in the club on the live app, on this phone anywhere else. */
 export function useSetPhoto() {
   const { setPhoto } = useSquad();
-  const { status, setOwnPhoto } = useClubSync();
+  const { status, user, setClubPhoto } = useClubSync();
   return useCallback(
     async (player: { name: string; email?: string }, photo: string | null) => {
-      if (status !== 'unavailable' && player.email) {
-        await setOwnPhoto(player.email, photo);
+      if (status !== 'unavailable' && user) {
+        await setClubPhoto(photoId(player), photo);
         if (!photo) setPhoto(player.name, null);
       } else setPhoto(player.name, photo);
     },
-    [status, setOwnPhoto, setPhoto],
+    [status, user, setClubPhoto, setPhoto],
   );
 }

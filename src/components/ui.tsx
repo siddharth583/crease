@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   Animated,
   Easing,
@@ -19,7 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BallView } from '../engine/engine.ts';
 import { EASE_OUT, useReducedMotion } from './motion.tsx';
-import { ballColors, colors, font, gradients, radius, space, type, edge, isDay } from '../theme.ts';
+import { ballColors, colors, font, gradients, radius, space, type, edge, isDay, type TeamTheme } from '../theme.ts';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -40,19 +40,29 @@ export function tap(kind: 'light' | 'medium' | 'heavy' | 'success' | 'warning' =
 
 // ─── Surfaces ────────────────────────────────────────────────────────────────
 
+/**
+ * A team's page wears its side's theme: the haze at the top, the cards and their edges, the section labels. Pages
+ * read it for their own highlights. Unset everywhere else.
+ */
+const PageTone = createContext<TeamTheme | null>(null);
+export const PageToneProvider = PageTone.Provider;
+export const usePageTone = () => useContext(PageTone);
+
 /** A screen at the ground after dark: the pitch-black page with a faint green haze from the floodlights. */
 export function Screen({ children, style, glow = true }: { children: ReactNode; style?: StyleProp<ViewStyle>; glow?: boolean }) {
   const insets = useSafeAreaInsets();
+  const tone = usePageTone();
   return (
     <View style={[styles.screen, { paddingTop: insets.top }, style]}>
-      {glow && <LinearGradient pointerEvents="none" colors={gradients.glow} style={styles.glow} />}
+      {glow && <LinearGradient pointerEvents="none" colors={tone?.glow ?? gradients.glow} style={styles.glow} />}
       {children}
     </View>
   );
 }
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+  const tone = usePageTone();
+  return <View style={[styles.card, tone && { backgroundColor: tone.card, borderColor: tone.line }, style]}>{children}</View>;
 }
 
 /** Mown-grass stripes, as seen on a ground from the stands. Fills its parent. */
@@ -73,9 +83,10 @@ export function GhostWord(_: { children: string; size?: number; style?: StylePro
 }
 
 export function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
+  const tone = usePageTone();
   return (
     <View style={styles.sectionRow}>
-      <Text style={styles.sectionLabel}>{children}</Text>
+      <Text style={[styles.sectionLabel, tone && { color: tone.ink }]}>{children}</Text>
       {right}
     </View>
   );

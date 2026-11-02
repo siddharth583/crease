@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Card, IconButton, PressableScale, Screen, SectionLabel, tap, GhostWord, PitchStripes, useToast } from '../../components/ui.tsx';
+import { Card, IconButton, PageToneProvider, PressableScale, Screen, usePageTone, SectionLabel, tap, GhostWord, PitchStripes, useToast } from '../../components/ui.tsx';
 import { CountUp, GrowBar } from '../../components/motion.tsx';
 import { RatingChips } from '../../components/Ratings.tsx';
 import { playerRatings } from '../../engine/ratings.ts';
@@ -23,7 +23,7 @@ import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { useAccess, usePhotos, useSetPhoto } from '../../store/sync.tsx';
 import { pickPhoto } from '../../store/files.ts';
-import { colors, gradients, radius, space, type, font, ink, hero, teamTheme } from '../../theme.ts';
+import { colors, gradients, radius, space, type, font, ink, hero, ownTeamTheme, teamTheme } from '../../theme.ts';
 import { photoFor, photoKey } from '../../engine/photos.ts';
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
@@ -37,11 +37,12 @@ function Figure({ value, style }: { value: string | number; style: StyleProp<Tex
 }
 
 function Tiles({ items }: { items: [string, string | number, boolean?][] }) {
+  const tone = usePageTone();
   return (
     <View style={styles.tiles}>
       {items.map(([label, value, hero]) => (
-        <View key={label} style={[styles.tile, hero && styles.tileHero]}>
-          <Figure value={value} style={[styles.tileValue, hero && { color: colors.accentInk }]} />
+        <View key={label} style={[styles.tile, tone && { backgroundColor: tone.card, borderColor: tone.line }, hero && (tone ? { borderColor: tone.accent, backgroundColor: tone.soft } : styles.tileHero)]}>
+          <Figure value={value} style={[styles.tileValue, hero && { color: tone?.ink ?? colors.accentInk }]} />
           <Text style={styles.tileLabel}>{label}</Text>
         </View>
       ))}
@@ -50,6 +51,7 @@ function Tiles({ items }: { items: [string, string | number, boolean?][] }) {
 }
 
 function MatchRow({ line, first }: { line: MatchLine; first: boolean }) {
+  const tone = usePageTone();
   const date = new Date(line.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   const parts = [
     line.bat && `${line.bat.runs}${line.bat.notOut ? '*' : ''} (${line.bat.balls})`,
@@ -67,14 +69,14 @@ function MatchRow({ line, first }: { line: MatchLine; first: boolean }) {
       <View
         style={[
           styles.result,
-          line.won === true && { backgroundColor: colors.accentDim },
+          line.won === true && { backgroundColor: tone?.soft ?? colors.accentDim },
           line.won === false && { backgroundColor: colors.dangerDim },
         ]}
       >
         <Text
           style={[
             styles.resultText,
-            line.won === true && { color: colors.accentInk },
+            line.won === true && { color: tone?.ink ?? colors.accentInk },
             line.won === false && { color: colors.danger },
           ]}
         >
@@ -106,6 +108,8 @@ export default function PlayerProfile() {
   const photo = c ? photoFor(photos, c.name) : undefined;
   // The page wears their side's colours.
   const side = teamTheme(c?.team);
+  // Their side's theme over the whole page: the haze, the cards, the highlights.
+  const tone = ownTeamTheme(c?.team) ?? null;
   // Their match ratings out of 10 and their form, as on the squad list.
   const rated = useMemo(() => playerRatings(matches, key), [matches, key]);
 
@@ -141,7 +145,8 @@ export default function PlayerProfile() {
   const peak = Math.max(20, ...form.map((h) => h.bat!.runs));
 
   return (
-    <Screen>
+    <PageToneProvider value={tone}>
+      <Screen>
       {back}
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
         <LinearGradient colors={side.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
@@ -216,7 +221,7 @@ export default function PlayerProfile() {
                 const hot = h.bat!.runs >= 30;
                 return (
                   <View key={h.matchId} style={styles.formCol}>
-                    <Text style={[styles.formText, hot && { color: colors.accentInk }]}>
+                    <Text style={[styles.formText, hot && { color: side.ink }]}>
                       {h.bat!.runs}
                       {h.bat!.notOut ? '*' : ''}
                     </Text>
@@ -227,7 +232,7 @@ export default function PlayerProfile() {
                       trackStyle={styles.formTrack}
                       style={[
                         styles.formBar,
-                        hot && { backgroundColor: colors.accent },
+                        hot && { backgroundColor: side.accent },
                         h.bat!.runs === 0 && !h.bat!.notOut && { backgroundColor: colors.danger },
                       ]}
                     />
@@ -298,7 +303,8 @@ export default function PlayerProfile() {
           ))}
         </Card>
       </ScrollView>
-    </Screen>
+      </Screen>
+    </PageToneProvider>
   );
 }
 

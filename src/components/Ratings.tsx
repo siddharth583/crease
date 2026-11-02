@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { MatchRating } from '../engine/ratings.ts';
 import { colors, font, radius, space, type } from '../theme.ts';
+import { usePageTone } from './ui.tsx';
 
 // A player's match ratings out of 10 and the form they make, the same on the squad list and the player's page.
 
@@ -11,21 +12,24 @@ export const ratingTone = (r: number) => (r >= 8 ? styles.top : r >= 6.5 ? style
 
 /** Form as a small badge: "Form 7.4", coloured like a rating. */
 export function FormBadge({ form }: { form: number }) {
+  // On a team's page, a big game wears the side's colour.
+  const tone = usePageTone();
   return (
-    <View style={[styles.badge, ratingTone(form)]}>
-      <Text style={[styles.badgeText, form >= 8 && { color: colors.onAccent }]}>Form {form.toFixed(1)}</Text>
+    <View style={[styles.badge, ratingTone(form), tone && form >= 8 && { backgroundColor: tone.accent }]}>
+      <Text style={[styles.badgeText, form >= 8 && { color: tone?.onAccent ?? colors.onAccent }]}>Form {form.toFixed(1)}</Text>
     </View>
   );
 }
 
 /** Their ratings, newest first, each with the day it was played. */
 export function RatingChips({ history, max = 8 }: { history: MatchRating[]; max?: number }) {
+  const tone = usePageTone();
   return (
     <View style={styles.chips}>
       {history.slice(0, max).map((m) => (
         <View key={m.matchId} style={styles.cell}>
-          <View style={[styles.chip, ratingTone(m.rating)]}>
-            <Text style={[styles.chipText, m.rating >= 8 && { color: colors.onAccent }]}>{m.rating.toFixed(1)}</Text>
+          <View style={[styles.chip, ratingTone(m.rating), tone && m.rating >= 8 && { backgroundColor: tone.accent }]}>
+            <Text style={[styles.chipText, m.rating >= 8 && { color: tone?.onAccent ?? colors.onAccent }]}>{m.rating.toFixed(1)}</Text>
           </View>
           <Text style={styles.day} numberOfLines={1}>
             {day(m.date)}
