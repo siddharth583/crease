@@ -31,6 +31,8 @@ type SharedKey = (typeof SHARED)[number];
 const LAST_KEY = 'crease.sync.v1';
 
 export type ClubRole = 'owner' | 'scorer' | 'viewer';
+/** Someone asking the admin to be an editor (scorer). Kept under their email; only they and the admin can see it. */
+export type EditorRequest = { email: string; name: string; at: number; status: 'pending' | 'declined' };
 export type SyncStatus = 'unavailable' | 'starting' | 'signed-out' | 'signing-in' | 'not-member' | 'syncing' | 'synced' | 'error';
 type ClubSync = {
   status: SyncStatus;
@@ -43,6 +45,14 @@ type ClubSync = {
   signOut: () => Promise<void>;
   /** The owner only: add someone as a scorer or viewer, or take them off (null). */
   setMember: (email: string, role: 'scorer' | 'viewer' | null) => Promise<void>;
+  /** The admin: requests waiting, oldest first. */
+  requests: EditorRequest[];
+  /** Everyone else: their own request, if they've made one. */
+  myRequest: EditorRequest | null;
+  requestEditor: () => Promise<void>;
+  cancelRequest: () => Promise<void>;
+  /** The admin: yes makes them an editor; no tells them it wasn't approved this time. */
+  answerRequest: (email: string, yes: boolean) => Promise<void>;
 };
 
 /** What the phone and the club last agreed on, kept between visits. */
@@ -97,6 +107,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [members, setMembers] = useState<ClubSync['members']>({});
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [requests, setRequests] = useState<EditorRequest[]>([]);
+  const [myRequest, setMyRequest] = useState<EditorRequest | null>(null);
   // The club as last heard, and the phone as it is now, for the sync to compare whenever either changes.
   const remote = useRef<{ matches: Map<string, RemoteMatch> | null; shared: Partial<Record<SharedKey, string | null>> }>({ matches: null, shared: {} });
   const local = useRef({ matches, shared: { squad, teams: savedTeams, auctions, lineups } as Record<SharedKey, unknown> });
@@ -272,6 +284,37 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     };
   }, [web, role, ready, soon]);
 
+  // Editor requests: the admin sees every one waiting; anyone else, their own.
+  useEffect(() => {
+    if (!web || !email) return;
+    let stop = () => {};
+    let gone = false;
+    firebase().then((fb) => {
+      if (gone) return;
+      const col = fb.F.collection(fb.db, 'clubs', CLUB, 'requests');
+      const quiet = () => {};
+      if (email === CLUB_OWNER) {
+        stop = fb.F.onSnapshot(
+          col,
+          (snap) => {
+            const all: EditorRequest[] = [];
+            snap.forEach((d) => all.push(d.data() as EditorRequest));
+            setRequests(all.filter((r) => r.status === 'pending').sort((a, b) => a.at - b.at));
+          },
+          quiet,
+        );
+      } else {
+        stop = fb.F.onSnapshot(fb.F.doc(col, email), (snap) => setMyRequest(snap.exists() ? (snap.data() as EditorRequest) : null), quiet);
+      }
+    });
+    return () => {
+      gone = true;
+      stop();
+      setRequests([]);
+      setMyRequest(null);
+    };
+  }, [web, email]);
+
   // Anything changed on this phone: sync it.
   useEffect(() => {
     if (role) soon();
@@ -317,9 +360,39 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     [role, members],
   );
 
+  const requestEditor = useCallback(async () => {
+    if (!web || !user) return;
+    const fb = await firebase();
+    try {
+      await fb.F.setDoc(fb.F.doc(fb.db, 'clubs', CLUB, 'requests', user.email), { email: user.email, name: user.name, at: Date.now(), status: 'pending' });
+      setError(null);
+    } catch (e) {
+      setError(why(e));
+    }
+  }, [web, user]);
+
+  const cancelRequest = useCallback(async () => {
+    if (!web || !user) return;
+    const fb = await firebase();
+    await fb.F.deleteDoc(fb.F.doc(fb.db, 'clubs', CLUB, 'requests', user.email)).catch((e) => setError(why(e)));
+  }, [web, user]);
+
+  const answerRequest = useCallback(
+    async (who: string, yes: boolean) => {
+      if (role !== 'owner') return;
+      const fb = await firebase();
+      const ref = fb.F.doc(fb.db, 'clubs', CLUB, 'requests', who);
+      if (yes) {
+        await setMember(who, 'scorer');
+        await fb.F.deleteDoc(ref);
+      } else await fb.F.updateDoc(ref, { status: 'declined' });
+    },
+    [role, setMember],
+  );
+
   const value = useMemo<ClubSync>(
-    () => ({ status, user, role, members, lastSync, error, signIn, signOut, setMember }),
-    [status, user, role, members, lastSync, error, signIn, signOut, setMember],
+    () => ({ status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest }),
+    [status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

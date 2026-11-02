@@ -278,6 +278,11 @@ export default function Home() {
           )}
           <PressableScale accessibilityLabel="My profile" onPress={() => router.push('/profile')} style={styles.me}>
             <Avatar photo={sync.user?.photo} name={sync.user?.name ?? prefs.me?.[sync.user?.email ?? ''] ?? ''} size={36} />
+            {sync.requests.length > 0 && (
+              <View style={styles.dot} accessibilityLabel={`${sync.requests.length} editor requests waiting`}>
+                <Text style={styles.dotText}>{sync.requests.length}</Text>
+              </View>
+            )}
           </PressableScale>
           <PressableScale accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={styles.gear}>
             <Ionicons name="settings-outline" size={18} color={colors.text} />
@@ -385,6 +390,8 @@ const styles = StyleSheet.create({
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.xl },
   brand: { fontFamily: font.posterBlack, fontSize: 22, color: colors.text, letterSpacing: -0.6 },
   me: { borderRadius: radius.pill },
+  dot: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg },
+  dotText: { color: '#FFFFFF', fontSize: 10, fontFamily: font.heavy },
   newMatch: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 38, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: colors.accent },
   newMatchText: { color: colors.onAccent, fontFamily: font.bold, fontSize: 14 },
   gear: {

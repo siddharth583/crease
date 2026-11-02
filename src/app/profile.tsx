@@ -8,17 +8,18 @@ import { RatingChips } from '../components/Ratings.tsx';
 import { Button, Card, Chip, IconButton, PitchStripes, Screen, SectionLabel } from '../components/ui.tsx';
 import { playerRatings } from '../engine/ratings.ts';
 import { battingAverage, bestFigures, careerStats, economy, playerKey, strikeRate } from '../engine/stats.ts';
+import { playerForEmail } from '../engine/squad.ts';
 import { nameKey } from '../engine/teams.ts';
 import { useMatches } from '../store/matches.tsx';
 import { usePrefs } from '../store/prefs.ts';
 import { useSquad } from '../store/squad.ts';
-import { CLUB_OWNER, useClubSync, type ClubRole } from '../store/sync.tsx';
+import { ROLE, RequestEditor } from '../components/ClubSync.tsx';
+import { useClubSync } from '../store/sync.tsx';
 import { colors, font, gradients, hero, radius, space, type } from '../theme.ts';
 
 // My profile: who's signed in and what they can do in the club, and their own cricket once they say which squad
 // player they are. That choice is kept on this phone, for each account.
 
-const ROLE: Record<ClubRole, string> = { owner: 'Admin', scorer: 'Scorer', viewer: 'Viewer' };
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -27,7 +28,9 @@ export default function ProfileScreen() {
   const { prefs, setPrefs } = usePrefs();
   const sync = useClubSync();
   const account = sync.user?.email ?? '';
-  const me = prefs.me?.[account];
+  // The squad player with this account's email is them; a pick made on this phone (for anyone else) comes after.
+  const byEmail = playerForEmail(squad, sync.user?.email);
+  const me = prefs.me?.[account] ?? byEmail?.name;
   const choose = (name: string | null) => {
     const next = { ...(prefs.me ?? {}) };
     if (name) next[account] = name;
@@ -96,15 +99,23 @@ export default function ProfileScreen() {
           ) : (
             <Button icon="logo-google" label={sync.status === 'signing-in' ? 'Signing in…' : 'Sign in with Google'} disabled={sync.status === 'signing-in' || sync.status === 'starting'} onPress={() => void sync.signIn()} />
           ))}
-        {sync.role === 'viewer' && (
-          <Text style={styles.note}>
-            You can see and export everything. To score for the club, ask the admin ({CLUB_OWNER}) to make you a scorer.
-          </Text>
+        <RequestEditor />
+        {sync.role === 'owner' && sync.requests.length > 0 && (
+          <Card style={styles.waiting}>
+            <Text style={styles.body}>
+              {sync.requests.length === 1 ? `${sync.requests[0].name} wants` : `${sync.requests.length} people want`} to be an editor.
+            </Text>
+            <Button icon="people-outline" label="Review" onPress={() => router.push('/settings')} />
+          </Card>
         )}
 
         {me ? (
           <>
-            <SectionLabel right={<Chip icon="swap-horizontal" label="Not me" onPress={() => choose(null)} />}>My cricket</SectionLabel>
+            <SectionLabel
+              right={byEmail && !prefs.me?.[account] ? <Text style={styles.note}>Linked by your email</Text> : <Chip icon="swap-horizontal" label="Not me" onPress={() => choose(null)} />}
+            >
+              My cricket
+            </SectionLabel>
             <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
               <PitchStripes tint="255,255,255" />
               <View style={styles.heroTop}>
@@ -196,6 +207,7 @@ const styles = StyleSheet.create({
   body: { color: colors.text, fontSize: 15, fontFamily: font.semibold },
   label: { ...type.label, color: colors.muted },
   row: { flexDirection: 'row', gap: space.sm },
+  waiting: { gap: space.sm, borderColor: colors.gold },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   account: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   accountName: { color: colors.text, fontSize: 18, fontFamily: font.bold },

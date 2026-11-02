@@ -67,7 +67,8 @@ const names = (xs: Strength[]) => xs.map((p) => p.name);
 const gapOf = (sides: [string[], string[]]) => gap(sides[0].map((n) => strengthOf(table, n)), sides[1].map((n) => strengthOf(table, n)));
 
 test('after a player is sent across, the fix sends someone else back and leaves that player where they were put', () => {
-  const split = evenSides(everyone, 2);
+  // An even number playing, so the sides start level in numbers.
+  const split = evenSides(everyone.length % 2 ? everyone.slice(0, -1) : everyone, 2);
   const sides: [string[], string[]] = [names(split.sides[0]), names(split.sides[1])];
   // Move the strongest of the first side across: the second is now two bigger and stronger.
   const star = split.sides[0][0].name;

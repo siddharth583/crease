@@ -34,17 +34,20 @@ function read(): Saved {
     const saved = raw ? (JSON.parse(raw) as Partial<Saved>) : {};
     // Squads saved before players had an auction category take the usual one for each regular.
     let squad = (saved.squad ?? DEFAULT_SQUAD).map((p) => (p.category ? p : { ...p, category: DEFAULT_SQUAD.find((d) => d.id === p.id)?.category }));
+    let changed = false;
     // New sides since this phone last looked: rename and add the players they bring, once.
     if ((saved.revision ?? 1) < TEAMS_REVISION) {
       squad = updateSquad(squad);
-      write({ squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION, keepers: saved.keepers });
+      changed = true;
     }
     // The club's keepers, set once on a squad saved before they were known.
     if (raw && !saved.keepers) {
       squad = setUsualKeepers(squad);
-      write({ squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION, keepers: 1 });
+      changed = true;
     }
-    return { squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION, keepers: 1 };
+    const next: Saved = { squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION, keepers: 1 };
+    if (changed) write(next);
+    return next;
   } catch {
     // An unreadable squad is kept aside before the defaults are ever saved over it.
     try {

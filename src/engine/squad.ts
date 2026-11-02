@@ -22,6 +22,8 @@ export type SquadPlayer = {
   category?: Category;
   /** Stars kept as set here, rather than worked out from their matches. */
   manual?: boolean;
+  /** Their club Google account: signing in with it makes My profile theirs. */
+  email?: string;
 };
 
 export const ROLE_LABEL: Record<Role, string> = { bat: 'Batter', bowl: 'Bowler', ar: 'All-rounder', wk: 'Keeper' };
@@ -143,6 +145,48 @@ const USUAL_KEEPERS: Record<string, true | 'sometimes'> = {
   'nitin parmar': true,
   'ashwani singh': 'sometimes',
 };
+
+/**
+ * Players' emails pasted as a list, in whatever shape it comes ("nihal@x.com - Nihal Walia", or the name on the line
+ * before): each email goes to the squad player of that name (or first name, when only one has it); a name the squad
+ * doesn't have yet joins it, rated 3 stars all round until they've played. Kept in the squad, never in the app's code.
+ */
+export function linkEmails(squad: SquadPlayer[], text: string, newId: () => string) {
+  const lines = text.split(/\n/).map((l) => l.trim());
+  const key = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+  const pairs: { email: string; name: string }[] = [];
+  lines.forEach((line, i) => {
+    const email = line.match(/[^\s@,;()<>]+@[^\s@,;()<>]+\.[a-z]{2,}/i)?.[0];
+    if (!email) return;
+    // The name beside the email, or on the nearest line above that isn't another entry.
+    const clean = (s: string) => s.replace(email, '').replace(/^[\s\d.)•*-]+|[\s,;:–—-]+$/g, '').replace(/^[\s:–—-]+/, '').trim();
+    let name = clean(line);
+    for (let j = i - 1; !name && j >= 0 && !/@/.test(lines[j]); j--) name = clean(lines[j]);
+    if (name) pairs.push({ email: email.toLowerCase(), name });
+  });
+  const next = [...squad];
+  const linked: { name: string; email: string }[] = [];
+  const added: string[] = [];
+  for (const { email, name } of pairs) {
+    const exact = next.findIndex((p) => key(p.name) === key(name));
+    const first = next.filter((p) => key(p.name).split(' ')[0] === key(name).split(' ')[0]);
+    // A spelling a letter out ("Moses William" for Moses Wiliams) is the same person when the first name is theirs alone.
+    const at = exact >= 0 ? exact : first.length === 1 && (key(name).split(' ').length === 1 || key(first[0].name).startsWith(key(name).slice(0, 8))) ? next.indexOf(first[0]) : -1;
+    if (at >= 0) {
+      next[at] = { ...next[at], email };
+      linked.push({ name: next[at].name, email });
+    } else {
+      const title = name.replace(/\b\w/g, (c) => c.toUpperCase());
+      next.push({ id: newId(), name: title, role: 'ar', bat: 3, bowl: 3, field: 3, email });
+      added.push(title);
+    }
+  }
+  return { squad: next, linked, added };
+}
+
+/** The squad player a signed-in account belongs to, by their club email. */
+export const playerForEmail = (squad: SquadPlayer[], email: string | undefined) =>
+  email ? squad.find((p) => p.email?.trim().toLowerCase() === email.trim().toLowerCase()) : undefined;
 
 /** A saved squad with the club's keepers, once: everyone else stops being one. */
 export function setUsualKeepers(squad: SquadPlayer[]): SquadPlayer[] {

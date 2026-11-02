@@ -5,7 +5,8 @@ rules_version = '2';
 //
 // - The admin (siddharth@copancs.com) can do everything, and is the only one who can change who's in the club.
 // - Anyone signed in with a copancs.com Google account can read everything (and so export it on their phone).
-// - People the admin adds as 'scorer' can also change matches, the squad, sides, auctions and line-ups.
+// - People the admin adds as 'scorer' (shown as Editor) can also change matches, the squad, sides, auctions and line-ups.
+// - Anyone signed in can ask to be an editor; only they and the admin can see their request.
 // - People the admin adds as 'viewer' (outside copancs.com) can read everything.
 // - Nobody else can read or write anything.
 service cloud.firestore {
@@ -41,9 +42,18 @@ service cloud.firestore {
     }
 
     match /clubs/copan/{part}/{id} {
-      allow read: if canRead();
-      allow create, update: if canWrite() && request.resource.data.by == email();
-      allow delete: if isAdmin();
+      allow read: if part != 'requests' && canRead();
+      allow create, update: if part != 'requests' && canWrite() && request.resource.data.by == email();
+      allow delete: if part != 'requests' && isAdmin();
+    }
+
+    // Editor requests: anyone signed in can ask for themselves; only they and the admin see it; the admin answers.
+    match /clubs/copan/requests/{who} {
+      allow read: if isAdmin() || (signedIn() && email() == who);
+      allow create, update: if signedIn() && email() == who && request.resource.data.email == who
+        && request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
+      allow delete: if signedIn() && email() == who;
     }
   }
 }

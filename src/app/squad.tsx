@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NameSuggestions } from '../components/NameSuggestions.tsx';
 import { Stars } from '../components/Stars.tsx';
 import { Button, Card, FadeIn, IconButton, PressableScale, Screen, SectionLabel, Segmented, ToggleRow, useToast } from '../components/ui.tsx';
-import { CATEGORIES, CATEGORY_LABEL, categoryOf, overall, ROLE_LABEL, type Category, type SquadPlayer } from '../engine/squad.ts';
+import { CATEGORIES, CATEGORY_LABEL, categoryOf, linkEmails, overall, ROLE_LABEL, type Category, type SquadPlayer } from '../engine/squad.ts';
 import type { Role } from '../engine/types.ts';
 import { MATCHES_TO_RATE, squadRatings, type PlayerRatings } from '../engine/ratings.ts';
 import { FormBadge, RatingChips } from '../components/Ratings.tsx';
@@ -98,6 +98,17 @@ function PlayerRow({
             maxLength={24}
             autoCapitalize="words"
           />
+          <TextInput
+            value={p.email ?? ''}
+            onChangeText={(email) => onChange({ ...p, email: email.trim() || undefined })}
+            style={styles.input}
+            placeholder="Club email (for My profile)"
+            placeholderTextColor={colors.faint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            maxLength={60}
+          />
           <Segmented value={p.role} onChange={(role) => onChange({ ...p, role, keeper: role === 'wk' ? true : p.keeper })} options={ROLES} />
           <View style={{ gap: space.sm }}>
             <Text style={styles.rateLabel}>Auction category</Text>
@@ -119,6 +130,43 @@ function PlayerRow({
           <Button variant="ghost" icon="trash-outline" label="Remove from squad" onPress={onRemove} />
         </View>
       )}
+    </Card>
+  );
+}
+
+/** Paste the club's list of emails once: each one links to its player, so signing in makes My profile theirs. */
+function EmailLinker({ onLink }: { onLink: (text: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const found = (text.match(/@[^\s@]+\.[a-z]{2,}/gi) ?? []).length;
+  if (!open) return <Button variant="ghost" icon="mail-outline" label="Link players’ emails" onPress={() => setOpen(true)} />;
+  return (
+    <Card style={{ gap: space.sm }}>
+      <Text style={styles.catHint}>
+        Paste the list as it is (an email and a name on each line, in any order). Each email links to its player, so signing
+        in with it makes My profile theirs. New names join the squad. The emails stay in the squad, shared only with the club.
+      </Text>
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        multiline
+        placeholder={'name@club.com - Their Name\nTheir Name - name@club.com'}
+        placeholderTextColor={colors.faint}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={[styles.input, { minHeight: 120, textAlignVertical: 'top', paddingTop: space.sm }]}
+      />
+      <Button
+        icon="link-outline"
+        label={found ? `Link ${found} email${found === 1 ? '' : 's'}` : 'Link the emails'}
+        disabled={!found}
+        onPress={() => {
+          onLink(text);
+          setText('');
+          setOpen(false);
+        }}
+      />
+      <Button variant="ghost" label="Cancel" onPress={() => (setText(''), setOpen(false))} />
     </Card>
   );
 }
@@ -179,6 +227,18 @@ export default function SquadScreen() {
             <IconButton icon="add" label="Add to squad" active={Boolean(name.trim())} disabled={!name.trim()} onPress={add} />
           </Card>
           <NameSuggestions value={name} taken={squad.map((p) => p.name)} onPick={setName} />
+
+          <EmailLinker
+            onLink={(text) => {
+              const r = linkEmails(squad, text, newId);
+              if (!r.linked.length && !r.added.length) return toast.show('No emails found in that list.', 'info');
+              setSquad(r.squad);
+              toast.show(
+                [r.linked.length && `${r.linked.length} emails linked`, r.added.length && `${r.added.join(', ')} added to the squad`].filter(Boolean).join('. '),
+                'success',
+              );
+            }}
+          />
 
           <SectionLabel right={<Text style={styles.hint}>Tap to edit</Text>}>Best first</SectionLabel>
           <View style={{ gap: space.sm }}>
