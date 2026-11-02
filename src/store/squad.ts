@@ -92,6 +92,8 @@ type SquadStore = {
   deleteLineup: (id: string) => void;
   /** A full backup's squad, auctions and line-ups, merged in: how many players joined or changed, and what was added. */
   importSquad: (squad: SquadPlayer[] | null, auctions: Auction[], lineups?: SavedLineup[]) => { players: number; auctions: number; lineups: number };
+  /** The club sync: the club's squad, auctions or line-ups, as they are. */
+  setShared: (shared: { squad?: SquadPlayer[]; auctions?: Auction[]; lineups?: SavedLineup[] }) => void;
 };
 
 const SquadContext = createContext<SquadStore | null>(null);
@@ -116,6 +118,10 @@ export function SquadProvider({ children }: { children: ReactNode }) {
   const deleteAuction = useCallback((id: string) => update((s) => ({ ...s, auctions: s.auctions.filter((x) => x.id !== id) })), [update]);
   const saveLineup = useCallback((l: SavedLineup) => update((s) => ({ ...s, lineups: [l, ...(s.lineups ?? []).filter((x) => x.id !== l.id)] })), [update]);
   const deleteLineup = useCallback((id: string) => update((s) => ({ ...s, lineups: (s.lineups ?? []).filter((x) => x.id !== id) })), [update]);
+  const setShared = useCallback(
+    (shared: { squad?: SquadPlayer[]; auctions?: Auction[]; lineups?: SavedLineup[] }) => update((s) => ({ ...s, ...shared })),
+    [update],
+  );
   const importSquad = useCallback(
     (squad: SquadPlayer[] | null, auctions: Auction[], lineups: SavedLineup[] = []) => {
       // Counted against what's here now; merged again against whatever is there when it lands.
@@ -136,7 +142,7 @@ export function SquadProvider({ children }: { children: ReactNode }) {
   );
   return createElement(
     SquadContext.Provider,
-    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, lineups: state.lineups ?? [], saveLineup, deleteLineup, importSquad } },
+    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, lineups: state.lineups ?? [], saveLineup, deleteLineup, importSquad, setShared } },
     children,
   );
 }

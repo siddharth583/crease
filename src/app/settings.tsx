@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
+import { ClubSyncSettings } from '../components/ClubSync.tsx';
 import { ExportSheet } from '../components/ExportSheet.tsx';
 import { Button, Card, IconButton, Screen, SectionLabel, Segmented, useToast } from '../components/ui.tsx';
 import { useMatches } from '../store/matches.tsx';
@@ -28,6 +29,8 @@ export default function SettingsScreen() {
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
         <Text style={styles.title}>Settings</Text>
+
+        <ClubSyncSettings />
 
         <SectionLabel>Look</SectionLabel>
         <Card style={{ gap: space.md }}>

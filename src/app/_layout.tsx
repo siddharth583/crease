@@ -20,6 +20,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MatchesProvider } from '../store/matches.tsx';
 import { PrefsProvider } from '../store/prefs.ts';
 import { SquadProvider } from '../store/squad.ts';
+import { SyncProvider } from '../store/sync.tsx';
 import { colors, isDay } from '../theme.ts';
 
 export default function RootLayout() {
@@ -49,6 +50,7 @@ export default function RootLayout() {
       <PrefsProvider>
       <SquadProvider>
       <MatchesProvider>
+      <SyncProvider>
         <StatusBar style={isDay ? 'dark' : 'light'} />
         <Stack
           screenOptions={{
@@ -57,6 +59,7 @@ export default function RootLayout() {
             animation: 'slide_from_right',
           }}
         />
+      </SyncProvider>
       </MatchesProvider>
       </SquadProvider>
       </PrefsProvider>

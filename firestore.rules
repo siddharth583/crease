@@ -1,0 +1,49 @@
+rules_version = '2';
+
+// Who may read and change Crease's club data in Firestore (project crease-29555).
+// Paste this into Firebase console › Firestore Database › Rules, then Publish.
+//
+// - The admin (siddharth@copancs.com) can do everything, and is the only one who can change who's in the club.
+// - Anyone signed in with a copancs.com Google account can read everything (and so export it on their phone).
+// - People the admin adds as 'scorer' can also change matches, the squad, sides, auctions and line-ups.
+// - People the admin adds as 'viewer' (outside copancs.com) can read everything.
+// - Nobody else can read or write anything.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function email() {
+      return request.auth.token.email.lower();
+    }
+    function isAdmin() {
+      return signedIn() && email() == 'siddharth@copancs.com';
+    }
+    function club() {
+      return get(/databases/$(database)/documents/clubs/copan).data;
+    }
+    function inDomain() {
+      return signedIn() && email().matches('.*@copancs[.]com$');
+    }
+    function role() {
+      return club().members.get(email(), '');
+    }
+    function canRead() {
+      return isAdmin() || inDomain() || (signedIn() && role() in ['scorer', 'viewer']);
+    }
+    function canWrite() {
+      return isAdmin() || (signedIn() && role() == 'scorer');
+    }
+
+    match /clubs/copan {
+      allow read: if isAdmin() || inDomain() || (signedIn() && email() in resource.data.members);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /clubs/copan/{part}/{id} {
+      allow read: if canRead();
+      allow create, update: if canWrite() && request.resource.data.by == email();
+      allow delete: if isAdmin();
+    }
+  }
+}

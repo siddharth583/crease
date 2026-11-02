@@ -19,6 +19,10 @@ type Store = {
   deleteMatch: (id: string) => void;
   rememberTeams: (teams: Team[]) => void;
   importMatches: (matches: Match[], teams: Team[]) => { added: number; updated: number; unchanged: number };
+  /** The club sync: its newer matches in, its deleted ones out. */
+  fromClub: (take: Match[], remove: string[]) => void;
+  /** The club sync: the club's saved sides, as they are. */
+  setTeams: (teams: Team[]) => void;
 };
 
 const MatchesContext = createContext<Store | null>(null);
@@ -124,9 +128,17 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
     return { added: result.added, updated: result.updated, unchanged: result.unchanged };
   }, []);
 
+  const fromClub = useCallback((take: Match[], remove: string[]) => {
+    if (!take.length && !remove.length) return;
+    const gone = new Set(remove);
+    setMatches((all) => mergeMatches(all, take).matches.filter((m) => !gone.has(m.id)));
+  }, []);
+
+  const setTeams = useCallback((teams: Team[]) => setSavedTeams(teams), []);
+
   const value = useMemo<Store>(
-    () => ({ ready, matches, savedTeams, saveMatch, deleteMatch, rememberTeams, importMatches }),
-    [ready, matches, savedTeams, saveMatch, deleteMatch, rememberTeams, importMatches],
+    () => ({ ready, matches, savedTeams, saveMatch, deleteMatch, rememberTeams, importMatches, fromClub, setTeams }),
+    [ready, matches, savedTeams, saveMatch, deleteMatch, rememberTeams, importMatches, fromClub, setTeams],
   );
   return <MatchesContext.Provider value={value}>{children}</MatchesContext.Provider>;
 }
