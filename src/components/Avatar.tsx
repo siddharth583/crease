@@ -1,5 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image, StyleSheet, Text, View } from 'react-native';
+import { photoFor } from '../engine/photos.ts';
+import { displayName } from '../engine/stats.ts';
+import { useSquad } from '../store/squad.ts';
 import { colors, font } from '../theme.ts';
 
 const initials = (name: string) =>
@@ -24,3 +27,9 @@ const styles = StyleSheet.create({
   initials: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.border },
   initialsText: { color: colors.text, fontFamily: font.posterBlack },
 });
+
+/** A squad player's photo from the club, or their initials. */
+export function PlayerAvatar({ name, size }: { name: string; size: number }) {
+  const { photos } = useSquad();
+  return <Avatar photo={photoFor(photos, name)} name={displayName(name)} size={size} />;
+}

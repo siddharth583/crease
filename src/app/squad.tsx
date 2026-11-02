@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PlayerAvatar } from '../components/Avatar.tsx';
 import { NameSuggestions } from '../components/NameSuggestions.tsx';
 import { Stars } from '../components/Stars.tsx';
 import { Button, Card, FadeIn, IconButton, PressableScale, Screen, SectionLabel, Segmented, ToggleRow, useToast } from '../components/ui.tsx';
@@ -11,7 +12,9 @@ import type { Role } from '../engine/types.ts';
 import { MATCHES_TO_RATE, squadRatings, type PlayerRatings } from '../engine/ratings.ts';
 import { FormBadge, RatingChips } from '../components/Ratings.tsx';
 import { newId, useMatches } from '../store/matches.tsx';
+import { pickPhoto, pickTextFile } from '../store/files.ts';
 import { useSquad } from '../store/squad.ts';
+import { parsePhotos, photoFor } from '../engine/photos.ts';
 import { useAccess } from '../store/sync.tsx';
 import { colors, font, radius, space, type } from '../theme.ts';
 
@@ -65,9 +68,21 @@ function PlayerRow({
   onRemove: () => void;
 }) {
   const fromMatches = Boolean(r?.stars) && !p.manual;
+  const { photos, setPhoto } = useSquad();
+  const toast = useToast();
+  const hasPhoto = Boolean(photoFor(photos, p.name));
+  const choosePhoto = async () => {
+    try {
+      const photo = await pickPhoto();
+      if (photo) setPhoto(p.name, photo);
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'Couldn’t open that picture.', 'error');
+    }
+  };
   return (
     <Card style={styles.row}>
       <PressableScale scaleTo={0.98} onPress={onToggle} style={styles.rowHead} accessibilityLabel={`${p.name}, ${ROLE_LABEL[p.role]}`}>
+        <PlayerAvatar name={p.name} size={44} />
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{overall(shown).toFixed(1)}</Text>
         </View>
@@ -110,6 +125,16 @@ function PlayerRow({
             keyboardType="email-address"
             maxLength={60}
           />
+          <View style={{ flexDirection: 'row', gap: space.sm }}>
+            <View style={{ flex: 1 }}>
+              <Button variant="ghost" icon="camera-outline" label={hasPhoto ? 'Change photo' : 'Set photo'} onPress={() => void choosePhoto()} />
+            </View>
+            {hasPhoto && (
+              <View style={{ flex: 1 }}>
+                <Button variant="ghost" icon="close-outline" label="Remove photo" onPress={() => setPhoto(p.name, null)} />
+              </View>
+            )}
+          </View>
           <Segmented value={p.role} onChange={(role) => onChange({ ...p, role, keeper: role === 'wk' ? true : p.keeper })} options={ROLES} />
           <View style={{ gap: space.sm }}>
             <Text style={styles.rateLabel}>Auction category</Text>
@@ -174,7 +199,7 @@ function EmailLinker({ onLink }: { onLink: (text: string) => void }) {
 
 export default function SquadScreen() {
   const insets = useSafeAreaInsets();
-  const { squad, setSquad } = useSquad();
+  const { squad, setSquad, importPhotos } = useSquad();
   // Everyone sees the squad; only the admin changes it.
   const { admin } = useAccess();
   const { matches } = useMatches();
@@ -242,6 +267,19 @@ export default function SquadScreen() {
                 [r.linked.length && `${r.linked.length} emails linked`, r.added.length && `${r.added.join(', ')} added to the squad`].filter(Boolean).join('. '),
                 'success',
               );
+            }}
+          />
+          <Button
+            variant="ghost"
+            icon="images-outline"
+            label="Import players’ photos"
+            onPress={async () => {
+              const text = await pickTextFile();
+              if (text === null) return;
+              const photos = parsePhotos(text);
+              if (!photos) return toast.show('That isn’t a Crease photos file.', 'error');
+              const n = importPhotos(photos);
+              toast.show(n ? `${n} photo${n === 1 ? '' : 's'} added. Everyone in the club sees them.` : 'No photos in that file.', n ? 'success' : 'info');
             }}
           />
           </>

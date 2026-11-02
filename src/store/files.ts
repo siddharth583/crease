@@ -47,6 +47,38 @@ export async function pickTextFile(): Promise<string | null> {
   return new File(asset.uri).text();
 }
 
+/** Photos are kept this many pixels square: sharp on a big avatar, small enough for the whole squad in one club doc. */
+const PHOTO_SIZE = 200;
+
+/**
+ * Lets the person pick a picture and returns it cropped to the middle square and shrunk, as a JPEG data URL; null if
+ * they backed out. Web only: the app's photos are set in the browser.
+ */
+export async function pickPhoto(): Promise<string | null> {
+  if (Platform.OS !== 'web') throw new Error('Set photos in the web app.');
+  const result = await DocumentPicker.getDocumentAsync({ type: 'image/*', copyToCacheDirectory: true, multiple: false });
+  if (result.canceled || !result.assets?.length) return null;
+  const asset = result.assets[0];
+  const url = asset.file ? URL.createObjectURL(asset.file) : asset.uri;
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('That file isn’t a picture this browser can open.'));
+      i.src = url;
+    });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = PHOTO_SIZE;
+    const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
+    return canvas.toDataURL('image/jpeg', 0.82);
+  } finally {
+    if (asset.file) URL.revokeObjectURL(url);
+  }
+}
+
 /** Downloads a file the browser made, under its name. */
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);

@@ -28,7 +28,7 @@ export const CLUB_OWNER = 'siddharth@copancs.com';
 export const CLUB_DOMAIN = 'copancs.com';
 /** Only the live app syncs: a test copy's made-up matches must never reach the club. */
 export const LIVE_HOST = 'siddharth583.github.io';
-const SHARED = ['squad', 'teams', 'auctions', 'lineups'] as const;
+const SHARED = ['squad', 'teams', 'auctions', 'lineups', 'photos'] as const;
 type SharedKey = (typeof SHARED)[number];
 const LAST_KEY = 'crease.sync.v1';
 
@@ -111,7 +111,7 @@ const Context = createContext<ClubSync | null>(null);
 export function SyncProvider({ children }: { children: ReactNode }) {
   const web = Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname === LIVE_HOST;
   const { ready, matches, savedTeams, fromClub, setTeams } = useMatches();
-  const { squad, auctions, lineups, setShared } = useSquad();
+  const { squad, auctions, lineups, photos, setShared } = useSquad();
   const [status, setStatus] = useState<SyncStatus>(web ? 'starting' : 'unavailable');
   const [user, setUser] = useState<ClubSync['user']>(null);
   const [role, setRole] = useState<ClubRole | null>(null);
@@ -122,8 +122,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [myRequest, setMyRequest] = useState<EditorRequest | null>(null);
   // The club as last heard, and the phone as it is now, for the sync to compare whenever either changes.
   const remote = useRef<{ matches: Map<string, RemoteMatch> | null; shared: Partial<Record<SharedKey, string | null>> }>({ matches: null, shared: {} });
-  const local = useRef({ matches, shared: { squad, teams: savedTeams, auctions, lineups } as Record<SharedKey, unknown> });
-  local.current = { matches, shared: { squad, teams: savedTeams, auctions, lineups } };
+  const local = useRef({ matches, shared: { squad, teams: savedTeams, auctions, lineups, photos } as Record<SharedKey, unknown> });
+  local.current = { matches, shared: { squad, teams: savedTeams, auctions, lineups, photos } };
   const apply = useRef({ fromClub, setTeams, setShared });
   apply.current = { fromClub, setTeams, setShared };
   const last = useRef<Last>(web ? readLast() : { matches: {}, shared: {} });
@@ -347,7 +347,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   // Anything changed on this phone: sync it.
   useEffect(() => {
     if (role) soon();
-  }, [role, matches, savedTeams, squad, auctions, lineups, soon]);
+  }, [role, matches, savedTeams, squad, auctions, lineups, photos, soon]);
 
   const signIn = useCallback(async () => {
     if (!web) return;

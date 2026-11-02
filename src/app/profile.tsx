@@ -9,6 +9,7 @@ import { Button, Card, Chip, IconButton, PitchStripes, Screen, SectionLabel } fr
 import { playerRatings } from '../engine/ratings.ts';
 import { battingAverage, bestFigures, careerStats, economy, playerKey, strikeRate } from '../engine/stats.ts';
 import { playerForEmail } from '../engine/squad.ts';
+import { photoFor } from '../engine/photos.ts';
 import { nameKey } from '../engine/teams.ts';
 import { useMatches } from '../store/matches.tsx';
 import { usePrefs } from '../store/prefs.ts';
@@ -24,7 +25,7 @@ const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(di
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { matches } = useMatches();
-  const { squad } = useSquad();
+  const { squad, photos } = useSquad();
   const { prefs, setPrefs } = usePrefs();
   const sync = useClubSync();
   const account = sync.user?.email ?? '';
@@ -57,7 +58,7 @@ export default function ProfileScreen() {
         <Text style={styles.title}>My profile</Text>
 
         <Card style={styles.account}>
-          <Avatar photo={sync.user?.photo} name={sync.user?.name ?? me ?? ''} size={64} />
+          <Avatar photo={photoFor(photos, me) ?? sync.user?.photo} name={sync.user?.name ?? me ?? ''} size={64} />
           <View style={{ flex: 1, minWidth: 0 }}>
             {sync.user ? (
               <>

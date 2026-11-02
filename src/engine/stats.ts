@@ -39,7 +39,7 @@ export type Career = {
 const squash = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
 /** Players who now go by a longer name: matches scored under the old one are theirs too. */
-export const RENAMED: Record<string, string> = { chirag: 'Chirag Taneja', rohit: 'Rohit Kumar' };
+export const RENAMED: Record<string, string> = { chirag: 'Chirag Taneja', rohit: 'Rohit Kumar', ajayvir: 'Ajayvir Singh Ghai' };
 
 /** A name as the stats know it: trimmed, any case, and an old short name read as the full one. */
 const norm = (s: string) => {

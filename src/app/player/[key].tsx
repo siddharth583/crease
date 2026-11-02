@@ -22,6 +22,8 @@ import {
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { colors, gradients, radius, space, type, font, ink, hero } from '../../theme.ts';
+import { Avatar } from '../../components/Avatar.tsx';
+import { photoFor } from '../../engine/photos.ts';
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
 
@@ -94,7 +96,7 @@ export default function PlayerProfile() {
   const { key } = useLocalSearchParams<{ key: string }>();
   const { matches, ready } = useMatches();
   const insets = useSafeAreaInsets();
-  const { squad } = useSquad();
+  const { squad, photos } = useSquad();
   const c = useMemo(() => careerStats(matches).find((x) => x.key === key), [matches, key, squad]);
   // Their match ratings out of 10 and their form, as on the squad list.
   const rated = useMemo(() => playerRatings(matches, key), [matches, key]);
@@ -139,9 +141,12 @@ export default function PlayerProfile() {
               </View>
             )}
           </View>
-          <Text style={styles.name} numberOfLines={2}>
-            {c.name}
-          </Text>
+          <View style={styles.nameRow}>
+            {photoFor(photos, c.name) && <Avatar photo={photoFor(photos, c.name)} name={c.name} size={64} />}
+            <Text style={[styles.name, { flex: 1 }]} numberOfLines={2}>
+              {c.name}
+            </Text>
+          </View>
           <View style={styles.heroStats}>
             {[
               ['Matches', c.matches],
@@ -265,6 +270,7 @@ export default function PlayerProfile() {
 }
 
 const styles = StyleSheet.create({
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   header: { flexDirection: 'row', paddingHorizontal: space.lg, paddingVertical: space.sm },
   missing: { color: colors.muted, textAlign: 'center', marginTop: space.xxl },
   hero: {

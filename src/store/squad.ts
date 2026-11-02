@@ -5,6 +5,7 @@ import type { Auction } from '../engine/auction.ts';
 import { mergeAuctions, mergeSquad } from '../engine/backup.ts';
 import { DEFAULT_SQUAD, setUsualKeepers, TEAMS_REVISION, updateSquad, type SquadPlayer } from '../engine/squad.ts';
 import type { SavedLineup } from '../engine/teams.ts';
+import { photoKey, type Photos } from '../engine/photos.ts';
 import { setRegulars } from '../engine/stats.ts';
 
 // The squad, the auctions and the saved line-ups, kept on this phone. Read synchronously at start-up, like the preferences, so the
@@ -12,7 +13,8 @@ import { setRegulars } from '../engine/stats.ts';
 
 /** `revision`: which version of the usual sides the squad was last brought up to. */
 /** `keepers`: the club's keepers have been set on this squad (once; after that the squad screen decides). */
-type Saved = { squad: SquadPlayer[]; auctions: Auction[]; lineups?: SavedLineup[]; revision?: number; keepers?: number };
+/** `photos`: each player's photo, by `photoKey`. */
+type Saved = { squad: SquadPlayer[]; auctions: Auction[]; lineups?: SavedLineup[]; photos?: Photos; revision?: number; keepers?: number };
 
 const KEY = 'crease.squad.v1';
 const fileFor = () => new File(Paths.document, 'crease-squad.json');
@@ -45,7 +47,7 @@ function read(): Saved {
       squad = setUsualKeepers(squad);
       changed = true;
     }
-    const next: Saved = { squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], revision: TEAMS_REVISION, keepers: 1 };
+    const next: Saved = { squad, auctions: saved.auctions ?? [], lineups: saved.lineups ?? [], photos: saved.photos ?? {}, revision: TEAMS_REVISION, keepers: 1 };
     if (changed) write(next);
     return next;
   } catch {
@@ -95,8 +97,13 @@ type SquadStore = {
   deleteLineup: (id: string) => void;
   /** A full backup's squad, auctions and line-ups, merged in: how many players joined or changed, and what was added. */
   importSquad: (squad: SquadPlayer[] | null, auctions: Auction[], lineups?: SavedLineup[]) => { players: number; auctions: number; lineups: number };
-  /** The club sync: the club's squad, auctions or line-ups, as they are. */
-  setShared: (shared: { squad?: SquadPlayer[]; auctions?: Auction[]; lineups?: SavedLineup[] }) => void;
+  /** The club sync: the club's squad, auctions, line-ups or photos, as they are. */
+  setShared: (shared: { squad?: SquadPlayer[]; auctions?: Auction[]; lineups?: SavedLineup[]; photos?: Photos }) => void;
+  photos: Photos;
+  /** A player's photo, or none to take it away. */
+  setPhoto: (name: string, photo: string | null) => void;
+  /** A photos file's photos, added over any already here: how many. */
+  importPhotos: (photos: Photos) => number;
 };
 
 const SquadContext = createContext<SquadStore | null>(null);
@@ -122,7 +129,25 @@ export function SquadProvider({ children }: { children: ReactNode }) {
   const saveLineup = useCallback((l: SavedLineup) => update((s) => ({ ...s, lineups: [l, ...(s.lineups ?? []).filter((x) => x.id !== l.id)] })), [update]);
   const deleteLineup = useCallback((id: string) => update((s) => ({ ...s, lineups: (s.lineups ?? []).filter((x) => x.id !== id) })), [update]);
   const setShared = useCallback(
-    (shared: { squad?: SquadPlayer[]; auctions?: Auction[]; lineups?: SavedLineup[] }) => update((s) => ({ ...s, ...shared })),
+    (shared: { squad?: SquadPlayer[]; auctions?: Auction[]; lineups?: SavedLineup[]; photos?: Photos }) => update((s) => ({ ...s, ...shared })),
+    [update],
+  );
+  const setPhoto = useCallback(
+    (name: string, photo: string | null) =>
+      update((s) => {
+        const photos = { ...(s.photos ?? {}) };
+        if (photo) photos[photoKey(name)] = photo;
+        else delete photos[photoKey(name)];
+        return { ...s, photos };
+      }),
+    [update],
+  );
+  const importPhotos = useCallback(
+    (photos: Photos) => {
+      const n = Object.keys(photos).length;
+      if (n) update((s) => ({ ...s, photos: { ...(s.photos ?? {}), ...photos } }));
+      return n;
+    },
     [update],
   );
   const importSquad = useCallback(
@@ -145,7 +170,7 @@ export function SquadProvider({ children }: { children: ReactNode }) {
   );
   return createElement(
     SquadContext.Provider,
-    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, lineups: state.lineups ?? [], saveLineup, deleteLineup, importSquad, setShared } },
+    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, lineups: state.lineups ?? [], saveLineup, deleteLineup, importSquad, setShared, photos: state.photos ?? {}, setPhoto, importPhotos } },
     children,
   );
 }
