@@ -13,7 +13,7 @@ import { SeriesPips } from '../series/[id].tsx';
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
-import { useClubSync } from '../../store/sync.tsx';
+import { useAccess, useClubSync } from '../../store/sync.tsx';
 import { Avatar } from '../../components/Avatar.tsx';
 import { usePrefs } from '../../store/prefs.ts';
 import { colors, font, gradients, radius, space, type, hero, edge } from '../../theme.ts';
@@ -73,6 +73,7 @@ function LiveHero({ match }: { match: Match }) {
 }
 
 function PosterHero() {
+  const access = useAccess();
   return (
     <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.poster}>
       <PitchStripes opacity={0.035} tint="255,255,255" />
@@ -80,7 +81,11 @@ function PosterHero() {
       <AppMark size={52} />
       <Text style={styles.posterTitle}>Ready for{'\n'}the toss?</Text>
       <Text style={styles.posterBody}>Score every ball. Every player’s numbers add up, match after match.</Text>
-      <Button label="Start a match" icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
+      {access.score ? (
+        <Button label="Start a match" icon="play" onPress={() => router.push('/new')} style={{ marginTop: space.xl }} />
+      ) : (
+        <Button label="Get editor access to score" icon="person-outline" onPress={() => router.push('/profile')} style={{ marginTop: space.xl }} />
+      )}
     </LinearGradient>
   );
 }
@@ -168,6 +173,7 @@ function SeriesCard({ s }: { s: SeriesState }) {
 /** What can be done with a finished match: play it again, share the result, or delete it. */
 function ResultMenu({ match, onClose, onShare, onDelete }: { match: Match | null; onClose: () => void; onShare: () => void; onDelete: () => void }) {
   const [deleting, setDeleting] = useState(false);
+  const access = useAccess();
   const close = () => {
     setDeleting(false);
     onClose();
@@ -175,16 +181,19 @@ function ResultMenu({ match, onClose, onShare, onDelete }: { match: Match | null
   return (
     <Sheet visible={match !== null} onClose={close} title={match ? `${match.teams[0].name} vs ${match.teams[1].name}` : ''}>
       <View style={{ gap: space.sm }}>
-        <Button
-          variant="ghost"
-          icon="refresh"
-          label="Rematch"
-          onPress={() => {
-            close();
-            if (match) router.push({ pathname: '/new', params: { rematch: match.id } });
-          }}
-        />
+        {access.score && (
+          <Button
+            variant="ghost"
+            icon="refresh"
+            label="Rematch"
+            onPress={() => {
+              close();
+              if (match) router.push({ pathname: '/new', params: { rematch: match.id } });
+            }}
+          />
+        )}
         <Button variant="ghost" icon="image-outline" label="Share result picture" onPress={onShare} />
+        {access.admin && (
         <Button
           variant="danger"
           icon="trash-outline"
@@ -195,6 +204,7 @@ function ResultMenu({ match, onClose, onShare, onDelete }: { match: Match | null
             onDelete();
           }}
         />
+        )}
       </View>
     </Sheet>
   );
@@ -254,6 +264,7 @@ export default function Home() {
   const toast = useToast();
   const { exportEverything } = useMatchFiles(toast.show);
   const sync = useClubSync();
+  const access = useAccess();
   const { prefs, setPrefs } = usePrefs();
   // Remind once a week that a lost phone shouldn't mean lost matches.
   const backupDue = matches.length >= 2 && (!prefs.lastBackup || Date.now() - prefs.lastBackup > 7 * 86_400_000);
@@ -270,7 +281,7 @@ export default function Home() {
           <AppMark size={34} />
           <Text style={styles.brand}>crease</Text>
           <View style={{ flex: 1 }} />
-          {live.length > 0 && (
+          {live.length > 0 && access.score && (
             <PressableScale accessibilityLabel="New match" haptic="medium" onPress={() => router.push('/new')} style={styles.newMatch}>
               <Ionicons name="add" size={18} color={colors.onAccent} />
               <Text style={styles.newMatchText}>New match</Text>

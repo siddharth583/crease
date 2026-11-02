@@ -5,7 +5,8 @@ rules_version = '2';
 //
 // - The admin (siddharth@copancs.com) can do everything, and is the only one who can change who's in the club.
 // - Anyone signed in with a copancs.com Google account can read everything (and so export it on their phone).
-// - People the admin adds as 'scorer' (shown as Editor) can also change matches, the squad, sides, auctions and line-ups.
+// - People the admin adds as 'scorer' (shown as Editor) can start matches and score them; once a match is finished only
+//   the admin can change it. Only the admin changes the squad, sides, auctions and line-ups, or deletes a match.
 // - Anyone signed in can ask to be an editor; only they and the admin can see their request.
 // - People the admin adds as 'viewer' (outside copancs.com) can read everything.
 // - Nobody else can read or write anything.
@@ -41,10 +42,22 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    match /clubs/copan/{part}/{id} {
-      allow read: if part != 'requests' && canRead();
-      allow create, update: if part != 'requests' && canWrite() && request.resource.data.by == email();
-      allow delete: if part != 'requests' && isAdmin();
+    // Matches: editors (role 'scorer') add matches and score them while they're on; once a match is finished only the
+    // admin can change it, and only the admin deletes one.
+    match /clubs/copan/matches/{id} {
+      allow read: if canRead();
+      allow create: if canWrite() && request.resource.data.by == email();
+      allow update: if signedIn() && request.resource.data.by == email() && (isAdmin()
+        || (role() == 'scorer' && resource.data.get('finished', true) == false
+            && request.resource.data.get('deleted', false) == false));
+      allow delete: if isAdmin();
+    }
+
+    // The squad, the usual sides, auctions and line-ups: everyone in the club reads them, only the admin changes them.
+    match /clubs/copan/shared/{doc} {
+      allow read: if canRead();
+      allow create, update: if isAdmin() && request.resource.data.by == email();
+      allow delete: if isAdmin();
     }
 
     // Editor requests: anyone signed in can ask for themselves; only they and the admin see it; the admin answers.

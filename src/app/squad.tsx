@@ -12,6 +12,7 @@ import { MATCHES_TO_RATE, squadRatings, type PlayerRatings } from '../engine/rat
 import { FormBadge, RatingChips } from '../components/Ratings.tsx';
 import { newId, useMatches } from '../store/matches.tsx';
 import { useSquad } from '../store/squad.ts';
+import { useAccess } from '../store/sync.tsx';
 import { colors, font, radius, space, type } from '../theme.ts';
 
 const ROLES: { value: Role; label: string }[] = [
@@ -174,6 +175,8 @@ function EmailLinker({ onLink }: { onLink: (text: string) => void }) {
 export default function SquadScreen() {
   const insets = useSafeAreaInsets();
   const { squad, setSquad } = useSquad();
+  // Everyone sees the squad; only the admin changes it.
+  const { admin } = useAccess();
   const { matches } = useMatches();
   const ratings = useMemo(() => squadRatings(matches, squad), [matches, squad]);
   const shownOf = (p: SquadPlayer) => {
@@ -212,6 +215,8 @@ export default function SquadScreen() {
             Your {squad.length} regulars. Every match gives each of them a rating out of 10, and their stars come from those matches: they set them up for the auction.
           </Text>
 
+          {admin && (
+          <>
           <Card style={styles.addCard}>
             <TextInput
               value={name}
@@ -239,8 +244,10 @@ export default function SquadScreen() {
               );
             }}
           />
+          </>
+          )}
 
-          <SectionLabel right={<Text style={styles.hint}>Tap to edit</Text>}>Best first</SectionLabel>
+          <SectionLabel right={admin ? <Text style={styles.hint}>Tap to edit</Text> : undefined}>Best first</SectionLabel>
           <View style={{ gap: space.sm }}>
             {sorted.map((p, i) => (
               <FadeIn key={p.id} delay={Math.min(i, 10) * 25}>
@@ -248,8 +255,8 @@ export default function SquadScreen() {
                   p={p}
                   shown={shownOf(p)}
                   r={ratings.get(p.id)}
-                  open={open === p.id}
-                  onToggle={() => setOpen(open === p.id ? null : p.id)}
+                  open={admin && open === p.id}
+                  onToggle={() => admin && setOpen(open === p.id ? null : p.id)}
                   onChange={(next) => setSquad(squad.map((x) => (x.id === p.id ? next : x)))}
                   onRemove={() => {
                     setSquad(squad.filter((x) => x.id !== p.id));

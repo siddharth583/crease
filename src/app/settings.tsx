@@ -8,6 +8,7 @@ import { Button, Card, IconButton, Screen, SectionLabel, Segmented, useToast } f
 import { useMatches } from '../store/matches.tsx';
 import { applyTheme, usePrefs } from '../store/prefs.ts';
 import { useMatchFiles } from '../store/useMatchFiles.ts';
+import { useAccess } from '../store/sync.tsx';
 import { colors, font, space, type } from '../theme.ts';
 
 export default function SettingsScreen() {
@@ -17,6 +18,7 @@ export default function SettingsScreen() {
   const toast = useToast();
   const { exportEverything, exportAs, importFile } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState(false);
+  const { admin } = useAccess();
 
   const backedUp = prefs.lastBackup
     ? `Last backup ${new Date(prefs.lastBackup).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
@@ -63,7 +65,7 @@ export default function SettingsScreen() {
             }}
           />
           <Button variant="ghost" label="Export matches as PDF or file" icon="document-text-outline" disabled={!matches.length} onPress={() => setExporting(true)} />
-          <Button variant="ghost" label="Import a backup or match file" icon="push-outline" onPress={() => importFile()} />
+          {admin && <Button variant="ghost" label="Import a backup or match file" icon="push-outline" onPress={() => importFile()} />}
           <Text style={styles.note}>
             A backup brings everything back on any phone: the matches, and from them every scorecard, record, rating and form,
             plus the squad and auctions. It adds to what’s here: nothing is added twice, and a match only changes if the

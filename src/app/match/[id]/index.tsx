@@ -19,6 +19,7 @@ function useScreenAwake() {
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BallEditSheet, fixBall } from '../../../components/BallEditSheet.tsx';
+import { useAccess } from '../../../store/sync.tsx';
 import { NameSuggestions } from '../../../components/NameSuggestions.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { ShareCardSheet } from '../../../components/ShareCard.tsx';
@@ -151,7 +152,8 @@ function Stat({ label, value, hot }: { label: string; value: string; hot?: boole
 
 // ─── Crease ──────────────────────────────────────────────────────────────────
 
-function Crease({ match, s, onSwap, onRetire }: { match: Match; s: InningsState; onSwap: () => void; onRetire: (batter: string) => void }) {
+/** The batters and bowler. Without `onSwap` and `onRetire` it's to watch only. */
+function Crease({ match, s, onSwap, onRetire }: { match: Match; s: InningsState; onSwap?: () => void; onRetire?: (batter: string) => void }) {
   const bowler = s.bowlers.find((b) => b.id === s.bowler);
   const batters = [s.striker, s.nonStriker].filter((id): id is string => id !== null);
 
@@ -169,9 +171,11 @@ function Crease({ match, s, onSwap, onRetire }: { match: Match; s: InningsState;
                   {playerName(match, id)}
                 </Text>
                 {onStrike && <MaterialCommunityIcons name="cricket" size={15} color={colors.accentInk} />}
-                <PressableScale accessibilityLabel={`Retire ${playerName(match, id)}`} hitSlop={8} onPress={() => onRetire(id)} style={styles.retire}>
-                  <Text style={styles.retireText}>Retire</Text>
-                </PressableScale>
+                {onRetire && (
+                  <PressableScale accessibilityLabel={`Retire ${playerName(match, id)}`} hitSlop={8} onPress={() => onRetire(id)} style={styles.retire}>
+                    <Text style={styles.retireText}>Retire</Text>
+                  </PressableScale>
+                )}
               </View>
               <Text style={styles.batterMeta}>
                 {b?.fours ?? 0}×4   {b?.sixes ?? 0}×6   SR {b && b.balls ? ((b.runs * 100) / b.balls).toFixed(0) : '–'}
@@ -199,7 +203,7 @@ function Crease({ match, s, onSwap, onRetire }: { match: Match; s: InningsState;
             {oversText(bowler.balls)}-{bowler.maidens}-{bowler.runs}-{bowler.wickets}
           </Text>
         )}
-        {s.nonStriker && <IconButton icon="swap-vertical" label="Swap strike" onPress={onSwap} />}
+        {s.nonStriker && onSwap && <IconButton icon="swap-vertical" label="Swap strike" onPress={onSwap} />}
       </View>
     </Card>
   );
@@ -208,7 +212,7 @@ function Crease({ match, s, onSwap, onRetire }: { match: Match; s: InningsState;
 // ─── This over and over-by-over ──────────────────────────────────────────────
 
 /** This over's balls; tap one to fix it. Before the first ball of a new over, the last over stays editable. */
-function ThisOver({ s, onEdit }: { s: InningsState; onEdit: (b: BallView) => void }) {
+function ThisOver({ s, onEdit }: { s: InningsState; onEdit?: (b: BallView) => void }) {
   const current = s.overs[s.overs.length - 1] ?? [];
   const showLast = current.length === 0 && s.overs.length > 1;
   const balls = showLast ? s.overs[s.overs.length - 2] : current;
@@ -219,11 +223,11 @@ function ThisOver({ s, onEdit }: { s: InningsState; onEdit: (b: BallView) => voi
     <View style={styles.scorebug}>
       <View style={styles.scorebugLabel}>
         <Text style={styles.scorebugTitle}>{showLast ? 'LAST OVER' : `OVER ${overNo}`}</Text>
-        <Text style={styles.scorebugRuns}>{totals?.runs ?? 0} runs · tap to fix</Text>
+        <Text style={styles.scorebugRuns}>{totals?.runs ?? 0} runs{onEdit ? ' · tap to fix' : ''}</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overBalls}>
         {balls.map((b, i) => (
-          <PressableScale key={`${s.overs.length}-${i}`} scaleTo={0.85} accessibilityLabel={`Fix ball ${i + 1}`} onPress={() => onEdit(b)}>
+          <PressableScale key={`${s.overs.length}-${i}`} scaleTo={0.85} accessibilityLabel={`Fix ball ${i + 1}`} disabled={!onEdit} dimWhenDisabled={false} onPress={() => onEdit?.(b)}>
             <BallChip ball={b} animate={!showLast && i === balls.length - 1} />
           </PressableScale>
         ))}
@@ -248,6 +252,7 @@ function MatchMenu({
   onDeadBall,
   onEndInnings,
   onDelete,
+  canDelete,
   onBowlerChange,
   onMovePlayer,
   inningsLabel,
@@ -267,6 +272,8 @@ function MatchMenu({
   onEndInnings: () => void;
   /** The match is called off: it goes, without a result. */
   onDelete: () => void;
+  /** Only the admin deletes a match. */
+  canDelete: boolean;
   /** A new bowler finishes the over (the one bowling it is hurt or taken off). */
   onBowlerChange: (bowler: string) => void;
   /** A player switches to the other side. */
@@ -414,14 +421,18 @@ function MatchMenu({
           style={{ marginTop: space.sm }}
         />
 
-        <Text style={styles.sheetLabel}>Called off</Text>
-        <Text style={styles.editNote}>Rained off, or just a test? Delete the match. It won’t count in anyone’s numbers.</Text>
-        <Button
-          variant="ghost"
-          label={deleting ? 'Tap again to delete it' : 'Delete this match'}
-          icon="trash-outline"
-          onPress={() => (deleting ? onDelete() : setDeleting(true))}
-        />
+        {canDelete && (
+          <>
+            <Text style={styles.sheetLabel}>Called off</Text>
+            <Text style={styles.editNote}>Rained off, or just a test? Delete the match. It won’t count in anyone’s numbers.</Text>
+            <Button
+              variant="ghost"
+              label={deleting ? 'Tap again to delete it' : 'Delete this match'}
+              icon="trash-outline"
+              onPress={() => (deleting ? onDelete() : setDeleting(true))}
+            />
+          </>
+        )}
       </ScrollView>
     </Sheet>
   );
@@ -877,6 +888,7 @@ function momentFor(match: Match, s: InningsState, e: InningsEvent): Omit<Moment,
 export default function LiveMatch() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { match, saveMatch, ready } = useMatch(id);
+  const access = useAccess();
   const { matches, deleteMatch } = useMatches();
   const insets = useSafeAreaInsets();
   const [openers, setOpeners] = useState<string[]>([]);
@@ -1013,7 +1025,7 @@ export default function LiveMatch() {
           </View>
         </View>
         <View style={{ gap: space.md, marginTop: space.lg }}>
-          {state.result === 'Match tied' && match.innings.length < 4 && (
+          {state.result === 'Match tied' && match.innings.length < 4 && access.score && (
             <Button label={'Play a super over'} icon="flash" onPress={() => saveMatch(startSuperOver(match))} />
           )}
           <Button label="Share result picture" icon="image-outline" onPress={() => setSharing(true)} />
@@ -1023,7 +1035,7 @@ export default function LiveMatch() {
             icon="list"
             onPress={() => router.push({ pathname: '/match/[id]/scorecard', params: { id: match.id } })}
           />
-          {series?.next ? (
+          {!access.score ? null : series?.next ? (
             <Button
               label={`Next: match ${series.next} of ${series.of}`}
               icon="play-forward"
@@ -1152,6 +1164,16 @@ export default function LiveMatch() {
     );
   }
 
+  // Watching, not scoring: the pickers (openers, bowler, next batter) give way to a line on who can score.
+  if (!state.result && !access.score) {
+    body = (
+      <Card style={{ gap: space.sm }}>
+        <Text style={styles.watchTitle}>{live ? 'Live' : 'Waiting for the next ball'}</Text>
+        <Text style={styles.editNote}>{access.why}</Text>
+      </Card>
+    );
+  }
+
   return (
     <Screen>
       <View style={styles.header}>
@@ -1168,13 +1190,13 @@ export default function LiveMatch() {
         </View>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
           {/* While scoring, Undo sits on the pad; between balls' screens (openers, bowler, result) it's up here. */}
-          {!live && <IconButton icon="arrow-undo" label="Undo" disabled={!canUndo(match)} onPress={undoLast} />}
+          {!live && (state.result ? access.admin : access.score) && <IconButton icon="arrow-undo" label="Undo" disabled={!canUndo(match)} onPress={undoLast} />}
           <IconButton
             icon="stats-chart"
             label="Scorecard"
             onPress={() => router.push({ pathname: '/match/[id]/scorecard', params: { id: match.id } })}
           />
-          {!state.result && <IconButton icon="ellipsis-horizontal" label="Match options" onPress={() => setMenu(true)} />}
+          {!state.result && access.score && <IconButton icon="ellipsis-horizontal" label="Match options" onPress={() => setMenu(true)} />}
         </View>
       </View>
 
@@ -1183,18 +1205,22 @@ export default function LiveMatch() {
         {s.striker && !state.result && <Crease
             match={match}
             s={s}
-            onSwap={() => push({ type: 'swap' })}
-            onRetire={(id) => {
-              setRetiring(id);
-              setWicketFor(null);
-            }}
+            onSwap={access.score ? () => push({ type: 'swap' }) : undefined}
+            onRetire={
+              access.score
+                ? (id) => {
+                    setRetiring(id);
+                    setWicketFor(null);
+                  }
+                : undefined
+            }
           />}
-        {live && <ThisOver s={s} onEdit={setEditing} />}
+        {live && <ThisOver s={s} onEdit={access.score ? setEditing : undefined} />}
         {!state.result && s.status !== 'openers' && <OverChart s={s} />}
         {body}
       </ScrollView>
 
-      {live && (
+      {live && access.score && (
         <View style={[styles.padWrap, { paddingBottom: insets.bottom + space.sm }]}>
           {s.freeHit && <Banner tone="volt" title={'FREE HIT'} body={'Only a run out counts on this ball'} />}
           {s.bowler && s.streaks[s.bowler] === 2 && (
@@ -1220,6 +1246,7 @@ export default function LiveMatch() {
         }}
       />
       <MatchMenu
+        canDelete={access.admin}
         visible={menu}
         match={match}
         s={s}
@@ -1316,6 +1343,7 @@ export default function LiveMatch() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.sm },
+  watchTitle: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   headerTitle: { flex: 1, minWidth: 0, paddingHorizontal: space.sm },
   headerTeam: { color: colors.text, fontSize: 16, lineHeight: 20, fontFamily: font.poster },
   headerVs: { color: colors.accentInk, fontFamily: font.semibold, fontSize: 13 },

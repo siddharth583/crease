@@ -13,6 +13,7 @@ import { isPlaceholder, keyFor, momChoices, playerOfTheMatch } from '../../../en
 import type { BallEvent, Match, Team } from '../../../engine/types.ts';
 import { useMatch, useMatches } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
+import { useAccess } from '../../../store/sync.tsx';
 import { colors, radius, space, type, font, edge } from '../../../theme.ts';
 
 const econ = (runs: number, balls: number) => (balls ? ((runs * 6) / balls).toFixed(1) : '–');
@@ -330,6 +331,8 @@ function NamesEditor({ match, onRename }: { match: Match; onRename: (playerId: s
 export default function Scorecard() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { match, saveMatch } = useMatch(id);
+  // Only the admin changes a scorecard, picks the Man of the Match or deletes a match.
+  const { admin } = useAccess();
   const { deleteMatch } = useMatches();
   const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -354,13 +357,15 @@ export default function Scorecard() {
         <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
         <Text style={styles.headerTitle}>Scorecard</Text>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
-          <IconButton
-            icon={editMode ? 'checkmark' : 'create-outline'}
-            label={editMode ? 'Done editing' : 'Edit scorecard'}
-            onPress={() => setEditMode(!editMode)}
-          />
+          {admin && (
+            <IconButton
+              icon={editMode ? 'checkmark' : 'create-outline'}
+              label={editMode ? 'Done editing' : 'Edit scorecard'}
+              onPress={() => setEditMode(!editMode)}
+            />
+          )}
           <IconButton icon="download-outline" label="Export match" onPress={() => setExporting([match])} />
-          <IconButton icon="trash-outline" label="Delete this match" onPress={() => setDeleting(true)} />
+          {admin && <IconButton icon="trash-outline" label="Delete this match" onPress={() => setDeleting(true)} />}
         </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, paddingBottom: insets.bottom + space.xxl }}>
@@ -396,9 +401,11 @@ export default function Scorecard() {
               </Text>
             </View>
             </PressableScale>
-            <PressableScale accessibilityLabel="Change the Man of the Match" onPress={() => setPickingMom(true)} style={styles.momChange}>
-              <Text style={styles.momChangeText}>Change</Text>
-            </PressableScale>
+            {admin && (
+              <PressableScale accessibilityLabel="Change the Man of the Match" onPress={() => setPickingMom(true)} style={styles.momChange}>
+                <Text style={styles.momChangeText}>Change</Text>
+              </PressableScale>
+            )}
           </View>
         )}
         <Segmented
@@ -406,7 +413,7 @@ export default function Scorecard() {
           onChange={setTab}
           options={state.innings.map((inn, i) => ({ value: String(i), label: i >= 2 ? `SO · ${inn.battingTeam.name}` : inn.battingTeam.name }))}
         />
-        {editMode && (
+        {editMode && admin && (
           <View style={styles.editHint}>
             <Ionicons name="create-outline" size={16} color={colors.accentInk} />
             <Text style={styles.editHintText}>
@@ -416,7 +423,7 @@ export default function Scorecard() {
             </Text>
           </View>
         )}
-        {started && editMode ? (
+        {started && editMode && admin ? (
           <>
             <InningsCard match={match} s={s} />
             <OversEditor match={match} s={s} inningsIndex={Number(shown)} onOpen={setEditingOver} />

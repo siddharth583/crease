@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
+import { matchState } from '../engine/engine.ts';
 import { fingerprint, planMatches, planShared, type RemoteMatch } from '../engine/sync.ts';
+import type { Match } from '../engine/types.ts';
 import { useMatches } from './matches.tsx';
 import { useSquad } from './squad.ts';
 
@@ -95,6 +97,15 @@ const why = (e: unknown) => {
   return 'Couldn’t sync just now. It tries again on the next change.';
 };
 
+/**
+ * Finished, for the club: a result that stands. Editors can't change a finished match; a tie isn't finished, since the
+ * super over is still to be scored.
+ */
+const finished = (m: Match) => {
+  const r = matchState(m).result;
+  return Boolean(r) && r !== 'Match tied';
+};
+
 const Context = createContext<ClubSync | null>(null);
 
 export function SyncProvider({ children }: { children: ReactNode }) {
@@ -126,25 +137,43 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     const r = remote.current;
     if (!r.matches || SHARED.some((k) => !(k in r.shared)) || !roleRef.current) return;
     const fb = await firebase();
+    const admin = roleRef.current === 'owner';
     const writer = roleRef.current !== 'viewer';
     const by = email;
     const base = fb.F.collection(fb.db, 'clubs', CLUB, 'matches');
     const writes: Promise<unknown>[] = [];
 
     const plan = planMatches(local.current.matches, r.matches, last.current.matches);
-    apply.current.fromClub(plan.take, plan.remove);
+    // What only the admin may change, an editor's phone takes back from the club instead: a finished match changed
+    // here, a match deleted here or there.
+    const clubs = (id: string) => {
+      const doc = r.matches!.get(id);
+      return doc?.json ? (JSON.parse(doc.json) as Match) : null;
+    };
+    const send: Match[] = [];
+    const take = [...plan.take];
+    const remove = [...plan.remove];
+    for (const m of plan.send) {
+      const doc = r.matches.get(m.id);
+      if (!writer) continue;
+      if (!admin && doc?.deleted) remove.push(m.id);
+      else if (!admin && doc && (doc.finished ?? true)) take.push(clubs(m.id)!);
+      else send.push(m);
+    }
+    const bury = admin ? plan.bury : [];
+    if (!admin) for (const id of plan.bury) take.push(clubs(id)!);
+    apply.current.fromClub(take.filter(Boolean), remove);
     const agreed = { ...last.current.matches, ...plan.agreed };
-    for (const id of plan.remove) delete agreed[id];
-    if (writer) {
-      for (const m of plan.send) {
-        const json = JSON.stringify(m);
-        writes.push(fb.F.setDoc(fb.F.doc(base, m.id), { json, updatedAt: m.updatedAt ?? m.createdAt, by }));
-        agreed[m.id] = fingerprint(json);
-      }
-      for (const id of plan.bury) {
-        writes.push(fb.F.setDoc(fb.F.doc(base, id), { deleted: true, updatedAt: Date.now(), by }));
-        delete agreed[id];
-      }
+    for (const id of remove) delete agreed[id];
+    for (const m of take) if (m) agreed[m.id] = fingerprint(r.matches.get(m.id)!.json!);
+    for (const m of send) {
+      const json = JSON.stringify(m);
+      writes.push(fb.F.setDoc(fb.F.doc(base, m.id), { json, updatedAt: m.updatedAt ?? m.createdAt, finished: finished(m), by }));
+      agreed[m.id] = fingerprint(json);
+    }
+    for (const id of bury) {
+      writes.push(fb.F.setDoc(fb.F.doc(base, id), { deleted: true, finished: true, updatedAt: Date.now(), by }));
+      delete agreed[id];
     }
 
     const shared = { ...last.current.shared };
@@ -157,7 +186,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         if (key === 'teams') apply.current.setTeams(value);
         else apply.current.setShared({ [key]: value });
         shared[key] = fingerprint(theirs);
-      } else if (step === 'send' && writer) {
+      } else if (step === 'send' && admin) {
         writes.push(fb.F.setDoc(fb.F.doc(fb.db, 'clubs', CLUB, 'shared', key), { json: mine, updatedAt: Date.now(), by }));
         shared[key] = fingerprint(mine);
       } else if (step === 'none') shared[key] = fingerprint(mine);
@@ -401,4 +430,17 @@ export function useClubSync(): ClubSync {
   const s = useContext(Context);
   if (!s) throw new Error('useClubSync must be used inside SyncProvider');
   return s;
+}
+
+/**
+ * What this person may do. The admin everything; editors start matches and score them while they're on; viewers and
+ * anyone signed out only watch. Where the club sync isn't running (a test copy, a phone build) the phone is its own.
+ */
+export function useAccess() {
+  const { status, role, user } = useClubSync();
+  const local = status === 'unavailable';
+  const admin = local || role === 'owner';
+  const score = admin || role === 'scorer';
+  const why = score ? null : user ? 'Only editors can score. Ask the admin for editor access in My profile.' : 'Sign in, as an editor, to score for the club.';
+  return { admin, score, why };
 }

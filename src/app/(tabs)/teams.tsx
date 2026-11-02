@@ -25,6 +25,7 @@ import type { Team } from '../../engine/types.ts';
 import { newId, useMatches } from '../../store/matches.tsx';
 import { saveReportImage } from '../../store/files.ts';
 import { useSquad } from '../../store/squad.ts';
+import { useAccess } from '../../store/sync.tsx';
 import { colors, font, radius, space, type } from '../../theme.ts';
 
 // The sides: how strong each is on current form, and two even sides from whoever turns up today.
@@ -246,13 +247,16 @@ function LineupCard({
   onEdit,
   onShare,
   onDelete,
+  onStartAllowed,
 }: {
   l: SavedLineup;
   table: Map<string, Strength>;
   onStart: () => void;
   onEdit: () => void;
   onShare: () => void;
-  onDelete: () => void;
+  /** Left out for those who may not do it. */
+  onDelete?: () => void;
+  onStartAllowed: boolean;
 }) {
   const [arming, setArming] = useState(false);
   const s = l.sides.map((side) => sideStrength(side.players.map((n) => strengthOf(table, n))));
@@ -275,10 +279,12 @@ function LineupCard({
       ))}
       <Text style={styles.playerSub}>Strength on today’s form, so it moves as players’ form does.</Text>
       <View style={styles.wrap}>
-        <Chip icon="play" label="Start a match" onPress={onStart} />
+        {onStartAllowed && <Chip icon="play" label="Start a match" onPress={onStart} />}
         <Chip icon="create-outline" label="Edit" onPress={onEdit} />
         <Chip icon="share-outline" label="Share" onPress={onShare} />
-        <Chip icon="trash-outline" tone="danger" selected={arming} label={arming ? 'Tap again to delete' : 'Delete'} onPress={() => (arming ? onDelete() : setArming(true))} />
+        {onDelete && (
+          <Chip icon="trash-outline" tone="danger" selected={arming} label={arming ? 'Tap again to delete' : 'Delete'} onPress={() => (arming ? onDelete() : setArming(true))} />
+        )}
       </View>
     </Card>
   );
@@ -286,6 +292,8 @@ function LineupCard({
 
 function RecommendView({ table }: { table: Map<string, Strength> }) {
   const { savedTeams, rememberTeams } = useMatches();
+  // Editors start matches from here; only the admin changes the usual sides or the saved line-ups.
+  const access = useAccess();
   const { squad, lineups, saveLineup, deleteLineup } = useSquad();
   const toast = useToast();
   const everyone = useMemo(() => [...table.values()].sort((a, b) => a.name.localeCompare(b.name)), [table]);
@@ -556,8 +564,8 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
             );
           })}
           <View style={styles.actions}>
-            <Action primary icon="play" label="Start a match with these sides" onPress={() => start(current())} />
-            <Action icon="bookmark-outline" label="Save this line-up for later" onPress={keep} />
+            {access.score && <Action primary icon="play" label="Start a match with these sides" onPress={() => start(current())} />}
+            {access.admin && <Action icon="bookmark-outline" label="Save this line-up for later" onPress={keep} />}
             <Action icon="share-outline" label="Share the line-up as a picture" onPress={() => share(current())} />
             <Action icon="arrow-undo-outline" label="Back to the suggestion" disabled={!edited} onPress={() => (fresh(), toast.show('Back to the suggestion', 'info'))} />
             <Action
@@ -569,6 +577,7 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
                 toast.show('Another even split', 'info');
               }}
             />
+            {access.admin && (
             <Action
               icon="save-outline"
               armed={saving}
@@ -579,6 +588,7 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
                 toast.show(`Tap again to make these the new ${names[0]} and ${names[1]}`, 'info');
               }}
             />
+            )}
           </View>
         </>
       ) : (
@@ -598,10 +608,15 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
               onStart={() => start(l.sides)}
               onEdit={() => load(l)}
               onShare={() => share(l.sides)}
-              onDelete={() => {
-                deleteLineup(l.id);
-                toast.show('Line-up deleted', 'info');
-              }}
+              onStartAllowed={access.score}
+              onDelete={
+                access.admin
+                  ? () => {
+                      deleteLineup(l.id);
+                      toast.show('Line-up deleted', 'info');
+                    }
+                  : undefined
+              }
             />
           ))}
         </>

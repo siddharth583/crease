@@ -14,6 +14,7 @@ import { newId, useMatches } from '../store/matches.tsx';
 import { HOUSE_RULES } from '../engine/squad.ts';
 import { fillSides, strengths } from '../engine/teams.ts';
 import { useSquad } from '../store/squad.ts';
+import { useAccess } from '../store/sync.tsx';
 import { colors, edge, radius, space, font } from '../theme.ts';
 
 /** `captain` and `keeper` are indexes into `players`. */
@@ -306,6 +307,25 @@ function TeamEditor({
 }
 
 export default function NewMatch() {
+  const access = useAccess();
+  if (!access.score) return <NoAccess why={access.why} />;
+  return <NewMatchScreen />;
+}
+
+/** In place of a screen this person may not use: why, and where to go. */
+function NoAccess({ why }: { why: string | null }) {
+  return (
+    <Screen>
+      <View style={{ padding: space.lg, gap: space.md }}>
+        <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+        <Text style={styles.noAccess}>{why}</Text>
+        <Button icon="person-outline" label="My profile" onPress={() => router.replace('/profile')} />
+      </View>
+    </Screen>
+  );
+}
+
+function NewMatchScreen() {
   const insets = useSafeAreaInsets();
   const { rematch, series: continueSeries, auction, sides } = useLocalSearchParams<{ rematch?: string; series?: string; auction?: string; sides?: string }>();
   const { savedTeams, rememberTeams, saveMatch, matches } = useMatches();
@@ -613,6 +633,7 @@ export default function NewMatch() {
 }
 
 const styles = StyleSheet.create({
+  noAccess: { color: colors.text, fontSize: 16, fontFamily: font.semibold, lineHeight: 23 },
   pasteBox: { gap: space.sm, marginTop: space.sm },
   mark: {
     width: 34,

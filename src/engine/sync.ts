@@ -11,7 +11,7 @@ export function fingerprint(text: string): string {
 }
 
 /** A match as the club keeps it: the whole match as text, or a mark that it was deleted. */
-export type RemoteMatch = { json?: string; deleted?: boolean; updatedAt: number };
+export type RemoteMatch = { json?: string; deleted?: boolean; updatedAt: number; finished?: boolean };
 
 export type MatchPlan = {
   /** The club's copy is newer, or the phone hasn't got it: take it. */
