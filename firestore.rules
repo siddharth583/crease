@@ -8,6 +8,7 @@ rules_version = '2';
 // - People the admin adds as 'scorer' (shown as Editor) can start matches and score them; once a match is finished only
 //   the admin can change it. Only the admin changes the squad, sides, auctions and line-ups, or deletes a match.
 // - Anyone signed in can ask to be an editor; only they and the admin can see their request.
+// - Everyone in the club can set their own photo; the admin can set anyone's.
 // - People the admin adds as 'viewer' (outside copancs.com) can read everything.
 // - Nobody else can read or write anything.
 service cloud.firestore {
@@ -58,6 +59,17 @@ service cloud.firestore {
       allow read: if canRead();
       allow create, update: if isAdmin() && request.resource.data.by == email();
       allow delete: if isAdmin();
+    }
+
+    // Players' photos, kept under their email: everyone in the club sees them; each person sets or removes their own,
+    // the admin anyone's. Only a small picture is accepted.
+    match /clubs/copan/photos/{who} {
+      allow read: if canRead();
+      allow create, update: if (isAdmin() || (canRead() && email() == who))
+        && request.resource.data.photo is string && request.resource.data.photo.size() < 200000
+        && request.resource.data.photo.matches('data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+')
+        && request.resource.data.by == email();
+      allow delete: if isAdmin() || (signedIn() && email() == who);
     }
 
     // Editor requests: anyone signed in can ask for themselves; only they and the admin see it; the admin answers.

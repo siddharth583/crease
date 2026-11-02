@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { matchState } from '../engine/engine.ts';
+import { photoKey, type Photos } from '../engine/photos.ts';
 import { fingerprint, planMatches, planShared, type RemoteMatch } from '../engine/sync.ts';
 import type { Match } from '../engine/types.ts';
 import { useMatches } from './matches.tsx';
@@ -55,6 +56,10 @@ type ClubSync = {
   cancelRequest: () => Promise<void>;
   /** The admin: yes makes them an editor; no tells them it wasn't approved this time. */
   answerRequest: (email: string, yes: boolean) => Promise<void>;
+  /** Photos people set for themselves (or the admin set for them), by email. */
+  ownPhotos: Record<string, string>;
+  /** Set or take away (null) the photo kept under this email: anyone their own, the admin anyone's. */
+  setOwnPhoto: (email: string, photo: string | null) => Promise<void>;
 };
 
 /** What the phone and the club last agreed on, kept between visits. */
@@ -120,6 +125,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [requests, setRequests] = useState<EditorRequest[]>([]);
   const [myRequest, setMyRequest] = useState<EditorRequest | null>(null);
+  const [ownPhotos, setOwnPhotos] = useState<Record<string, string>>({});
   // The club as last heard, and the phone as it is now, for the sync to compare whenever either changes.
   const remote = useRef<{ matches: Map<string, RemoteMatch> | null; shared: Partial<Record<SharedKey, string | null>> }>({ matches: null, shared: {} });
   const local = useRef({ matches, shared: { squad, teams: savedTeams, auctions, lineups, photos } as Record<SharedKey, unknown> });
@@ -305,6 +311,21 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           ),
         );
       }
+      // Photos people set for themselves. Quiet on failure: the rest of the sync doesn't depend on them.
+      stops.push(
+        fb.F.onSnapshot(
+          fb.F.collection(fb.db, 'clubs', CLUB, 'photos'),
+          (snap) => {
+            const all: Record<string, string> = {};
+            snap.forEach((d) => {
+              const photo = (d.data() as { photo?: string }).photo;
+              if (photo) all[d.id] = photo;
+            });
+            setOwnPhotos(all);
+          },
+          () => {},
+        ),
+      );
     });
     return () => {
       gone = true;
@@ -419,9 +440,20 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     [role, setMember],
   );
 
+  const setOwnPhoto = useCallback(
+    async (who: string, photo: string | null) => {
+      if (!web || !user) return;
+      const fb = await firebase();
+      const ref = fb.F.doc(fb.db, 'clubs', CLUB, 'photos', who.trim().toLowerCase());
+      if (photo) await fb.F.setDoc(ref, { photo, at: Date.now(), by: user.email });
+      else await fb.F.deleteDoc(ref);
+    },
+    [web, user],
+  );
+
   const value = useMemo<ClubSync>(
-    () => ({ status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest }),
-    [status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest],
+    () => ({ status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, ownPhotos, setOwnPhoto }),
+    [status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, ownPhotos, setOwnPhoto],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
@@ -443,4 +475,40 @@ export function useAccess() {
   const score = admin || role === 'scorer';
   const why = score ? null : user ? 'Only editors can score. Ask the admin for editor access in My profile.' : 'Sign in, as an editor, to score for the club.';
   return { admin, score, why };
+}
+
+/**
+ * Every player's photo: the club's set (imported or set by the admin), and over it any a player set for themselves,
+ * matched to them by the email on their squad entry.
+ */
+export function usePhotos(): Photos {
+  const { photos, squad } = useSquad();
+  const { ownPhotos } = useClubSync();
+  return useMemo(() => {
+    if (!Object.keys(ownPhotos).length) return photos;
+    const all = { ...photos };
+    for (const p of squad) {
+      const own = p.email && ownPhotos[p.email.trim().toLowerCase()];
+      if (own) all[photoKey(p.name)] = own;
+    }
+    return all;
+  }, [photos, squad, ownPhotos]);
+}
+
+/**
+ * Set or take away a player's photo. On the live app a player with a club email keeps it under that email (their own
+ * place, which they can change themselves); everyone else, and any copy without the club sync, in the club's set.
+ */
+export function useSetPhoto() {
+  const { setPhoto } = useSquad();
+  const { status, setOwnPhoto } = useClubSync();
+  return useCallback(
+    async (player: { name: string; email?: string }, photo: string | null) => {
+      if (status !== 'unavailable' && player.email) {
+        await setOwnPhoto(player.email, photo);
+        if (!photo) setPhoto(player.name, null);
+      } else setPhoto(player.name, photo);
+    },
+    [status, setOwnPhoto, setPhoto],
+  );
 }

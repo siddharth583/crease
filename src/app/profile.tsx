@@ -5,7 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../components/Avatar.tsx';
 import { RatingChips } from '../components/Ratings.tsx';
-import { Button, Card, Chip, IconButton, PitchStripes, Screen, SectionLabel } from '../components/ui.tsx';
+import { Button, Card, Chip, IconButton, PitchStripes, Screen, SectionLabel, useToast } from '../components/ui.tsx';
 import { playerRatings } from '../engine/ratings.ts';
 import { battingAverage, bestFigures, careerStats, economy, playerKey, strikeRate } from '../engine/stats.ts';
 import { playerForEmail } from '../engine/squad.ts';
@@ -15,7 +15,8 @@ import { useMatches } from '../store/matches.tsx';
 import { usePrefs } from '../store/prefs.ts';
 import { useSquad } from '../store/squad.ts';
 import { ROLE, RequestEditor } from '../components/ClubSync.tsx';
-import { useClubSync } from '../store/sync.tsx';
+import { useClubSync, usePhotos, useSetPhoto } from '../store/sync.tsx';
+import { pickPhoto } from '../store/files.ts';
 import { colors, font, gradients, hero, radius, space, type } from '../theme.ts';
 
 // My profile: who's signed in and what they can do in the club, and their own cricket once they say which squad
@@ -25,7 +26,10 @@ const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(di
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { matches } = useMatches();
-  const { squad, photos } = useSquad();
+  const { squad } = useSquad();
+  const photos = usePhotos();
+  const setPhoto = useSetPhoto();
+  const toast = useToast();
   const { prefs, setPrefs } = usePrefs();
   const sync = useClubSync();
   const account = sync.user?.email ?? '';
@@ -44,6 +48,21 @@ export default function ProfileScreen() {
   const key = me ? playerKey({ id: '', name: '', players: [] }, me) : '';
   const career = useMemo(() => (key ? careerStats(matches).find((c) => c.key === key) : undefined), [matches, key]);
   const rated = useMemo(() => (key ? playerRatings(matches, key) : null), [matches, key]);
+  // Their photo: kept under their email on the live app, so only a squad entry with this account's email can change it
+  // from here (the admin links emails in The squad). A copy without the club sync keeps it on the phone.
+  const myPhoto = photoFor(photos, me);
+  const photoOwner = sync.status === 'unavailable' ? (player ? { name: player.name } : null) : byEmail ? { name: byEmail.name, email: account } : null;
+  const changePhoto = async (remove = false) => {
+    if (!photoOwner) return;
+    try {
+      const photo = remove ? null : await pickPhoto();
+      if (photo === null && !remove) return;
+      await setPhoto(photoOwner, photo);
+      toast.show(remove ? 'Photo removed' : 'Photo updated. Everyone in the club sees it.', 'success');
+    } catch (e) {
+      toast.show(e instanceof Error && e.message.includes('picture') ? e.message : 'Couldn’t save the photo. Try again.', 'error');
+    }
+  };
   // Signed in as someone the squad knows by name: offer them first.
   const guess = !me && sync.user ? squad.find((p) => nameKey(p.name) === nameKey(sync.user!.name)) : undefined;
   const others = [...squad].sort((a, b) => a.name.localeCompare(b.name));
@@ -58,7 +77,7 @@ export default function ProfileScreen() {
         <Text style={styles.title}>My profile</Text>
 
         <Card style={styles.account}>
-          <Avatar photo={photoFor(photos, me) ?? sync.user?.photo} name={sync.user?.name ?? me ?? ''} size={64} />
+          <Avatar photo={myPhoto ?? sync.user?.photo} name={sync.user?.name ?? me ?? ''} size={64} />
           <View style={{ flex: 1, minWidth: 0 }}>
             {sync.user ? (
               <>
@@ -87,6 +106,20 @@ export default function ProfileScreen() {
             )}
           </View>
         </Card>
+        {photoOwner ? (
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Button variant="ghost" icon="camera-outline" label={myPhoto ? 'Change my photo' : 'Add my photo'} onPress={() => void changePhoto()} />
+            </View>
+            {myPhoto && (
+              <View style={{ flex: 1 }}>
+                <Button variant="ghost" icon="close-outline" label="Remove my photo" onPress={() => void changePhoto(true)} />
+              </View>
+            )}
+          </View>
+        ) : (
+          Boolean(me && sync.user) && <Text style={styles.note}>To set your own photo, ask the admin to add {account} to your name in The squad.</Text>
+        )}
         {sync.status !== 'unavailable' &&
           (sync.user ? (
             <View style={styles.row}>

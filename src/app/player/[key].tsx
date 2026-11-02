@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Card, IconButton, Screen, SectionLabel, tap, GhostWord, PitchStripes } from '../../components/ui.tsx';
+import { Card, IconButton, Screen, SectionLabel, tap, GhostWord, PitchStripes, useToast } from '../../components/ui.tsx';
 import { CountUp, GrowBar } from '../../components/motion.tsx';
 import { RatingChips } from '../../components/Ratings.tsx';
 import { playerRatings } from '../../engine/ratings.ts';
@@ -21,8 +21,10 @@ import {
 } from '../../engine/stats.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
+import { useAccess, usePhotos, useSetPhoto } from '../../store/sync.tsx';
+import { pickPhoto } from '../../store/files.ts';
 import { colors, gradients, radius, space, type, font, ink, hero } from '../../theme.ts';
-import { photoFor } from '../../engine/photos.ts';
+import { photoFor, photoKey } from '../../engine/photos.ts';
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
 
@@ -95,15 +97,31 @@ export default function PlayerProfile() {
   const { key } = useLocalSearchParams<{ key: string }>();
   const { matches, ready } = useMatches();
   const insets = useSafeAreaInsets();
-  const { squad, photos } = useSquad();
+  const { squad } = useSquad();
+  const photos = usePhotos();
+  const setPhoto = useSetPhoto();
+  const { admin } = useAccess();
+  const toast = useToast();
   const c = useMemo(() => careerStats(matches).find((x) => x.key === key), [matches, key, squad]);
   const photo = c ? photoFor(photos, c.name) : undefined;
   // Their match ratings out of 10 and their form, as on the squad list.
   const rated = useMemo(() => playerRatings(matches, key), [matches, key]);
 
+  // The admin can set a squad player's photo from here.
+  const regular = c ? squad.find((p) => photoKey(p.name) === photoKey(c.name)) : undefined;
+  const choosePhoto = async () => {
+    if (!regular) return;
+    try {
+      const picked = await pickPhoto();
+      if (picked) await setPhoto(regular, picked);
+    } catch {
+      toast.show('Couldn’t save the photo. Try again.', 'error');
+    }
+  };
   const back = (
     <View style={styles.header}>
       <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/players'))} />
+      {admin && regular && <IconButton icon="camera-outline" label={photo ? 'Change photo' : 'Add photo'} onPress={() => void choosePhoto()} />}
     </View>
   );
   if (!c) {
@@ -136,7 +154,7 @@ export default function PlayerProfile() {
               // Their photo set into the corner, the shoulders and the left edge fading into the card.
               <Image source={{ uri: photo }} style={[styles.portrait, PORTRAIT_FADE]} resizeMode="cover" accessibilityIgnoresInvertColors />
             )}
-            <View style={[styles.heroTop, photo && styles.heroTopLeft]}>
+            <View style={styles.heroTop}>
               <View style={styles.teamTag}>
                 <Text style={styles.teamTagText}>{c.team}</Text>
               </View>
@@ -296,10 +314,9 @@ const styles = StyleSheet.create({
   stage: { alignSelf: 'stretch', height: 168, justifyContent: 'space-between' },
   portrait: { position: 'absolute', top: -space.xl, right: -space.xl, width: 200, height: 200 },
   nameOnPhoto: { fontSize: 36, lineHeight: 40, letterSpacing: -1, marginTop: 0, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 14, textShadowOffset: { width: 0, height: 2 } },
-  heroTopLeft: { justifyContent: 'flex-start', alignSelf: 'flex-start' },
   nameOnPhotoLong: { fontSize: 30, lineHeight: 34 },
   nameLong: { fontSize: 38, lineHeight: 44 },
-  header: { flexDirection: 'row', paddingHorizontal: space.lg, paddingVertical: space.sm },
+  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
   missing: { color: colors.muted, textAlign: 'center', marginTop: space.xxl },
   hero: {
     borderRadius: radius.xl,
@@ -310,10 +327,11 @@ const styles = StyleSheet.create({
     borderColor: hero.line,
   },
   name: { fontFamily: font.posterBlack, fontSize: 49, lineHeight: 55, color: hero.text, letterSpacing: -1.5, marginTop: space.lg, alignSelf: 'stretch' },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
-  formPill: { flexDirection: 'row', alignItems: 'center', height: 28, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: hero.ink(0.12) },
+  // The team, and their form under it, the same size.
+  heroTop: { alignSelf: 'flex-start', alignItems: 'flex-start', gap: 6 },
+  formPill: { flexDirection: 'row', alignItems: 'center', height: 24, paddingHorizontal: 10, borderRadius: radius.sm, backgroundColor: hero.ink(0.12) },
   formPillText: { ...type.label, color: hero.text },
-  formPillValue: { fontFamily: font.posterBlack, fontSize: 15, letterSpacing: 0, ...type.num },
+  formPillValue: { fontFamily: font.heavy, letterSpacing: 0, ...type.num },
   teamTag: { alignSelf: 'flex-start', backgroundColor: colors.accent, paddingHorizontal: 10, height: 24, borderRadius: radius.sm, justifyContent: 'center', transform: [{ skewX: '-8deg' }] },
   teamTagText: { ...type.label, color: colors.onAccent },
   heroStats: {

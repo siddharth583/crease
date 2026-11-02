@@ -15,7 +15,7 @@ import { newId, useMatches } from '../store/matches.tsx';
 import { pickPhoto, pickTextFile } from '../store/files.ts';
 import { useSquad } from '../store/squad.ts';
 import { parsePhotos, photoFor } from '../engine/photos.ts';
-import { useAccess } from '../store/sync.tsx';
+import { useAccess, usePhotos, useSetPhoto } from '../store/sync.tsx';
 import { colors, font, radius, space, type } from '../theme.ts';
 
 const ROLES: { value: Role; label: string }[] = [
@@ -68,13 +68,14 @@ function PlayerRow({
   onRemove: () => void;
 }) {
   const fromMatches = Boolean(r?.stars) && !p.manual;
-  const { photos, setPhoto } = useSquad();
+  const photos = usePhotos();
+  const setPhoto = useSetPhoto();
   const toast = useToast();
   const hasPhoto = Boolean(photoFor(photos, p.name));
   const choosePhoto = async () => {
     try {
       const photo = await pickPhoto();
-      if (photo) setPhoto(p.name, photo);
+      if (photo) await setPhoto(p, photo);
     } catch (e) {
       toast.show(e instanceof Error ? e.message : 'Couldn’t open that picture.', 'error');
     }
@@ -131,7 +132,7 @@ function PlayerRow({
             </View>
             {hasPhoto && (
               <View style={{ flex: 1 }}>
-                <Button variant="ghost" icon="close-outline" label="Remove photo" onPress={() => setPhoto(p.name, null)} />
+                <Button variant="ghost" icon="close-outline" label="Remove photo" onPress={() => void setPhoto(p, null).catch(() => toast.show('Couldn’t remove the photo. Try again.', 'error'))} />
               </View>
             )}
           </View>

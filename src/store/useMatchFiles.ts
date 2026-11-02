@@ -7,13 +7,15 @@ import { matchReportHtml } from '../engine/report.ts';
 import { pickTextFile, savePdf, saveReportImage, saveTextFile } from './files.ts';
 import { useMatches } from './matches.tsx';
 import { useSquad } from './squad.ts';
+import { usePhotos } from './sync.tsx';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 'es'}`;
 
 /** Export one match or all of them as a file, and import files others shared, reporting back through a toast. */
 export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) {
   const { matches, savedTeams, importMatches } = useMatches();
-  const { squad, auctions, lineups, importSquad, photos } = useSquad();
+  const { squad, auctions, lineups, importSquad } = useSquad();
+  const photos = usePhotos();
 
   /** Everything on this phone in one file: every match, the saved sides, the squad and the auctions. */
   const exportEverything = useCallback(async () => {
