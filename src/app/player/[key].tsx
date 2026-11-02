@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Card, IconButton, Screen, SectionLabel, tap, GhostWord, PitchStripes, useToast } from '../../components/ui.tsx';
+import { Card, IconButton, PressableScale, Screen, SectionLabel, tap, GhostWord, PitchStripes, useToast } from '../../components/ui.tsx';
 import { CountUp, GrowBar } from '../../components/motion.tsx';
 import { RatingChips } from '../../components/Ratings.tsx';
 import { playerRatings } from '../../engine/ratings.ts';
@@ -23,7 +23,7 @@ import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { useAccess, usePhotos, useSetPhoto } from '../../store/sync.tsx';
 import { pickPhoto } from '../../store/files.ts';
-import { colors, gradients, radius, space, type, font, ink, hero } from '../../theme.ts';
+import { colors, gradients, radius, space, type, font, ink, hero, teamTheme } from '../../theme.ts';
 import { photoFor, photoKey } from '../../engine/photos.ts';
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
@@ -104,6 +104,8 @@ export default function PlayerProfile() {
   const toast = useToast();
   const c = useMemo(() => careerStats(matches).find((x) => x.key === key), [matches, key, squad]);
   const photo = c ? photoFor(photos, c.name) : undefined;
+  // The page wears their side's colours.
+  const side = teamTheme(c?.team);
   // Their match ratings out of 10 and their form, as on the squad list.
   const rated = useMemo(() => playerRatings(matches, key), [matches, key]);
 
@@ -142,7 +144,7 @@ export default function PlayerProfile() {
     <Screen>
       {back}
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
-        <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
+        <LinearGradient colors={side.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
           <PitchStripes tint="255,255,255" />
           {!photo && (
             <GhostWord size={260} style={{ right: -20, top: -60, color: hero.ink(0.05) }}>
@@ -155,12 +157,17 @@ export default function PlayerProfile() {
               <Image source={{ uri: photo }} style={[styles.portrait, PORTRAIT_FADE]} resizeMode="cover" accessibilityIgnoresInvertColors />
             )}
             <View style={styles.heroTop}>
-              <View style={styles.teamTag}>
-                <Text style={styles.teamTagText}>{c.team}</Text>
-              </View>
+              <PressableScale
+                scaleTo={0.95}
+                onPress={() => router.push({ pathname: '/team/[name]', params: { name: c.team } })}
+                accessibilityLabel={`${c.team} team page`}
+                style={[styles.teamTag, { backgroundColor: side.accent }]}
+              >
+                <Text style={[styles.teamTagText, { color: side.onAccent }]}>{c.team}</Text>
+              </PressableScale>
               {rated.form !== null && (
-                <View style={[styles.formPill, rated.form >= 8 && { backgroundColor: hero.accent }]}>
-                  <Text style={[styles.formPillText, rated.form >= 8 && { color: colors.onAccent }]}>
+                <View style={[styles.formPill, rated.form >= 8 && { backgroundColor: side.accent }]}>
+                  <Text style={[styles.formPillText, rated.form >= 8 && { color: side.onAccent }]}>
                     Form <Text style={styles.formPillValue}>{rated.form.toFixed(1)}</Text>
                   </Text>
                 </View>

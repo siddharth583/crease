@@ -151,3 +151,17 @@ export const type = {
   label: { fontSize: 11, fontFamily: font.semibold, letterSpacing: 1.1, textTransform: 'uppercase' as const },
   num: { fontVariant: ['tabular-nums' as const] },
 };
+
+/** A side's own colours, apart from the app's volt and green: its accent, the ink on it, and its panel's gradient. */
+export type TeamTheme = { accent: string; onAccent: string; hero: readonly [string, string, string]; soft: string };
+const TEAM_THEMES: Record<string, TeamTheme> = {
+  /** Ember orange on dark rust. */
+  'copan strikers': { accent: '#FF7A2F', onAccent: '#1C0B02', hero: ['#40200F', '#28140A', '#150B06'], soft: 'rgba(255,122,47,0.16)' },
+  /** Royal gold on deep navy. */
+  'copan royals': { accent: '#FFC940', onAccent: '#1A1302', hero: ['#1A2C57', '#10203F', '#0A1326'], soft: 'rgba(255,201,64,0.16)' },
+};
+/** A side's own colours, if it has them. */
+export const ownTeamTheme = (name?: string | null): TeamTheme | undefined => TEAM_THEMES[(name ?? '').trim().toLowerCase()];
+/** A side's own colours; any other side (a one-off XI) plays in the app's own. */
+export const teamTheme = (name?: string | null): TeamTheme =>
+  ownTeamTheme(name) ?? { accent: NIGHT.accent, onAccent: NIGHT.onAccent, hero: PITCH, soft: 'rgba(215,255,58,0.14)' };

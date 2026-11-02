@@ -47,8 +47,8 @@ export async function pickTextFile(): Promise<string | null> {
   return new File(asset.uri).text();
 }
 
-/** Photos are kept this many pixels square: sharp on a big avatar, small enough for the whole squad in one club doc. */
-const PHOTO_SIZE = 200;
+/** Photos are kept this many pixels square: sharp on the player page, well under the club's 200 KB a photo. */
+const PHOTO_SIZE = 512;
 
 /**
  * Lets the person pick a picture and returns it cropped to the middle square and shrunk, as a JPEG data URL; null if

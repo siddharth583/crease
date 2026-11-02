@@ -26,7 +26,7 @@ import { newId, useMatches } from '../../store/matches.tsx';
 import { saveReportImage } from '../../store/files.ts';
 import { useSquad } from '../../store/squad.ts';
 import { useAccess } from '../../store/sync.tsx';
-import { colors, font, radius, space, type } from '../../theme.ts';
+import { colors, font, ownTeamTheme, radius, space, type } from '../../theme.ts';
 
 // The sides: how strong each is on current form, and two even sides from whoever turns up today.
 
@@ -36,6 +36,9 @@ const TINTS = [colors.accentInk, colors.violet];
 type SideEdit = { other: string; picked: string | null; onRename: (name: string) => void; onPick: (player: string) => void; onMove: (player: string) => void };
 
 /** A side's strength in a few numbers, then its players best first. With `edit`, the side can be changed. */
+/** A side's colour: its own when it has one, else the usual first or second. */
+const tintOf = (name: string, i: number) => ownTeamTheme(name)?.accent ?? TINTS[i % 2];
+
 function SideCard({
   name,
   s,
@@ -45,7 +48,10 @@ function SideCard({
   edit,
   tagged = [],
   results,
+  onOpen,
 }: {
+  /** Opens the side's own page. */
+  onOpen?: () => void;
   name: string;
   s: SideStrength;
   tint: string;
@@ -73,6 +79,13 @@ function SideCard({
               autoCapitalize="words"
               accessibilityLabel={`Rename ${name}`}
             />
+          ) : onOpen ? (
+            <PressableScale scaleTo={0.97} onPress={onOpen} accessibilityLabel={`${name} team page`} style={styles.sideLink}>
+              <Text style={styles.sideName} numberOfLines={1}>
+                {name}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+            </PressableScale>
           ) : (
             <Text style={styles.sideName} numberOfLines={1}>
               {name}
@@ -195,7 +208,7 @@ function StrengthView({ table }: { table: Map<string, Strength> }) {
           <Card style={styles.compare}>
             {[a, b].map((x, i) => (
               <View key={x.team.id} style={[styles.compareSide, i === 1 && { alignItems: 'flex-end' }]}>
-                <Text style={[styles.comparePower, { color: TINTS[i] }]}>{x.s.power.toFixed(1)}</Text>
+                <Text style={[styles.comparePower, { color: tintOf(x.team.name, i) }]}>{x.s.power.toFixed(1)}</Text>
                 <Text style={styles.compareName} numberOfLines={1}>
                   {x.team.name}
                 </Text>
@@ -207,7 +220,7 @@ function StrengthView({ table }: { table: Map<string, Strength> }) {
       )}
       {sides.map((x, i) => (
         <FadeIn key={x.team.id} delay={60 + i * 60}>
-          <SideCard name={x.team.name} s={x.s} tint={TINTS[i % 2]} captain={x.team.players.find((p) => p.id === x.team.captain)?.name} results={recentResults(matches, x.team.name)} />
+          <SideCard name={x.team.name} s={x.s} tint={tintOf(x.team.name, i)} onOpen={() => router.push({ pathname: '/team/[name]', params: { name: x.team.name } })} captain={x.team.players.find((p) => p.id === x.team.captain)?.name} results={recentResults(matches, x.team.name)} />
         </FadeIn>
       ))}
       <Text style={styles.hint}>
@@ -660,6 +673,7 @@ export default function TeamsScreen() {
 }
 
 const styles = StyleSheet.create({
+  sideLink: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', maxWidth: '100%' },
   content: { padding: space.lg, paddingBottom: 130 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.lg },
   title: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
