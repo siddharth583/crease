@@ -13,7 +13,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 'es'}`
 /** Export one match or all of them as a file, and import files others shared, reporting back through a toast. */
 export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) {
   const { matches, savedTeams, importMatches } = useMatches();
-  const { squad, auctions, lineups, importSquad } = useSquad();
+  const { squad, auctions, lineups, importSquad, photos } = useSquad();
 
   /** Everything on this phone in one file: every match, the saved sides, the squad and the auctions. */
   const exportEverything = useCallback(async () => {
@@ -50,14 +50,14 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
       if (!which.length) return notify('Pick at least one match.', 'info');
       try {
         notify('Making the PDF…', 'info');
-        const result = await savePdf(backupFileName(which, new Date(), 'pdf'), matchReportHtml(which, matches));
+        const result = await savePdf(backupFileName(which, new Date(), 'pdf'), matchReportHtml(which, matches, photos));
         if (result === 'downloaded') notify('PDF saved to your downloads');
         if (result === 'shared') notify('Scorecard PDF ready to send');
       } catch {
         notify('Couldn’t make the PDF. Try again.', 'error');
       }
     },
-    [notify, matches],
+    [notify, matches, photos],
   );
 
   /** Each match as a picture of its scorecard: one image a match, named like its PDF. */
@@ -67,14 +67,14 @@ export function useMatchFiles(notify: (text: string, tone?: ToastTone) => void) 
       try {
         notify(which.length === 1 ? 'Making the picture…' : `Making ${which.length} pictures…`, 'info');
         let result: Awaited<ReturnType<typeof saveReportImage>> = 'cancelled';
-        for (const m of which) result = await saveReportImage(backupFileName([m], new Date(), 'png'), matchReportHtml([m], matches));
+        for (const m of which) result = await saveReportImage(backupFileName([m], new Date(), 'png'), matchReportHtml([m], matches, photos));
         if (result === 'downloaded') notify(which.length === 1 ? 'Picture saved to your downloads' : `${which.length} pictures saved to your downloads`);
         if (result === 'shared') notify('Scorecard ready to send');
       } catch {
         notify('Couldn’t make the picture. Try again.', 'error');
       }
     },
-    [notify, matches],
+    [notify, matches, photos],
   );
 
   /** Export chosen matches in the format picked in the export sheet. */

@@ -2,6 +2,7 @@ import { appIconSvg } from './mark.ts';
 import { dismissal, matchState, oversText, playerName, type InningsState, type MatchState } from './engine.ts';
 import { playerOfTheMatch, seriesState } from './stats.ts';
 import type { Match } from './types.ts';
+import { photoFor, type Photos } from './photos.ts';
 
 // A printable match report, like a matchday programme: a black scoreboard cover with both totals, the
 // highlights on cards, the run race, then each innings as a clean scorecard on white. Turned into a PDF on
@@ -112,7 +113,7 @@ function inningsHtml(match: Match, s: InningsState, label: string, tint: string,
       const notOut = !b.out && !b.retired && atCrease.includes(b.id);
       const marks = `${match.captains?.[s.battingTeam.id] === b.id ? '<span class="mark">c</span>' : ''}${match.keepers?.[s.battingTeam.id] === b.id ? '<span class="mark">wk</span>' : ''}`;
       return `<tr${b.runs === topRuns && b.runs > 0 ? ' class="top"' : ''}>
-        <td class="name"><div class="who">${esc(playerName(match, b.id))}${notOut ? '<span class="no">*</span>' : ''}${marks}</div><div class="how${notOut ? ' live' : ''}">${esc(dismissal(match, b))}</div></td>
+        <td class="name"><div class="who">${face(playerName(match, b.id))}${esc(playerName(match, b.id))}${notOut ? '<span class="no">*</span>' : ''}${marks}</div><div class="how${notOut ? ' live' : ''}">${esc(dismissal(match, b))}</div></td>
         <td class="runs"><b>${b.runs}</b></td><td>${b.balls}</td><td>${b.fours}</td><td>${b.sixes}</td><td class="dim">${sr(b.runs, b.balls)}</td>
       </tr>`;
     })
@@ -122,7 +123,7 @@ function inningsHtml(match: Match, s: InningsState, label: string, tint: string,
     .filter((b) => b.balls || b.runs)
     .map(
       (b) => `<tr>
-        <td class="name"><div class="who">${esc(playerName(match, b.id))}</div>${b.wides || b.noballs ? `<div class="how">${b.wides} wd · ${b.noballs} nb</div>` : ''}</td>
+        <td class="name"><div class="who">${face(playerName(match, b.id))}${esc(playerName(match, b.id))}</div>${b.wides || b.noballs ? `<div class="how">${b.wides} wd · ${b.noballs} nb</div>` : ''}</td>
         <td>${oversText(b.balls)}</td><td>${b.maidens}</td><td>${b.runs}</td><td><span class="wkts${b.wickets >= 2 ? ' hot' : b.wickets ? '' : ' zero'}">${b.wickets}</span></td><td class="dim">${econ(b.runs, b.balls)}</td>
       </tr>`,
     )
@@ -304,6 +305,8 @@ export const REPORT_HEAD = `<link rel="preconnect" href="https://fonts.googleapi
   th.name, td.name { text-align: left; width: 44%; }
   th.runs, td.runs { width: 15%; }
   .who { font-weight: 600; font-size: 11px; display: flex; align-items: center; gap: 5px; }
+  .face { flex: none; width: 18px; height: 18px; border-radius: 50%; margin-right: 2px; background: var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 7.5px; font-weight: 700; color: var(--faint); overflow: hidden; }
+  img.face { object-fit: cover; }
   .no { color: var(--volt-ink); font-weight: 800; margin-left: -3px; }
   .mark { font-size: 7.5px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); background: var(--soft); border-radius: 4px; padding: 1px 4px; }
   .how { color: var(--muted); font-size: 9px; margin-top: 1px; font-weight: 400; }
@@ -338,8 +341,18 @@ export const REPORT_HEAD = `<link rel="preconnect" href="https://fonts.googleapi
   footer { break-before: avoid; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--faint); font-size: 8.5px; display: flex; align-items: center; justify-content: center; }
 </style>`;
 
+/** The players' photos for the report being made: a small round one before each name, initials when there's none. */
+let photosNow: Photos = {};
+function face(name: string) {
+  const photo = photoFor(photosNow, name);
+  if (photo) return `<img class="face" src="${photo}" alt="">`;
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
+  return `<span class="face">${esc(initials)}</span>`;
+}
+
 /** One HTML document, a match after another, ready for printing or turning into a PDF. */
-export function matchReportHtml(matches: Match[], all: Match[] = matches): string {
+export function matchReportHtml(matches: Match[], all: Match[] = matches, photos: Photos = {}): string {
+  photosNow = photos;
   const title = matches.length === 1 ? `${matches[0].teams[0].name} vs ${matches[0].teams[1].name}` : `${matches.length} matches`;
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>${esc(title)} · Crease</title>

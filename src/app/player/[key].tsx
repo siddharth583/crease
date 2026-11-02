@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, IconButton, Screen, SectionLabel, tap, GhostWord, PitchStripes } from '../../components/ui.tsx';
 import { CountUp, GrowBar } from '../../components/motion.tsx';
@@ -22,7 +22,6 @@ import {
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { colors, gradients, radius, space, type, font, ink, hero } from '../../theme.ts';
-import { Avatar } from '../../components/Avatar.tsx';
 import { photoFor } from '../../engine/photos.ts';
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
@@ -98,6 +97,7 @@ export default function PlayerProfile() {
   const insets = useSafeAreaInsets();
   const { squad, photos } = useSquad();
   const c = useMemo(() => careerStats(matches).find((x) => x.key === key), [matches, key, squad]);
+  const photo = c ? photoFor(photos, c.name) : undefined;
   // Their match ratings out of 10 and their form, as on the squad list.
   const rated = useMemo(() => playerRatings(matches, key), [matches, key]);
 
@@ -126,9 +126,14 @@ export default function PlayerProfile() {
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
         <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
           <PitchStripes tint="255,255,255" />
-          <GhostWord size={260} style={{ right: -20, top: -60, color: hero.ink(0.05) }}>
-            {c.name.slice(0, 1)}
-          </GhostWord>
+          {photo ? (
+            // Their photo on the right, fading into the card to the left and at the foot.
+            <Image source={{ uri: photo }} style={[styles.portrait, PORTRAIT_FADE]} resizeMode="cover" accessibilityIgnoresInvertColors />
+          ) : (
+            <GhostWord size={260} style={{ right: -20, top: -60, color: hero.ink(0.05) }}>
+              {c.name.slice(0, 1)}
+            </GhostWord>
+          )}
           <View style={styles.heroTop}>
             <View style={styles.teamTag}>
               <Text style={styles.teamTagText}>{c.team}</Text>
@@ -141,12 +146,9 @@ export default function PlayerProfile() {
               </View>
             )}
           </View>
-          <View style={styles.nameRow}>
-            {photoFor(photos, c.name) && <Avatar photo={photoFor(photos, c.name)} name={c.name} size={64} />}
-            <Text style={[styles.name, { flex: 1 }]} numberOfLines={2}>
-              {c.name}
-            </Text>
-          </View>
+          <Text style={[styles.name, photo && styles.nameBeside]} numberOfLines={2}>
+            {c.name}
+          </Text>
           <View style={styles.heroStats}>
             {[
               ['Matches', c.matches],
@@ -269,8 +271,19 @@ export default function PlayerProfile() {
   );
 }
 
+/** Fades the portrait out to the left and towards the bottom (the browser's mask; elsewhere it shows as is). */
+const PORTRAIT_FADE = (Platform.OS === 'web'
+  ? {
+      maskImage: 'linear-gradient(to left, #000 45%, transparent 95%), linear-gradient(to top, transparent 0%, #000 45%)',
+      maskComposite: 'intersect',
+      WebkitMaskImage: 'linear-gradient(to left, #000 45%, transparent 95%), linear-gradient(to top, transparent 0%, #000 45%)',
+      WebkitMaskComposite: 'source-in',
+    }
+  : {}) as object;
+
 const styles = StyleSheet.create({
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  portrait: { position: 'absolute', right: 0, top: 0, width: 250, height: 250, opacity: 0.95 },
+  nameBeside: { textShadowColor: 'rgba(0,0,0,0.55)', textShadowRadius: 18, textShadowOffset: { width: 0, height: 2 } },
   header: { flexDirection: 'row', paddingHorizontal: space.lg, paddingVertical: space.sm },
   missing: { color: colors.muted, textAlign: 'center', marginTop: space.xxl },
   hero: {

@@ -15,7 +15,8 @@ const initials = (name: string) =>
 
 /** A round photo, or the person's initials when there's no photo. */
 export function Avatar({ photo, name, size }: { photo?: string | null; name: string; size: number }) {
-  if (photo) return <Image source={{ uri: photo }} style={{ width: size, height: size, borderRadius: size / 2 }} accessibilityIgnoresInvertColors />;
+  // Cut-out photos are see-through around the person: they sit on the same disc as the initials.
+  if (photo) return <Image source={{ uri: photo }} style={[styles.initials, { width: size, height: size, borderRadius: size / 2 }]} accessibilityIgnoresInvertColors />;
   return (
     <View style={[styles.initials, { width: size, height: size, borderRadius: size / 2 }]}>
       {name ? <Text style={[styles.initialsText, { fontSize: size * 0.38 }]}>{initials(name)}</Text> : <Ionicons name="person" size={size * 0.5} color={colors.muted} />}
