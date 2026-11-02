@@ -126,27 +126,30 @@ export default function PlayerProfile() {
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
         <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
           <PitchStripes tint="255,255,255" />
-          {photo ? (
-            // Their photo on the right, fading into the card to the left and at the foot.
-            <Image source={{ uri: photo }} style={[styles.portrait, PORTRAIT_FADE]} resizeMode="cover" accessibilityIgnoresInvertColors />
-          ) : (
+          {!photo && (
             <GhostWord size={260} style={{ right: -20, top: -60, color: hero.ink(0.05) }}>
               {c.name.slice(0, 1)}
             </GhostWord>
           )}
-          <View style={styles.heroTop}>
-            <View style={styles.teamTag}>
-              <Text style={styles.teamTagText}>{c.team}</Text>
-            </View>
-            {rated.form !== null && (
-              <View style={[styles.formPill, rated.form >= 8 && { backgroundColor: hero.accent }]}>
-                <Text style={[styles.formPillText, rated.form >= 8 && { color: colors.onAccent }]}>
-                  Form <Text style={styles.formPillValue}>{rated.form.toFixed(1)}</Text>
-                </Text>
+          <View style={photo ? styles.photoRow : undefined}>
+            <View style={[styles.heroTop, photo && styles.heroTopStacked]}>
+              <View style={styles.teamTag}>
+                <Text style={styles.teamTagText}>{c.team}</Text>
               </View>
+              {rated.form !== null && (
+                <View style={[styles.formPill, rated.form >= 8 && { backgroundColor: hero.accent }]}>
+                  <Text style={[styles.formPillText, rated.form >= 8 && { color: colors.onAccent }]}>
+                    Form <Text style={styles.formPillValue}>{rated.form.toFixed(1)}</Text>
+                  </Text>
+                </View>
+              )}
+            </View>
+            {photo && (
+              // Their photo in the top corner, the head clear of the name, the shoulders fading into the card.
+              <Image source={{ uri: photo }} style={[styles.portrait, PORTRAIT_FADE]} resizeMode="cover" accessibilityIgnoresInvertColors />
             )}
           </View>
-          <Text style={[styles.name, photo && styles.nameBeside]} numberOfLines={2}>
+          <Text style={[styles.name, longestWord(c.name) > 10 && styles.nameLong, photo && styles.nameUnder]} numberOfLines={2}>
             {c.name}
           </Text>
           <View style={styles.heroStats}>
@@ -271,19 +274,25 @@ export default function PlayerProfile() {
   );
 }
 
-/** Fades the portrait out to the left and towards the bottom (the browser's mask; elsewhere it shows as is). */
+/** A long word (a surname like Bhattacharjee) gets smaller type, so it fits on its line rather than being cut. */
+const longestWord = (name: string) => Math.max(...name.split(/\s+/).map((w) => w.length));
+
+/** Fades the portrait's shoulders and its left edge into the card (the browser's mask; elsewhere it shows as is). */
 const PORTRAIT_FADE = (Platform.OS === 'web'
   ? {
-      maskImage: 'linear-gradient(to left, #000 45%, transparent 95%), linear-gradient(to top, transparent 0%, #000 45%)',
+      maskImage: 'linear-gradient(to bottom, #000 62%, transparent 100%), linear-gradient(to right, transparent 0%, #000 22%)',
       maskComposite: 'intersect',
-      WebkitMaskImage: 'linear-gradient(to left, #000 45%, transparent 95%), linear-gradient(to top, transparent 0%, #000 45%)',
+      WebkitMaskImage: 'linear-gradient(to bottom, #000 62%, transparent 100%), linear-gradient(to right, transparent 0%, #000 22%)',
       WebkitMaskComposite: 'source-in',
     }
   : {}) as object;
 
 const styles = StyleSheet.create({
-  portrait: { position: 'absolute', right: 0, top: 0, width: 250, height: 250, opacity: 0.95 },
-  nameBeside: { textShadowColor: 'rgba(0,0,0,0.55)', textShadowRadius: 18, textShadowOffset: { width: 0, height: 2 } },
+  photoRow: { flexDirection: 'row', alignItems: 'flex-start', alignSelf: 'stretch' },
+  heroTopStacked: { flex: 1, flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start' },
+  portrait: { width: 200, height: 200, marginTop: -space.xl, marginRight: -space.xl },
+  nameUnder: { marginTop: -space.lg },
+  nameLong: { fontSize: 38, lineHeight: 44 },
   header: { flexDirection: 'row', paddingHorizontal: space.lg, paddingVertical: space.sm },
   missing: { color: colors.muted, textAlign: 'center', marginTop: space.xxl },
   hero: {
