@@ -131,8 +131,12 @@ export default function PlayerProfile() {
               {c.name.slice(0, 1)}
             </GhostWord>
           )}
-          <View style={photo ? styles.photoRow : undefined}>
-            <View style={[styles.heroTop, photo && styles.heroTopStacked]}>
+          <View style={photo ? styles.stage : styles.plain}>
+            {photo && (
+              // Their photo set into the corner, the shoulders and the left edge fading into the card.
+              <Image source={{ uri: photo }} style={[styles.portrait, PORTRAIT_FADE]} resizeMode="cover" accessibilityIgnoresInvertColors />
+            )}
+            <View style={[styles.heroTop, photo && styles.heroTopLeft]}>
               <View style={styles.teamTag}>
                 <Text style={styles.teamTagText}>{c.team}</Text>
               </View>
@@ -144,15 +148,14 @@ export default function PlayerProfile() {
                 </View>
               )}
             </View>
-            {photo && (
-              // Their photo in the top corner, the head clear of the name, the shoulders fading into the card.
-              <Image source={{ uri: photo }} style={[styles.portrait, PORTRAIT_FADE]} resizeMode="cover" accessibilityIgnoresInvertColors />
-            )}
+            <Text
+              style={[styles.name, photo ? [styles.nameOnPhoto, longestWord(c.name) > 10 && styles.nameOnPhotoLong] : longestWord(c.name) > 10 && styles.nameLong]}
+              numberOfLines={2}
+            >
+              {c.name}
+            </Text>
           </View>
-          <Text style={[styles.name, longestWord(c.name) > 10 && styles.nameLong, photo && styles.nameUnder]} numberOfLines={2}>
-            {c.name}
-          </Text>
-          <View style={styles.heroStats}>
+          <View style={[styles.heroStats, photo && { marginTop: space.md }]}>
             {[
               ['Matches', c.matches],
               ['Won', wins],
@@ -288,10 +291,13 @@ const PORTRAIT_FADE = (Platform.OS === 'web'
   : {}) as object;
 
 const styles = StyleSheet.create({
-  photoRow: { flexDirection: 'row', alignItems: 'flex-start', alignSelf: 'stretch' },
-  heroTopStacked: { flex: 1, flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start' },
-  portrait: { width: 200, height: 200, marginTop: -space.xl, marginRight: -space.xl },
-  nameUnder: { marginTop: -space.lg },
+  plain: { alignSelf: 'stretch' },
+  // With a photo: a fixed stage the photo fills on the right; the tags at the top, the name at the foot over the faded shoulders.
+  stage: { alignSelf: 'stretch', height: 168, justifyContent: 'space-between' },
+  portrait: { position: 'absolute', top: -space.xl, right: -space.xl, width: 200, height: 200 },
+  nameOnPhoto: { fontSize: 36, lineHeight: 40, letterSpacing: -1, marginTop: 0, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 14, textShadowOffset: { width: 0, height: 2 } },
+  heroTopLeft: { justifyContent: 'flex-start', alignSelf: 'flex-start' },
+  nameOnPhotoLong: { fontSize: 30, lineHeight: 34 },
   nameLong: { fontSize: 38, lineHeight: 44 },
   header: { flexDirection: 'row', paddingHorizontal: space.lg, paddingVertical: space.sm },
   missing: { color: colors.muted, textAlign: 'center', marginTop: space.xxl },
