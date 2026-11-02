@@ -13,6 +13,8 @@ import { SeriesPips } from '../series/[id].tsx';
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
+import { useClubSync } from '../../store/sync.tsx';
+import { Avatar } from '../../components/Avatar.tsx';
 import { usePrefs } from '../../store/prefs.ts';
 import { colors, font, gradients, radius, space, type, hero, edge } from '../../theme.ts';
 import { AppMark } from '../../components/AppMark.tsx';
@@ -251,6 +253,7 @@ export default function Home() {
   const { matches, deleteMatch, ready, importMatches } = useMatches();
   const toast = useToast();
   const { exportEverything } = useMatchFiles(toast.show);
+  const sync = useClubSync();
   const { prefs, setPrefs } = usePrefs();
   // Remind once a week that a lost phone shouldn't mean lost matches.
   const backupDue = matches.length >= 2 && (!prefs.lastBackup || Date.now() - prefs.lastBackup > 7 * 86_400_000);
@@ -273,6 +276,9 @@ export default function Home() {
               <Text style={styles.newMatchText}>New match</Text>
             </PressableScale>
           )}
+          <PressableScale accessibilityLabel="My profile" onPress={() => router.push('/profile')} style={styles.me}>
+            <Avatar photo={sync.user?.photo} name={sync.user?.name ?? prefs.me?.[sync.user?.email ?? ''] ?? ''} size={36} />
+          </PressableScale>
           <PressableScale accessibilityLabel="Settings" onPress={() => router.push('/settings')} style={styles.gear}>
             <Ionicons name="settings-outline" size={18} color={colors.text} />
           </PressableScale>
@@ -378,6 +384,7 @@ const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: 130 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.xl },
   brand: { fontFamily: font.posterBlack, fontSize: 22, color: colors.text, letterSpacing: -0.6 },
+  me: { borderRadius: radius.pill },
   newMatch: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 38, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: colors.accent },
   newMatchText: { color: colors.onAccent, fontFamily: font.bold, fontSize: 14 },
   gear: {

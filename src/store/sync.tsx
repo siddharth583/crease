@@ -34,7 +34,7 @@ export type ClubRole = 'owner' | 'scorer' | 'viewer';
 export type SyncStatus = 'unavailable' | 'starting' | 'signed-out' | 'signing-in' | 'not-member' | 'syncing' | 'synced' | 'error';
 type ClubSync = {
   status: SyncStatus;
-  user: { email: string; name: string } | null;
+  user: { email: string; name: string; photo: string | null } | null;
   role: ClubRole | null;
   members: Record<string, 'scorer' | 'viewer'>;
   lastSync: number | null;
@@ -178,7 +178,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       .then((fb) => {
         if (gone) return;
         stop = fb.A.onAuthStateChanged(fb.auth, (u) => {
-          setUser(u?.email ? { email: u.email.toLowerCase(), name: u.displayName ?? u.email } : null);
+          setUser(u?.email ? { email: u.email.toLowerCase(), name: u.displayName ?? u.email, photo: u.photoURL } : null);
           if (!u) {
             setRole(null);
             setStatus('signed-out');

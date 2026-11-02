@@ -10,6 +10,8 @@ export type Prefs = {
   theme: 'night' | 'day';
   /** When the last full backup was exported (ms), for the reminder. */
   lastBackup: number | null;
+  /** Which squad player each account on this phone is (by email, or '' signed out), for My profile. */
+  me?: Record<string, string>;
 };
 
 const DEFAULTS: Prefs = { theme: 'night', lastBackup: null };
