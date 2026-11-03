@@ -7,6 +7,7 @@ import { PlayerAvatar } from '../../../components/Avatar.tsx';
 import { NameSuggestions } from '../../../components/NameSuggestions.tsx';
 import { OverEditSheet } from '../../../components/OverEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
+import { canChangeResult, ResultSheet } from '../../../components/ResultSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
 import { BallChip, Button, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast, WideHead } from '../../../components/ui.tsx';
 import { Columns, Page, useLayout } from '../../../components/layout.tsx';
@@ -370,7 +371,8 @@ export default function Scorecard() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { match, saveMatch } = useMatch(id);
   // Only the admin changes a scorecard, picks the Man of the Match or deletes a match.
-  const { admin } = useAccess();
+  const access = useAccess();
+  const { admin } = access;
   const { deleteMatch } = useMatches();
   // Signed in to the club, a delete goes to everyone's phone.
   const { user } = useClubSync();
@@ -378,6 +380,7 @@ export default function Scorecard() {
   const [editMode, setEditMode] = useState(false);
   const [editingOver, setEditingOver] = useState<number | null>(null);
   const [pickingMom, setPickingMom] = useState(false);
+  const [callingResult, setCallingResult] = useState(false);
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<string | null>(null);
   const toast = useToast();
@@ -469,6 +472,12 @@ export default function Scorecard() {
             color={state.result ? colors.onAccent : colors.danger}
           />
           <Text style={[styles.bannerText, state.result ? { color: colors.onAccent } : null, wide && { fontSize: 20 }]}>{state.result ?? 'Live · match in progress'}</Text>
+          {/* A chase ended early: call it on the score, a draw or a forfeit. */}
+          {state.result && canChangeResult(match, access) && (
+            <PressableScale accessibilityLabel="Change the result" hitSlop={6} onPress={() => setCallingResult(true)} style={styles.momChange}>
+              <Text style={styles.momChangeText}>Change</Text>
+            </PressableScale>
+          )}
         </View>
         {mom && (
           <View style={[styles.mom, wide && styles.momWide]}>
@@ -633,6 +642,16 @@ export default function Scorecard() {
           const now = matchState(fixed).result;
           if (now !== state.result) toast.show(now ? `Over saved. Result now: ${now}` : 'Over saved. The match isn’t finished any more: carry on scoring it.', 'info');
           else toast.show(`Over ${editingOver + 1} saved`, 'success');
+        }}
+      />
+      <ResultSheet
+        match={match}
+        visible={callingResult}
+        onClose={() => setCallingResult(false)}
+        onPick={(outcome) => {
+          setCallingResult(false);
+          saveMatch({ ...match, outcome });
+          toast.show(matchState({ ...match, outcome }).result ?? 'Result changed', 'success');
         }}
       />
       <MomSheet

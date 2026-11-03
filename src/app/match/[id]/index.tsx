@@ -27,6 +27,7 @@ import { OverEditSheet } from '../../../components/OverEditSheet.tsx';
 import { NameSuggestions } from '../../../components/NameSuggestions.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { ShareCardSheet } from '../../../components/ShareCard.tsx';
+import { canChangeResult, outcomeChoices, ResultSheet, scoreResultIfEnded } from '../../../components/ResultSheet.tsx';
 import {
   BallChip,
   Button,
@@ -325,24 +326,6 @@ function LateArrival({ match, teamId, onAdd }: { match: Match; teamId?: string; 
 }
 
 type Outcome = Match['outcome'];
-
-/** The ways a chase ended by hand can be called: on the score, a draw, or either side forfeits. */
-function outcomeChoices(match: Match, scoreResult: string | null) {
-  const [a, b] = match.teams;
-  return [
-    { key: 'score', label: scoreResult ? `On the score: ${scoreResult}` : 'On the score', icon: 'stats-chart-outline' as const, outcome: undefined as Outcome },
-    { key: 'draw', label: 'A draw', icon: 'remove-circle-outline' as const, outcome: { kind: 'draw' } as Outcome },
-    { key: `forfeit-${a.id}`, label: `${a.name} forfeit, ${b.name} win`, icon: 'flag-outline' as const, outcome: { kind: 'forfeit', team: a.id } as Outcome },
-    { key: `forfeit-${b.id}`, label: `${b.name} forfeit, ${a.name} win`, icon: 'flag-outline' as const, outcome: { kind: 'forfeit', team: b.id } as Outcome },
-  ];
-}
-const outcomeKey = (o: Outcome) => (!o ? 'score' : o.kind === 'draw' ? 'draw' : `forfeit-${o.team}`);
-
-/** What the result would be on the score alone, with the chase ended now. */
-const scoreResultIfEnded = (match: Match) => {
-  const ended = addEvent({ ...match, outcome: undefined }, { type: 'endInnings' });
-  return matchState(ended).result;
-};
 
 /** Things that happen to the match rather than to a ball: rain, a declaration, a late arrival, a switch of sides. */
 function MatchMenu({
@@ -1750,7 +1733,7 @@ export default function LiveMatch() {
             <Button label={'Play a super over'} icon="flash" onPress={() => saveMatch(startSuperOver(match))} />
           )}
           {/* A chase ended by hand can be called again: on the score, a draw or a forfeit. Whoever could undo can. */}
-          {match.innings.length <= 2 && state.innings[1]?.endedEarly && (access.admin || (access.score && !lock && match.confirmed === false)) && (
+          {canChangeResult(match, access) && !lock && (
             <Button variant="ghost" label="Change the result" icon="create-outline" onPress={() => setCallingResult(true)} />
           )}
           <Button label="Share result picture" icon="image-outline" onPress={() => setSharing(true)} />
@@ -2059,28 +2042,16 @@ export default function LiveMatch() {
         }}
       />
       {state.result && <ShareCardSheet match={match} all={matches} visible={sharing} onClose={() => setSharing(false)} notify={toast.show} />}
-      <Sheet visible={callingResult} onClose={() => setCallingResult(false)} title="Change the result">
-        <View style={{ gap: space.sm, paddingBottom: space.md }}>
-          <Text style={styles.editNote}>{state.innings[1]?.battingTeam.name}’s innings was ended early. Call the match on the score, a draw, or a forfeit.</Text>
-          {outcomeChoices(match, matchState({ ...match, outcome: undefined }).result).map((c) => {
-            const current = outcomeKey(match.outcome) === c.key;
-            return (
-              <Button
-                key={c.key}
-                variant={current ? 'primary' : 'ghost'}
-                label={current ? `${c.label} (now)` : c.label}
-                icon={current ? 'checkmark-circle' : c.icon}
-                onPress={() => {
-                  setCallingResult(false);
-                  if (current) return;
-                  saveMatch({ ...match, outcome: c.outcome });
-                  toast.show(matchState({ ...match, outcome: c.outcome }).result ?? 'Result changed', 'success');
-                }}
-              />
-            );
-          })}
-        </View>
-      </Sheet>
+      <ResultSheet
+        match={match}
+        visible={callingResult}
+        onClose={() => setCallingResult(false)}
+        onPick={(outcome) => {
+          setCallingResult(false);
+          saveMatch({ ...match, outcome });
+          toast.show(matchState({ ...match, outcome }).result ?? 'Result changed', 'success');
+        }}
+      />
       <MomentFlash moment={moment} />
       {toast.element}
       <WicketSheet
