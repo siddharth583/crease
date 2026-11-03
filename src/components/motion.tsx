@@ -147,31 +147,53 @@ export function GrowBar({
   );
 }
 
+/**
+ * A web animation that never ends runs as CSS, not frame by frame through React: a JS loop keeps React busy every
+ * frame, and a page waiting to open (records, the squad, a match) waits behind it for as long as the loop runs.
+ */
+const compiled = new Map<string, ViewStyle>();
+const css = (keyframes: Record<string, object>, ms: number, timing: string): ViewStyle => {
+  // React Native Web writes keyframes only from StyleSheet.create, never from an inline style: one sheet per shape.
+  const key = JSON.stringify([keyframes, ms, timing]);
+  let style = compiled.get(key);
+  if (!style) {
+    const rule = { animationKeyframes: [keyframes], animationDuration: `${ms}ms`, animationTimingFunction: timing, animationIterationCount: 'infinite' };
+    style = StyleSheet.create({ rule: rule as unknown as ViewStyle }).rule;
+    compiled.set(key, style);
+  }
+  return style;
+};
+
 /** The live dot: a steady centre with a ring that keeps breathing out from it. */
 export function Pulse({ color, size = 8 }: { color: string; size?: number }) {
   const still = useReducedMotion();
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (still) return;
+    if (still || !native) return;
     const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: 1600, easing: Easing.out(Easing.quad), useNativeDriver: native }));
     loop.start();
     return () => loop.stop();
   }, [v, still]);
+  const ring = { position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: color } as const;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {!still && (
-        <Animated.View
-          style={{
-            position: 'absolute',
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: color,
-            opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
-            transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] }) }],
-          }}
-        />
-      )}
+      {!still &&
+        (native ? (
+          <Animated.View
+            style={{
+              ...ring,
+              opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+              transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] }) }],
+            }}
+          />
+        ) : (
+          <View
+            style={[
+              ring,
+              css({ '0%': { opacity: 0.55, transform: 'scale(1)' }, '100%': { opacity: 0, transform: 'scale(2.8)' } }, 1600, 'cubic-bezier(0.25, 0.46, 0.45, 0.94)'),
+            ]}
+          />
+        ))}
       <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
     </View>
   );
@@ -183,7 +205,7 @@ export function Sheen({ every = 5200, strength = 0.09 }: { every?: number; stren
   const v = useRef(new Animated.Value(0)).current;
   const [w, setW] = useState(0);
   useEffect(() => {
-    if (still || !w) return;
+    if (still || !w || !native) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.delay(900),
@@ -197,9 +219,15 @@ export function Sheen({ every = 5200, strength = 0.09 }: { every?: number; stren
   }, [v, still, w, every]);
   if (still) return null;
   const translateX = v.interpolate({ inputRange: [0, 1], outputRange: [-w * 0.8, w * 1.2] });
+  // The web: the same sweep as CSS. A pause, the sweep, a longer pause, then round again.
+  const total = 900 + 1500 + every;
+  const at = (ms: number) => `${((ms / total) * 100).toFixed(2)}%`;
+  const from = { transform: `translateX(${-w * 0.8}px) rotate(18deg)` };
+  const to = { transform: `translateX(${w * 1.2}px) rotate(18deg)` };
+  const sweep = css({ '0%': from, [at(900)]: from, [at(2400)]: to, '100%': to }, total, 'cubic-bezier(0.65, 0, 0.35, 1)');
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
-      <Animated.View style={[styles.sheen, { width: Math.max(120, w * 0.45), transform: [{ translateX }, { rotate: '18deg' }] }]}>
+      <Animated.View style={[styles.sheen, { width: Math.max(120, w * 0.45) }, native ? { transform: [{ translateX }, { rotate: '18deg' }] } : w ? sweep : { opacity: 0 }]}>
         <LinearGradient
           colors={['rgba(255,255,255,0)', `rgba(255,255,255,${strength})`, 'rgba(255,255,255,0)']}
           start={{ x: 0, y: 0.5 }}
