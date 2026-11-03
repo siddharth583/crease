@@ -324,6 +324,26 @@ function LateArrival({ match, teamId, onAdd }: { match: Match; teamId?: string; 
   );
 }
 
+type Outcome = Match['outcome'];
+
+/** The ways a chase ended by hand can be called: on the score, a draw, or either side forfeits. */
+function outcomeChoices(match: Match, scoreResult: string | null) {
+  const [a, b] = match.teams;
+  return [
+    { key: 'score', label: scoreResult ? `On the score: ${scoreResult}` : 'On the score', icon: 'stats-chart-outline' as const, outcome: undefined as Outcome },
+    { key: 'draw', label: 'A draw', icon: 'remove-circle-outline' as const, outcome: { kind: 'draw' } as Outcome },
+    { key: `forfeit-${a.id}`, label: `${a.name} forfeit, ${b.name} win`, icon: 'flag-outline' as const, outcome: { kind: 'forfeit', team: a.id } as Outcome },
+    { key: `forfeit-${b.id}`, label: `${b.name} forfeit, ${a.name} win`, icon: 'flag-outline' as const, outcome: { kind: 'forfeit', team: b.id } as Outcome },
+  ];
+}
+const outcomeKey = (o: Outcome) => (!o ? 'score' : o.kind === 'draw' ? 'draw' : `forfeit-${o.team}`);
+
+/** What the result would be on the score alone, with the chase ended now. */
+const scoreResultIfEnded = (match: Match) => {
+  const ended = addEvent({ ...match, outcome: undefined }, { type: 'endInnings' });
+  return matchState(ended).result;
+};
+
 /** Things that happen to the match rather than to a ball: rain, a declaration, a late arrival, a switch of sides. */
 function MatchMenu({
   visible,
@@ -344,6 +364,7 @@ function MatchMenu({
   inningsLabel,
   dlsG,
   superOver,
+  chase,
 }: {
   visible: boolean;
   match: Match;
@@ -355,7 +376,8 @@ function MatchMenu({
   onTarget: (target: number | undefined) => void;
   onAddPlayer: (teamId: string, name: string) => void;
   onDeadBall: () => void;
-  onEndInnings: () => void;
+  /** Ending the chase also says how it's called: on the score (no outcome), a draw or a forfeit. */
+  onEndInnings: (outcome?: Outcome) => void;
   /** The match is called off: it goes, without a result. */
   onDelete: () => void;
   /** Only the admin deletes a match. */
@@ -371,6 +393,8 @@ function MatchMenu({
   dlsG?: number;
   /** In a super over the overs and target are fixed: those parts of the menu go. */
   superOver: boolean;
+  /** The chase: ending it asks how the match is called. */
+  chase?: boolean;
 }) {
   const [overs, setOversDraft] = useState(match.rules.overs);
   const [target, setTargetDraft] = useState(0);
@@ -506,13 +530,24 @@ function MatchMenu({
         <Text style={styles.sheetLabel}>Umpire’s call</Text>
         <Button variant="ghost" label="Dead ball" icon="hand-left-outline" onPress={onDeadBall} />
 
-        <Button
-          variant="danger"
-          label={arming ? 'Tap again to end it' : `End ${inningsLabel} now`}
-          icon="flag-outline"
-          onPress={() => (arming ? onEndInnings() : setArming(true))}
-          style={{ marginTop: space.sm }}
-        />
+        {chase && arming ? (
+          // The chase ended by hand: the match is called on the score, a draw, or a forfeit.
+          <Card style={{ gap: space.sm, marginTop: space.sm }}>
+            <Text style={styles.switchTeam}>End {inningsLabel}: how does the match end?</Text>
+            {outcomeChoices(match, visible ? scoreResultIfEnded(match) : null).map((c, i) => (
+              <Button key={c.key} variant={i === 0 ? 'danger' : 'ghost'} label={c.label} icon={c.icon} onPress={() => onEndInnings(c.outcome)} />
+            ))}
+            <Button variant="ghost" label="Keep playing" icon="close" onPress={() => setArming(false)} />
+          </Card>
+        ) : (
+          <Button
+            variant="danger"
+            label={arming ? 'Tap again to end it' : `End ${inningsLabel} now`}
+            icon="flag-outline"
+            onPress={() => (arming ? onEndInnings() : setArming(true))}
+            style={{ marginTop: space.sm }}
+          />
+        )}
 
         {canDelete && (
           <>
@@ -1411,6 +1446,7 @@ export default function LiveMatch() {
   const { exportAs } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [callingResult, setCallingResult] = useState(false);
   // One scorer at a time: someone else's balls in the last ten minutes lock the pad here. The clock moves on so the
   // lock lifts once they've stopped.
   const clubUser = sync.status !== 'unavailable' ? sync.user : null;
@@ -1657,10 +1693,10 @@ export default function LiveMatch() {
             <MaterialCommunityIcons name="trophy" size={34} color={colors.onAccent} />
           </PopIn>
           <Text style={styles.resultEyebrow}>
-            {series ? `${series.name.toUpperCase()} · MATCH ${match.series!.number} OF ${series.of}` : winner ? 'RESULT' : 'ALL SQUARE'}
+            {series ? `${series.name.toUpperCase()} · MATCH ${match.series!.number} OF ${series.of}` : winner ? 'RESULT' : state.drawn ? 'NO WINNER' : 'ALL SQUARE'}
           </Text>
           <Text style={styles.resultWinner} numberOfLines={2}>
-            {winner ? `${winner.name} win` : 'Match tied'}
+            {winner ? `${winner.name} win` : state.drawn ? 'Match drawn' : 'Match tied'}
           </Text>
           {winner && <Text style={styles.resultMargin}>{margin}</Text>}
           {potm && (
@@ -1712,6 +1748,10 @@ export default function LiveMatch() {
         <View style={{ gap: space.md, marginTop: space.lg }}>
           {state.result === 'Match tied' && match.innings.length < 4 && canScore && (
             <Button label={'Play a super over'} icon="flash" onPress={() => saveMatch(startSuperOver(match))} />
+          )}
+          {/* A chase ended by hand can be called again: on the score, a draw or a forfeit. Whoever could undo can. */}
+          {match.innings.length <= 2 && state.innings[1]?.endedEarly && (access.admin || (access.score && !lock && match.confirmed === false)) && (
+            <Button variant="ghost" label="Change the result" icon="create-outline" onPress={() => setCallingResult(true)} />
           )}
           <Button label="Share result picture" icon="image-outline" onPress={() => setSharing(true)} />
           <Button
@@ -1940,8 +1980,15 @@ export default function LiveMatch() {
           toast.show('Dead ball. Nothing counts.', 'info');
           setMenu(false);
         }}
-        onEndInnings={() => {
+        chase={index === 1 && !superOver}
+        onEndInnings={(outcome) => {
           setMenu(false);
+          if (index === 1 && !superOver) {
+            // The chase: the call goes in with the end, so the result reads right from the start.
+            setRedo([]);
+            commit({ ...addEvent(match, { type: 'endInnings' }), outcome });
+            return;
+          }
           push({ type: 'endInnings' });
         }}
         onDelete={() =>
@@ -2012,6 +2059,28 @@ export default function LiveMatch() {
         }}
       />
       {state.result && <ShareCardSheet match={match} all={matches} visible={sharing} onClose={() => setSharing(false)} notify={toast.show} />}
+      <Sheet visible={callingResult} onClose={() => setCallingResult(false)} title="Change the result">
+        <View style={{ gap: space.sm, paddingBottom: space.md }}>
+          <Text style={styles.editNote}>{state.innings[1]?.battingTeam.name}’s innings was ended early. Call the match on the score, a draw, or a forfeit.</Text>
+          {outcomeChoices(match, matchState({ ...match, outcome: undefined }).result).map((c) => {
+            const current = outcomeKey(match.outcome) === c.key;
+            return (
+              <Button
+                key={c.key}
+                variant={current ? 'primary' : 'ghost'}
+                label={current ? `${c.label} (now)` : c.label}
+                icon={current ? 'checkmark-circle' : c.icon}
+                onPress={() => {
+                  setCallingResult(false);
+                  if (current) return;
+                  saveMatch({ ...match, outcome: c.outcome });
+                  toast.show(matchState({ ...match, outcome: c.outcome }).result ?? 'Result changed', 'success');
+                }}
+              />
+            );
+          })}
+        </View>
+      </Sheet>
       <MomentFlash moment={moment} />
       {toast.element}
       <WicketSheet

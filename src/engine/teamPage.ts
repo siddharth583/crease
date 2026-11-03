@@ -7,7 +7,7 @@ import type { Match } from './types.ts';
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-export type TeamResult = { matchId: string; date: number; opponent: string; outcome: 'W' | 'L' | 'T'; score: string; against: string; result: string };
+export type TeamResult = { matchId: string; date: number; opponent: string; outcome: 'W' | 'L' | 'T' | 'D'; score: string; against: string; result: string };
 export type TeamLeader = { key: string; name: string; value: number; sub: string };
 
 export type TeamProfile = {
@@ -16,10 +16,11 @@ export type TeamProfile = {
   won: number;
   lost: number;
   tied: number;
+  drawn: number;
   /** Newest first. */
   results: TeamResult[];
   /** The longest run of wins or losses going now: 3 W, 2 L. */
-  streak: { outcome: 'W' | 'L' | 'T'; count: number } | null;
+  streak: { outcome: TeamResult['outcome']; count: number } | null;
   highest: { runs: number; wickets: number; matchId: string; opponent: string } | null;
   lowest: { runs: number; wickets: number; matchId: string; opponent: string } | null;
   /** Their average first-innings score, batting first or second. */
@@ -54,7 +55,7 @@ export function teamProfile(matches: Match[], name: string): TeamProfile {
     const ours = main.find((s) => s.battingTeam.id === us.id);
     const theirs = main.find((s) => s.battingTeam.id === them.id);
     if (st.result) {
-      const outcome = !st.winner ? 'T' : st.winner === us.id ? 'W' : 'L';
+      const outcome = st.drawn ? 'D' : !st.winner ? 'T' : st.winner === us.id ? 'W' : 'L';
       results.push({
         matchId: m.id,
         date: m.createdAt,
@@ -126,6 +127,7 @@ export function teamProfile(matches: Match[], name: string): TeamProfile {
     won: results.filter((r) => r.outcome === 'W').length,
     lost: results.filter((r) => r.outcome === 'L').length,
     tied: results.filter((r) => r.outcome === 'T').length,
+    drawn: results.filter((r) => r.outcome === 'D').length,
     results,
     streak,
     highest,

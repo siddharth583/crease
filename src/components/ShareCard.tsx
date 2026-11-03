@@ -44,7 +44,7 @@ function Card({ match, all }: { match: Match; all: Match[] }) {
     <View style={styles.card}>
       <PitchStripes opacity={0.035} />
       <GhostWord size={220} style={{ right: -30, bottom: 40, color: 'rgba(255,255,255,0.04)' }}>
-        {winner ? 'WIN' : 'TIE'}
+        {winner ? 'WIN' : state.drawn ? 'DRAW' : 'TIE'}
       </GhostWord>
       <View style={styles.top}>
         <AppMark size={24} />

@@ -172,7 +172,7 @@ export default function TeamScreen() {
               ))}
               {t.streak && t.streak.count > 1 && (
                 <Text style={styles.streak}>
-                  {t.streak.count} {t.streak.outcome === 'W' ? 'wins' : t.streak.outcome === 'L' ? 'losses' : 'ties'} in a row
+                  {t.streak.count} {t.streak.outcome === 'W' ? 'wins' : t.streak.outcome === 'L' ? 'losses' : t.streak.outcome === 'D' ? 'draws' : 'ties'} in a row
                 </Text>
               )}
             </View>
@@ -185,8 +185,8 @@ export default function TeamScreen() {
                 ['Played', String(t.played)],
                 ['Won', String(t.won)],
                 ['Lost', String(t.lost)],
-                // Ties too, so the three add up to the matches played.
-                ['Tied', String(t.tied)],
+                // Ties and draws too, so they add up to the matches played.
+                [t.drawn ? (t.tied ? 'Tied/drawn' : 'Drawn') : 'Tied', String(t.tied + t.drawn)],
                 ['Win %', winPct === null ? '–' : `${winPct}`],
               ].map(([label, value]) => (
                 <View key={label} style={{ flex: 1, alignItems: 'center' }}>
@@ -252,7 +252,7 @@ export default function TeamScreen() {
                       {t.name}
                     </Text>
                   </View>
-                  <Text style={styles.small}>{rival.h.ties ? `${rival.h.ties} tied` : 'vs'}</Text>
+                  <Text style={styles.small}>{rival.h.ties ? `${rival.h.ties} drawn or tied` : 'vs'}</Text>
                   <View style={{ flex: 1, alignItems: 'flex-end' }}>
                     <Text style={[styles.h2hWins, { color: teamTheme(rival.x).ink }]}>{rival.h.winsB}</Text>
                     <Text style={styles.small} numberOfLines={1}>

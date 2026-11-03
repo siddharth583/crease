@@ -230,6 +230,26 @@ test('ending an innings early starts the chase', () => {
   assert.equal(st.innings[1].target, 5);
 });
 
+test('a chase ended early can be called a draw or a forfeit, and the score decides it again once play goes on', () => {
+  const first = play(start(setup()), ball(4), { type: 'endInnings' });
+  const ended = play(first, { type: 'openers', striker: 'b1', nonStriker: 'b2' }, { type: 'bowler', bowler: 'a1' }, ball(1), { type: 'endInnings' });
+  assert.equal(matchState(ended).result, 'A won by 3 runs');
+
+  const drawn = matchState({ ...ended, outcome: { kind: 'draw' } });
+  assert.equal(drawn.result, 'Match drawn');
+  assert.equal(drawn.winner, null);
+  assert.equal(drawn.drawn, true);
+
+  const forfeit = matchState({ ...ended, outcome: { kind: 'forfeit', team: 'a' } });
+  assert.equal(forfeit.result, 'B won by forfeit');
+  assert.equal(forfeit.winner, 'b');
+  assert.equal(forfeit.drawn, false);
+
+  // Without the end by hand the call doesn't count: play on and the score decides it.
+  const playedOn = { ...undo(ended), outcome: { kind: 'draw' as const } };
+  assert.equal(matchState(playedOn).result, null);
+});
+
 test('free hit follows a no-ball and survives a wide', () => {
   let m = start(setup({ freeHit: true }));
   m = play(m, ball(0, 'noball'));

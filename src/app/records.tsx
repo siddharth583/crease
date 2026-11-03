@@ -359,7 +359,7 @@ export default function Records() {
                     </View>
                     <View style={{ alignItems: 'center' }}>
                       <Text style={styles.h2hPlayed}>{h2h.played}</Text>
-                      <Text style={styles.sub}>played{h2h.ties ? ` · ${h2h.ties} tied` : ''}</Text>
+                      <Text style={styles.sub}>played{h2h.ties ? ` · ${h2h.ties} drawn or tied` : ''}</Text>
                     </View>
                     <View style={[styles.h2hSide, { alignItems: 'flex-end' }]}>
                       <Text style={[styles.h2hWins, { color: ownTeamTheme(tb)?.ink ?? colors.violet }]}>{h2h.winsB}</Text>

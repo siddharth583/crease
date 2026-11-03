@@ -76,7 +76,7 @@ function SideCard({
   /** Players Crease suggests moving to even the sides up. */
   tagged?: string[];
   /** Their last results, newest first. */
-  results?: ('W' | 'L' | 'T')[];
+  results?: ('W' | 'L' | 'T' | 'D')[];
 }) {
   const isTagged = (n: string) => tagged.some((x) => nameKey(x) === nameKey(n));
   const isCaptain = (n: string) => Boolean(captain) && nameKey(captain!) === nameKey(n);

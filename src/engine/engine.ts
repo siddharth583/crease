@@ -89,6 +89,8 @@ export type MatchState = {
   current: number;
   result: string | null;
   winner: string | null;
+  /** Called a draw (no winner, and not a tie). */
+  drawn: boolean;
 };
 
 export const BOWLER_WICKETS: WicketKind[] = ['bowled', 'caught', 'lbw', 'stumped', 'hitwicket'];
@@ -433,7 +435,20 @@ export function matchState(match: Match): MatchState {
 
   let result: string | null = null;
   let winner: string | null = null;
-  if (first.status === 'done' && second.status === 'done') {
+  let drawn = false;
+  const outcome = match.outcome;
+  // Only a chase ended by hand is called this way: undo the end and play on, and the score decides it again.
+  if (first.status === 'done' && second.status === 'done' && second.endedEarly && outcome) {
+    // Called by hand: a draw, or a side forfeits and the other wins.
+    if (outcome.kind === 'draw') {
+      drawn = true;
+      result = 'Match drawn';
+    } else {
+      const other = match.teams.find((t) => t.id !== outcome.team)!;
+      winner = other.id;
+      result = `${other.name} won by forfeit`;
+    }
+  } else if (first.status === 'done' && second.status === 'done') {
     if (second.runs >= target) {
       const left = allOutAt(match.rules, second.battingTeam) - second.wickets;
       winner = second.battingTeam.id;
@@ -466,7 +481,7 @@ export function matchState(match: Match): MatchState {
       }
     }
   }
-  return { innings, current, result, winner };
+  return { innings, current, result, winner, drawn };
 }
 
 /** Start a super over after a tie: the side that batted second bats first. */

@@ -87,6 +87,11 @@ export type Match = {
   interruptions?: Interruption[];
   /** Average full first-innings score at this length, for DLS when the chase gets more resources. */
   dlsG?: number;
+  /**
+   * How a match ended early decides it, in place of the score: a draw, or one side forfeits (`team`, a team id) and
+   * the other wins. Only counts once the chase is over.
+   */
+  outcome?: { kind: 'draw' } | { kind: 'forfeit'; team: string };
   /** Man of the Match picked by hand (a player id); without it Crease picks. */
   mom?: string;
   /** When this phone last saved it: an imported copy only replaces it if it's newer. */

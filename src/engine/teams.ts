@@ -239,15 +239,15 @@ export function rebalance(sides: [string[], string[]], table: Map<string, Streng
   return { fix: best.fix, strength: [sideStrength(of(next[0])), sideStrength(of(next[1]))] };
 }
 
-/** A side's last results by its name, newest first: W, L or T, from finished matches. */
-export function recentResults(matches: Match[], name: string, n = 5): ('W' | 'L' | 'T')[] {
-  const out: ('W' | 'L' | 'T')[] = [];
+/** A side's last results by its name, newest first: W, L, T or D (drawn), from finished matches. */
+export function recentResults(matches: Match[], name: string, n = 5): ('W' | 'L' | 'T' | 'D')[] {
+  const out: ('W' | 'L' | 'T' | 'D')[] = [];
   for (const m of [...matches].sort((a, b) => b.createdAt - a.createdAt)) {
     if (out.length >= n) break;
     if (!m.teams.some((t) => nameKey(t.name) === nameKey(name))) continue;
     const st = matchState(m);
     if (!st.result) continue;
-    out.push(!st.winner ? 'T' : nameKey(m.teams.find((t) => t.id === st.winner)?.name ?? '') === nameKey(name) ? 'W' : 'L');
+    out.push(st.drawn ? 'D' : !st.winner ? 'T' : nameKey(m.teams.find((t) => t.id === st.winner)?.name ?? '') === nameKey(name) ? 'W' : 'L');
   }
   return out;
 }
