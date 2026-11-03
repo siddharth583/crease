@@ -376,7 +376,11 @@ export function inningsState(match: Match, index: number, target: number | null)
 
   const gap = opened && (s.striker === null || s.nonStriker === null);
   const stranded = gap && s.available.length === 0 && (!rules.lastManStands || s.striker === null);
+  // Once a later innings has started this one is closed, however its side grew after (a late arrival joining a side
+  // that was all out mustn't reopen its innings).
+  const closed = match.innings.slice(index + 1).some((inn) => inn.events.length > 0);
   if (
+    closed ||
     s.endedEarly ||
     s.legalBalls >= s.maxBalls ||
     s.wickets >= limit ||
@@ -596,6 +600,13 @@ export function addEvent(match: Match, event: InningsEvent): Match {
     ...match,
     innings: match.innings.map((inn, i): Innings => (i === current ? { ...inn, events: [...inn.events, event] } : inn)),
   };
+}
+
+/** Someone else saving balls on this match in the last ten minutes: one scorer at a time, or balls get lost. */
+export function scoringLock(match: Match, email: string, now: number): { name: string } | null {
+  const by = match.scoringBy;
+  if (!by || !email || by.email === email || now - by.at > 10 * 60_000) return null;
+  return { name: by.name };
 }
 
 export function canUndo(match: Match) {
@@ -845,7 +856,7 @@ function inPlayThroughout(match: Match, inningsIndex: number, target: number | n
   const events = match.innings[inningsIndex].events;
   for (let k = 0; k < events.length; k++) {
     if (events[k].type !== 'ball') continue;
-    const cut = { ...match, innings: match.innings.map((inn, i) => (i === inningsIndex ? { ...inn, events: events.slice(0, k) } : inn)) };
+    const cut = { ...match, innings: match.innings.map((inn, i) => (i === inningsIndex ? { ...inn, events: events.slice(0, k) } : i > inningsIndex ? { ...inn, events: [] } : inn)) };
     if (inningsState(cut, inningsIndex, target).status !== 'live') return false;
   }
   return true;
@@ -856,12 +867,14 @@ function inPlayThroughout(match: Match, inningsIndex: number, target: number | n
  * innings, a super over only after a tie. Targets aren't checked: a fix to the first innings doesn't undo the chase.
  */
 function fitsTogether(match: Match): boolean {
+  // Whether an innings is over on its own balls, not because a later one has started.
+  const doneAlone = (i: number) => inningsState({ ...match, innings: match.innings.map((inn, j) => (j > i ? { ...inn, events: [] } : inn)) }, i, null).status === 'done';
   if (!inPlayThroughout(match, 0, null)) return false;
-  if (match.innings[1].events.length && (inningsState(match, 0, null).status !== 'done' || !inPlayThroughout(match, 1, null))) return false;
+  if (match.innings[1].events.length && (!doneAlone(0) || !inPlayThroughout(match, 1, null))) return false;
   if (match.innings.slice(2).some((inn) => inn.events.length)) {
     if (matchState({ ...match, innings: match.innings.slice(0, 2) }).result !== 'Match tied') return false;
     if (!inPlayThroughout(match, 2, null)) return false;
-    if (match.innings[3].events.length && (inningsState(match, 2, null).status !== 'done' || !inPlayThroughout(match, 3, null))) return false;
+    if (match.innings[3].events.length && (!doneAlone(2) || !inPlayThroughout(match, 3, null))) return false;
   }
   return true;
 }

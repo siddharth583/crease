@@ -453,6 +453,17 @@ test('a late player can bat', () => {
   assert.deepEqual(s.available, ['a9']);
 });
 
+test('a late arrival for a side that was all out does not reopen its innings once the chase is on', () => {
+  let m = start(setup({}, 2));
+  m = play(m, ball(1), ball(0, undefined, { kind: 'bowled', playerOut: 'a2' }));
+  assert.equal(matchState(m).current, 1);
+  m = play(m, { type: 'openers', striker: 'b1', nonStriker: 'b2' }, { type: 'bowler', bowler: 'a1' }, ball(0));
+  m = addPlayer(m, 'a', { id: 'a9', name: 'Late Larry' });
+  const st = matchState(m);
+  assert.equal(st.innings[0].status, 'done');
+  assert.equal(st.current, 1);
+});
+
 test('a wicket can be corrected but stays a wicket of the same batter', () => {
   const m = play(start(setup()), ball(0, undefined, { kind: 'bowled', playerOut: 'a1' }));
   const i = 2;

@@ -29,12 +29,28 @@ export type MatchPlan = {
 const when = (m: Match) => m.updatedAt ?? m.createdAt;
 
 /**
- * Matches both ways. Each match on its own: the newer copy wins (a fix, a picked Man of the Match, more balls). A
- * match the phone knew from the club but no longer has was deleted here; one the club marks deleted goes here too.
+ * Matches both ways. Each match on its own: the newer copy wins (a fix, a picked Man of the Match, more balls). Only a
+ * match deleted here by hand (`deleted`) is marked deleted in the club: one that's merely missing from the phone (its
+ * storage full, cleared, or never saved) comes back from the club instead. One the club marks deleted goes here too.
+ * A club copy that doesn't read as a match (`valid`) is left alone, so one bad entry can't break the phone.
  */
-export function planMatches(local: Match[], remote: Map<string, RemoteMatch>, last: Record<string, string>): MatchPlan {
+export function planMatches(
+  local: Match[],
+  remote: Map<string, RemoteMatch>,
+  last: Record<string, string>,
+  deleted: string[] = [],
+  valid: (m: unknown) => boolean = () => true,
+): MatchPlan {
   const plan: MatchPlan = { take: [], send: [], remove: [], bury: [], agreed: {} };
   const mine = new Map(local.map((m) => [m.id, m]));
+  const read = (json: string): Match | null => {
+    try {
+      const m = JSON.parse(json) as unknown;
+      return valid(m) ? (m as Match) : null;
+    } catch {
+      return null;
+    }
+  };
   for (const [id, r] of remote) {
     const m = mine.get(id);
     if (r.deleted) {
@@ -43,11 +59,11 @@ export function planMatches(local: Match[], remote: Map<string, RemoteMatch>, la
       continue;
     }
     if (!r.json) continue;
+    const theirs = read(r.json);
     if (!m) {
-      // Synced before and gone from the phone: deleted here. Never seen: new from the club.
-      if (last[id]) plan.bury.push(id);
-      else {
-        plan.take.push(JSON.parse(r.json) as Match);
+      if (deleted.includes(id)) plan.bury.push(id);
+      else if (theirs) {
+        plan.take.push(theirs);
         plan.agreed[id] = fingerprint(r.json);
       }
       continue;
@@ -58,8 +74,10 @@ export function planMatches(local: Match[], remote: Map<string, RemoteMatch>, la
       continue;
     }
     if (r.updatedAt > when(m)) {
-      plan.take.push(JSON.parse(r.json) as Match);
-      plan.agreed[id] = fingerprint(r.json);
+      if (theirs) {
+        plan.take.push(theirs);
+        plan.agreed[id] = fingerprint(r.json);
+      }
     } else plan.send.push(m);
   }
   for (const m of local) if (!remote.has(m.id)) plan.send.push(m);

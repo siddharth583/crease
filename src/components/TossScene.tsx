@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, radius, space } from '../theme.ts';
+import { useLayout } from './layout.tsx';
 import { useReducedMotion } from './motion.tsx';
 import { Button, IconButton, PressableScale, Segmented, tap } from './ui.tsx';
 
@@ -80,6 +81,8 @@ export function TossScene({
 }) {
   const insets = useSafeAreaInsets();
   const still = useReducedMotion();
+  // On a tablet or laptop the coin and the choices keep to a column in the middle, not buttons the width of the screen.
+  const { wide, gutter } = useLayout();
   const [phase, setPhase] = useState<Phase>('start');
   const [caller, setCaller] = useState<Side>(1);
   const [face, setFace] = useState<Face | null>(null);
@@ -142,14 +145,15 @@ export function TossScene({
 
   return (
     <Modal visible={visible} animationType={still ? 'none' : 'slide'} onRequestClose={onClose}>
-      <View style={[styles.screen, { paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.lg }]}>
+      <View style={[styles.screen, { paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.lg }, wide && { paddingHorizontal: gutter }]}>
         <View style={styles.head}>
           <IconButton icon="close" label="Back to the teams" onPress={onClose} />
-          <Text style={styles.title}>The toss</Text>
+          <Text style={[styles.title, wide && styles.titleWide]}>The toss</Text>
           <View style={{ width: 44 }} />
         </View>
 
-        <View style={styles.stage}>
+        <View style={[{ flex: 1 }, wide && styles.column]}>
+        <View style={[styles.stage, wide && styles.stageWide]}>
           <Animated.View style={[styles.shadow, { opacity: path.shadow, transform: [{ scaleX: path.shadow }] }]} />
           <Animated.View style={{ transform: [{ translateY: path.translateY }, { scale: Animated.multiply(path.scale, land) }] }}>
             <Animated.View style={[styles.coin, { transform: [{ scaleY: path.scaleY }] }]}>
@@ -240,6 +244,7 @@ export function TossScene({
             </Animated.View>
           )}
         </View>
+        </View>
       </View>
     </Modal>
   );
@@ -249,6 +254,11 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: space.lg },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontFamily: font.posterBlack, fontSize: 22, color: colors.text, letterSpacing: -0.5 },
+  titleWide: { fontSize: 28, letterSpacing: -0.8 },
+  // A tablet or laptop: the coin and the choices together in the middle of the screen, not dropped to its foot with
+  // the whole height empty above them; the stage keeps the coin's flight room.
+  column: { width: '100%', maxWidth: 520, alignSelf: 'center', justifyContent: 'center' },
+  stageWide: { flex: 0, height: COIN + RISE + space.xl },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: space.xl, minHeight: COIN + RISE * 0.6 },
   shadow: {
     position: 'absolute',
@@ -292,6 +302,6 @@ const styles = StyleSheet.create({
   or: { color: colors.faint, fontSize: 13, fontFamily: font.medium, textAlign: 'center', marginTop: space.md },
   face: { fontFamily: font.posterBlack, fontSize: 40, color: colors.gold, textAlign: 'center', letterSpacing: -1 },
   won: { color: colors.muted, fontSize: 16, fontFamily: font.medium, textAlign: 'center' },
-  link: { alignSelf: 'center', paddingVertical: space.sm, paddingHorizontal: space.md },
+  link: { alignSelf: 'center', justifyContent: 'center', minHeight: 44, paddingHorizontal: space.md },
   linkText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold, textDecorationLine: 'underline' },
 });

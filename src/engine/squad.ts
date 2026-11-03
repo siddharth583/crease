@@ -24,6 +24,10 @@ export type SquadPlayer = {
   manual?: boolean;
   /** Their club Google account: signing in with it makes My profile theirs. */
   email?: string;
+  /** Names they played under before a rename: those matches are theirs too. */
+  aka?: string[];
+  /** Taken off the squad: hidden from it, but still one person in the stats. */
+  left?: boolean;
 };
 
 export const ROLE_LABEL: Record<Role, string> = { bat: 'Batter', bowl: 'Bowler', ar: 'All-rounder', wk: 'Keeper' };
@@ -201,7 +205,7 @@ export function setUsualKeepers(squad: SquadPlayer[]): SquadPlayer[] {
 /** A saved squad brought up to date: renamed players get their full names, and new regulars join. */
 export function updateSquad(squad: SquadPlayer[]): SquadPlayer[] {
   const renamed = squad.map((p) => {
-    const full = { chirag: 'Chirag Taneja', rohit: 'Rohit Kumar' }[p.name.trim().toLowerCase()];
+    const full = ({ chirag: 'Chirag Taneja', rohit: 'Rohit Kumar', ajayvir: 'Ajayvir Singh Ghai' } as Record<string, string>)[p.name.trim().toLowerCase()];
     return full ? { ...p, name: full } : p;
   });
   const has = new Set(renamed.map((p) => p.name.trim().toLowerCase()));

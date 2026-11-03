@@ -3,7 +3,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, useToast } from '../components/ui.tsx';
+import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, Stepper, tap, useToast, WideHead } from '../components/ui.tsx';
+import { Columns, Page, useLayout } from '../components/layout.tsx';
 import { TossScene, type TossResult } from '../components/TossScene.tsx';
 import { NameSuggestions } from '../components/NameSuggestions.tsx';
 import { auctionState, rosterPlayer, type Auction } from '../engine/auction.ts';
@@ -11,7 +12,7 @@ import { newMatch } from '../engine/engine.ts';
 import { seriesState } from '../engine/stats.ts';
 import type { Match, Rules, SeriesInfo, Team } from '../engine/types.ts';
 import { newId, useMatches } from '../store/matches.tsx';
-import { HOUSE_RULES } from '../engine/squad.ts';
+import { DEFAULT_TEAMS, HOUSE_RULES } from '../engine/squad.ts';
 import { fillSides, strengths } from '../engine/teams.ts';
 import { useSquad } from '../store/squad.ts';
 import { useAccess } from '../store/sync.tsx';
@@ -32,6 +33,19 @@ const parseNames = (text: string) =>
     .slice(0, 11);
 
 const isPlaceholderName = (n: string) => /^player \d+$/i.test(n.trim());
+
+/** Names typed twice in one side, ignoring case and spaces: "Rohit" and " rohit ". As first typed. */
+function twice(players: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of players) {
+    const k = p.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!k) continue;
+    if (seen.has(k) && !out.some((o) => o.trim().replace(/\s+/g, ' ').toLowerCase() === k)) out.push(p.trim());
+    seen.add(k);
+  }
+  return out;
+}
 
 function draftFrom(team: Team, match?: Match): Draft {
   const own = team.players.filter((p) => !p.common);
@@ -69,7 +83,7 @@ function draftsFromParam(json: string): [Draft, Draft] | null {
 }
 
 /** A player row's height and the gap under it: how far a dragged row travels to swap places with the next. */
-const ROW = 42 + space.sm;
+const ROW = 44 + space.sm;
 
 /** Where a slot ends up when the player in `from` is dragged to `to`. */
 const moved = (k: number, from: number, to: number) =>
@@ -109,6 +123,7 @@ function TeamEditor({
   onSwap,
   other,
   otherNames,
+  startOpen,
 }: {
   label: string;
   draft: Draft;
@@ -124,8 +139,10 @@ function TeamEditor({
   other: string;
   /** The other side's players: not suggested for this one. */
   otherNames: string[];
+  /** The list starts open: on a tablet or laptop there's room to see both sides' players at once. */
+  startOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(startOpen));
   // The slot being typed in, for its name suggestions. Kept a moment after it loses focus, so a suggestion can be tapped.
   const [typing, setTyping] = useState<number | null>(null);
   // A narrow phone: the slot number goes and the buttons slim down, so the name keeps room to be read.
@@ -139,6 +156,7 @@ function TeamEditor({
   const [paste, setPaste] = useState('');
   const pasted = parseNames(paste);
   const named = draft.players.filter((p) => p.trim()).length;
+  const repeated = twice(draft.players);
   const landing = (from: number, d: number) => Math.max(0, Math.min(draft.players.length - 1, from + Math.round(d / ROW)));
   const startDrag = (i: number) => {
     tap();
@@ -210,6 +228,11 @@ function TeamEditor({
         </Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.muted} />
       </Pressable>
+      {repeated.length > 0 && (
+        <Text style={styles.twice}>
+          {repeated.join(', ')} {repeated.length === 1 ? 'is' : 'are'} in this side twice. Change or clear one.
+        </Text>
+      )}
       {open && (
         <View style={{ gap: space.sm }}>
           {draft.players.map((p, i) => (
@@ -238,6 +261,7 @@ function TeamEditor({
               />
               <PressableScale
                 accessibilityLabel={`Make player ${i + 1} captain`}
+                hitSlop={4}
                 accessibilityState={{ selected: draft.captain === i }}
                 onPress={() => onChange({ ...draft, captain: draft.captain === i ? undefined : i })}
                 style={[mark, draft.captain === i && styles.markOn]}
@@ -246,6 +270,7 @@ function TeamEditor({
               </PressableScale>
               <PressableScale
                 accessibilityLabel={`Make player ${i + 1} wicketkeeper`}
+                hitSlop={4}
                 accessibilityState={{ selected: draft.keeper === i }}
                 onPress={() => onChange({ ...draft, keeper: draft.keeper === i ? undefined : i })}
                 style={[mark, draft.keeper === i && styles.markOn]}
@@ -255,6 +280,7 @@ function TeamEditor({
               <PressableScale
                 accessibilityLabel={p.trim() ? `Move ${p.trim()} to ${other}` : `Move player ${i + 1} to ${other}`}
                 disabled={!p.trim()}
+                hitSlop={4}
                 onPress={() => onSwap(i)}
                 style={[mark, !p.trim() && { opacity: 0.35 }]}
               >
@@ -327,6 +353,7 @@ function NoAccess({ why }: { why: string | null }) {
 
 function NewMatchScreen() {
   const insets = useSafeAreaInsets();
+  const { wide, desk, gutter } = useLayout();
   const { rematch, series: continueSeries, auction, sides } = useLocalSearchParams<{ rematch?: string; series?: string; auction?: string; sides?: string }>();
   const { savedTeams, rememberTeams, saveMatch, matches } = useMatches();
   const { auctions, saveAuction, squad } = useSquad();
@@ -336,9 +363,16 @@ function NewMatchScreen() {
   const table = useMemo(() => strengths(matches, squad), [matches, squad]);
   const source: Match | undefined = rematch ? matches.find((m) => m.id === rematch) : undefined;
   const last: Match | undefined = matches[0];
+  // A new match starts from the club's two usual sides, ready to edit, rather than two blank teams.
+  const [usual] = useState<[Draft, Draft] | null>(() => {
+    if (auctionDrafts || source) return null;
+    const sides = savedTeams.length >= 2 ? savedTeams : DEFAULT_TEAMS;
+    return sides.length >= 2 ? [draftFrom(sides[0]), draftFrom(sides[1])] : null;
+  });
   const [size, setSize] = useState(
     () =>
       (auctionDrafts && Math.max(auctionDrafts[0].players.length, auctionDrafts[1].players.length)) ||
+      (usual && Math.min(11, Math.max(2, usual[0].players.length, usual[1].players.length))) ||
       (source?.rules.playersPerSide ?? last?.rules.playersPerSide ?? 8),
   );
   const [teams, setTeams] = useState<[Draft, Draft]>(() =>
@@ -348,6 +382,11 @@ function NewMatchScreen() {
       ? [auctionDrafts[0], auctionDrafts[1]]
       : source
       ? [draftFrom(source.teams[0], source), draftFrom(source.teams[1], source)]
+      : usual
+      ? [
+          { ...usual[0], players: resize(usual[0].players, size) },
+          { ...usual[1], players: resize(usual[1].players, size) },
+        ]
       : [
           { name: '', players: resize([], size) },
           { name: '', players: resize([], size) },
@@ -459,6 +498,8 @@ function NewMatchScreen() {
         ? { id: newId(), name: seriesName.trim() || `${names[0]} vs ${names[1]}`, of: Number(seriesOf), number: 1 }
         : undefined;
     if (series) match.series = series;
+    // Not confirmed until the scorer says the result stands.
+    match.confirmed = false;
     const pick = (key: 'captain' | 'keeper') =>
       Object.fromEntries(
         built.flatMap((t, i) => {
@@ -480,143 +521,240 @@ function NewMatchScreen() {
     router.replace({ pathname: '/match/[id]', params: { id: match.id } });
   };
 
+  const headTitle = ongoing?.next ? `Match ${ongoing.next}` : source ? 'Rematch' : 'New match';
+  const headSub = ongoing?.next
+    ? `${ongoing.name} · best of ${ongoing.of} · ${ongoing.status}`
+    : fromAuction
+      ? 'The teams from the auction, captains and keepers set. Then the toss.'
+      : source
+        ? 'Same teams. Straight to the toss.'
+        : 'The usual two sides, ready to change. Then out to the middle for the toss.';
+  const heading = (
+    <>
+      <Text style={styles.title}>{headTitle}</Text>
+      <Text style={styles.subtitle}>{headSub}</Text>
+    </>
+  );
+  // One match or a series: not offered when this is the next match of one.
+  const kindPicker = ongoing?.next ? null : (
+    <View style={{ gap: space.md }}>
+      <Segmented
+        value={kind}
+        onChange={setKind}
+        options={[
+          { value: 'single', label: 'One match' },
+          { value: 'series', label: 'Series' },
+        ]}
+      />
+      {kind === 'series' && (
+        <Card style={{ gap: space.md }}>
+          <Text style={styles.question}>How long?</Text>
+          <Segmented
+            value={seriesOf}
+            onChange={setSeriesOf}
+            options={[
+              { value: '3', label: 'Best of 3' },
+              { value: '5', label: 'Best of 5' },
+              { value: '7', label: 'Best of 7' },
+            ]}
+          />
+          <TextInput
+            value={seriesName}
+            onChangeText={setSeriesName}
+            placeholder="Name the series"
+            placeholderTextColor={colors.faint}
+            style={styles.seriesInput}
+            maxLength={40}
+            autoCapitalize="words"
+          />
+          {/* The example name sits here, not in the field, where a narrow column would cut it off. */}
+          <Text style={[styles.help, { marginLeft: 0 }]}>
+            E.g. {names[0]} vs {names[1]} Cup. First to {Math.floor(Number(seriesOf) / 2) + 1} wins; Man of the Series is picked across every match.
+          </Text>
+        </Card>
+      )}
+    </View>
+  );
+  const auctionLink =
+    !fromAuction && !source ? (
+      <PressableScale scaleTo={0.98} onPress={() => router.push('/auction/new')} style={styles.auctionLink}>
+        <Ionicons name="hammer-outline" size={18} color={colors.accentInk} />
+        <Text style={styles.auctionText}>Pick the teams by auction</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+      </PressableScale>
+    ) : null;
+  const editor = (side: 0 | 1) => (
+    <TeamEditor
+      label={side === 0 ? 'Team A' : 'Team B'}
+      draft={teams[side]}
+      saved={savedFor(side)}
+      onChange={(d) => setTeams(side === 0 ? [d, teams[1]] : [teams[0], d])}
+      onSquad={(d) => setSquad(side, d)}
+      onDragging={setLocked}
+      onSwap={(i) => swap(side, i)}
+      other={names[1 - side]}
+      otherNames={teams[1 - side].players}
+      startOpen={wide}
+    />
+  );
+  const vs = (
+    <View style={styles.vsBadge}>
+      <Text style={styles.vsText}>vs</Text>
+    </View>
+  );
+  const commonCard = (
+    <Card style={{ gap: space.sm }}>
+      <Text style={styles.question}>Common player (optional)</Text>
+      <TextInput
+        value={common}
+        onChangeText={setCommon}
+        placeholder="Their name"
+        placeholderTextColor={colors.faint}
+        style={styles.seriesInput}
+        maxLength={24}
+        autoCapitalize="words"
+      />
+      <NameSuggestions value={common} taken={[...teams[0].players, ...teams[1].players]} onPick={setCommon} />
+      {/* The why sits under the field rather than in it, where a narrow column would cut it off. */}
+      <Text style={[styles.help, { marginLeft: 0 }]}>
+        {common.trim() ? `${common.trim()} bats and bowls for both teams; their stats count once.` : 'Plays for both sides, e.g. when a team is short.'}
+      </Text>
+    </Card>
+  );
+  const formatCard = (
+    <Card style={{ paddingVertical: space.sm }}>
+      <Stepper label="Overs" hint="Per innings" value={rules.overs} min={1} max={50} onChange={(overs) => setRules((r) => ({ ...r, overs }))} />
+      <View style={styles.divider} />
+      <Stepper label="Players" hint="Per side" value={size} min={2} max={11} onChange={setSizeAll} />
+      {(() => {
+        // Can the side bowl the whole innings under the limit?
+        const limit = rules.maxOversPerBowler ?? 0;
+        const room = limit ? size * limit + Math.min(rules.extraOverBowlers ?? 0, size) : Infinity;
+        return room < rules.overs ? (
+          <Text style={[styles.help, { marginLeft: 0, paddingBottom: space.sm, color: colors.gold }]}>
+            {size} bowlers can only bowl {room} of the {rules.overs} overs under this limit. When everyone has bowled their share,
+            anyone can bowl the rest.
+          </Text>
+        ) : null;
+      })()}
+    </Card>
+  );
+  const startButton = (
+    <Button
+      label={ongoing?.next ? `Start match ${ongoing.next}` : kind === 'series' ? 'Start the series' : 'Start match'}
+      icon="play"
+      style={wide && styles.startWide}
+      onPress={() => {
+        if (tooFew >= 0) {
+          toast.show(`${names[tooFew]} needs at least 2 players`, 'error');
+          return;
+        }
+        const doubled = teams.findIndex((t) => twice(t.players).length > 0);
+        if (doubled >= 0) {
+          toast.show(`${twice(teams[doubled].players)[0]} is in ${names[doubled]} twice`, 'error');
+          return;
+        }
+        setTossing(true);
+      }}
+    />
+  );
+
   return (
     <Screen>
-      <View style={styles.header}>
-        <IconButton icon="chevron-back" label="Back" onPress={() => router.back()} />
-      </View>
+      {wide ? (
+        // A tablet or laptop: Back and the title on one line, as on every other page.
+        <View style={{ paddingHorizontal: gutter, paddingTop: space.lg }}>
+          <Page>
+            <WideHead title={headTitle} sub={headSub} onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+          </Page>
+        </View>
+      ) : (
+        <View style={styles.header}>
+          <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+        </View>
+      )}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           scrollEnabled={!locked}
-          contentContainerStyle={{ padding: space.lg, paddingBottom: 140 }}
+          contentContainerStyle={wide ? { paddingHorizontal: gutter, paddingBottom: 140 } : { padding: space.lg, paddingBottom: 140 }}
           keyboardShouldPersistTaps="handled"
         >
-          {ongoing?.next ? (
-            <>
-              <Text style={styles.title}>
-                Match {ongoing.next}
-              </Text>
-              <Text style={styles.subtitle}>
-                {ongoing.name} · best of {ongoing.of} · {ongoing.status}
-              </Text>
-            </>
+          {wide ? (
+            // A tablet or laptop: the two sides face each other across the page, each with its whole list open. On a
+            // laptop the match's shape (one match or a series, overs, players, a common player) sits in a column beside
+            // them; on a tablet it's a row underneath.
+            <Page>
+              <Columns weights={[5, 2]} tablet={1} laptop={2} gap={space.xl}>
+                <View>
+                  <SectionLabel flush>Teams</SectionLabel>
+                  {auctionLink}
+                  <View style={[styles.sides, !desk && { gap: space.lg }]}>
+                    <View style={styles.side}>{editor(0)}</View>
+                    <View style={styles.side}>{editor(1)}</View>
+                    <View style={styles.vsWide} pointerEvents="none">
+                      {vs}
+                    </View>
+                  </View>
+                </View>
+                {desk ? (
+                  <View style={{ gap: space.md }}>
+                    <View style={{ marginBottom: -space.md }}>
+                      <SectionLabel flush>Match</SectionLabel>
+                    </View>
+                    {kindPicker}
+                    {formatCard}
+                    {commonCard}
+                  </View>
+                ) : (
+                  <View>
+                    <SectionLabel>Match</SectionLabel>
+                    <Columns gap={space.md}>
+                      <View style={{ gap: space.md }}>
+                        {kindPicker}
+                        {formatCard}
+                      </View>
+                      {commonCard}
+                    </Columns>
+                  </View>
+                )}
+              </Columns>
+            </Page>
           ) : (
             <>
-              <Text style={styles.title}>
-                {source ? 'Rematch' : 'New match'}
-              </Text>
-              <Text style={styles.subtitle}>
-                {fromAuction
-                  ? 'The teams from the auction, captains and keepers set. Then the toss.'
-                  : source
-                    ? 'Same teams. Straight to the toss.'
-                    : 'Two teams, then out to the middle for the toss.'}
-              </Text>
-              <View style={{ marginTop: space.lg, gap: space.md }}>
-                <Segmented
-                  value={kind}
-                  onChange={setKind}
-                  options={[
-                    { value: 'single', label: 'One match' },
-                    { value: 'series', label: 'Series' },
-                  ]}
-                />
-                {kind === 'series' && (
-                  <Card style={{ gap: space.md }}>
-                    <Text style={styles.question}>How long?</Text>
-                    <Segmented
-                      value={seriesOf}
-                      onChange={setSeriesOf}
-                      options={[
-                        { value: '3', label: 'Best of 3' },
-                        { value: '5', label: 'Best of 5' },
-                        { value: '7', label: 'Best of 7' },
-                      ]}
-                    />
-                    <TextInput
-                      value={seriesName}
-                      onChangeText={setSeriesName}
-                      placeholder={`Name it, e.g. ${names[0]} vs ${names[1]} Cup`}
-                      placeholderTextColor={colors.faint}
-                      style={styles.seriesInput}
-                      maxLength={40}
-                      autoCapitalize="words"
-                    />
-                    <Text style={styles.help}>
-                      First to {Math.floor(Number(seriesOf) / 2) + 1} wins. Man of the Series is picked across every match.
-                    </Text>
-                  </Card>
-                )}
+              {heading}
+              {kindPicker && <View style={{ marginTop: space.lg }}>{kindPicker}</View>}
+              <SectionLabel>Teams</SectionLabel>
+              {auctionLink}
+              <View style={{ gap: space.md }}>
+                {editor(0)}
+                <View style={styles.vs} pointerEvents="none">
+                  {vs}
+                </View>
+                {editor(1)}
               </View>
+              <View style={{ marginTop: space.md }}>{commonCard}</View>
+              <SectionLabel>Format</SectionLabel>
+              {formatCard}
             </>
           )}
-          <SectionLabel>Teams</SectionLabel>
-          {!fromAuction && !source && (
-            <PressableScale scaleTo={0.98} onPress={() => router.push('/auction/new')} style={styles.auctionLink}>
-              <Ionicons name="hammer-outline" size={18} color={colors.accentInk} />
-              <Text style={styles.auctionText}>Pick the teams by auction</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.faint} />
-            </PressableScale>
-          )}
-          <View style={{ gap: space.md }}>
-            <TeamEditor label="Team A" draft={teams[0]} saved={savedFor(0)} onChange={(d) => setTeams([d, teams[1]])} onSquad={(d) => setSquad(0, d)} onDragging={setLocked} onSwap={(i) => swap(0, i)} other={names[1]} otherNames={teams[1].players} />
-            <View style={styles.vs} pointerEvents="none">
-              <View style={styles.vsBadge}>
-                <Text style={styles.vsText}>vs</Text>
-              </View>
-            </View>
-            <TeamEditor label="Team B" draft={teams[1]} saved={savedFor(1)} onChange={(d) => setTeams([teams[0], d])} onSquad={(d) => setSquad(1, d)} onDragging={setLocked} onSwap={(i) => swap(1, i)} other={names[0]} otherNames={teams[0].players} />
-          </View>
-
-          <Card style={{ gap: space.sm, marginTop: space.md }}>
-            <Text style={styles.question}>Common player (optional)</Text>
-            <TextInput
-              value={common}
-              onChangeText={setCommon}
-              placeholder="Plays for both sides, e.g. when a team is short"
-              placeholderTextColor={colors.faint}
-              style={styles.seriesInput}
-              maxLength={24}
-              autoCapitalize="words"
-            />
-            <NameSuggestions value={common} taken={[...teams[0].players, ...teams[1].players]} onPick={setCommon} />
-            {common.trim() ? (
-              <Text style={styles.help}>{common.trim()} bats and bowls for both teams; their stats count once.</Text>
-            ) : null}
-          </Card>
-
-          <SectionLabel>Format</SectionLabel>
-          <Card style={{ paddingVertical: space.sm }}>
-            <Stepper label="Overs" hint="Per innings" value={rules.overs} min={1} max={50} onChange={(overs) => setRules((r) => ({ ...r, overs }))} />
-            <View style={styles.divider} />
-            <Stepper label="Players" hint="Per side" value={size} min={2} max={11} onChange={setSizeAll} />
-            {(() => {
-              // Can the side bowl the whole innings under the limit?
-              const limit = rules.maxOversPerBowler ?? 0;
-              const room = limit ? size * limit + Math.min(rules.extraOverBowlers ?? 0, size) : Infinity;
-              return room < rules.overs ? (
-                <Text style={[styles.help, { marginLeft: 0, paddingBottom: space.sm, color: colors.gold }]}>
-                  {size} bowlers can only bowl {room} of the {rules.overs} overs under this limit. When everyone has bowled their share,
-                  anyone can bowl the rest.
-                </Text>
-              ) : null;
-            })()}
-          </Card>
-
         </ScrollView>
       </KeyboardAvoidingView>
-      <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
-        <Button
-          label={ongoing?.next ? `Start match ${ongoing.next}` : kind === 'series' ? 'Start the series' : 'Start match'}
-          icon="play"
-          onPress={() => {
-            if (tooFew >= 0) {
-              toast.show(`${names[tooFew]} needs at least 2 players`, 'error');
-              return;
-            }
-            setTossing(true);
-          }}
-        />
+      <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }, wide && { paddingHorizontal: gutter }]}>
+        {wide ? (
+          // The start stays in reach at the foot of the page, with what's about to be played beside it.
+          <Page style={styles.footWide}>
+            <Text style={styles.footSummary} numberOfLines={1}>
+              <Text style={styles.footStrong}>
+                {names[0]} v {names[1]}
+              </Text>
+              {`  ·  ${rules.overs} overs  ·  ${size} a side`}
+              {kind === 'series' && !ongoing?.next ? `  ·  best of ${seriesOf}` : ''}
+            </Text>
+            {startButton}
+          </Page>
+        ) : (
+          startButton
+        )}
       </View>
       <TossScene
         visible={tossing}
@@ -635,16 +773,17 @@ function NewMatchScreen() {
 const styles = StyleSheet.create({
   noAccess: { color: colors.text, fontSize: 16, fontFamily: font.semibold, lineHeight: 23 },
   pasteBox: { gap: space.sm, marginTop: space.sm },
+  // 44 tall, and a little wider to the thumb than it looks (hitSlop), so C, WK and ⇅ are easy to hit.
   mark: {
-    width: 34,
-    height: 34,
+    width: 40,
+    height: 44,
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.borderHi,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  markCompact: { width: 30 },
+  markCompact: { width: 36 },
   markOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   markText: { color: colors.faint, fontSize: 11, fontFamily: font.heavy },
   markTextOn: { color: colors.onAccent },
@@ -680,8 +819,17 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
   },
   title: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
+  // The two sides side by side, the vs badge riding on the seam between them.
+  sides: { flexDirection: 'row', gap: space.xl, alignItems: 'flex-start' },
+  side: { flex: 1, minWidth: 0 },
+  vsWide: { position: 'absolute', left: '50%', top: space.md, marginLeft: -23, zIndex: 2 },
+  footWide: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  footSummary: { flex: 1, minWidth: 0, color: colors.muted, fontSize: 15, fontFamily: font.medium },
+  footStrong: { color: colors.text, fontFamily: font.bold },
+  startWide: { width: 320 },
   subtitle: { color: colors.muted, fontSize: 15, fontFamily: font.medium, marginTop: 4 },
-  teamInput: { color: colors.text, fontSize: 23, fontFamily: font.posterBlack, paddingVertical: 2, letterSpacing: -0.8 },
+  // 44 high to the thumb, with the extra taken back in margin so the card looks the same.
+  teamInput: { color: colors.text, fontSize: 23, fontFamily: font.posterBlack, paddingVertical: 8, marginVertical: -6, letterSpacing: -0.8 },
   squadToggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -698,7 +846,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    height: 42,
+    height: 44,
     paddingRight: 2,
     // On the web: a drag here moves the row, not the page, and doesn't select text.
     ...(Platform.OS === 'web' ? ({ touchAction: 'none', userSelect: 'none', cursor: 'grab' } as object) : null),
@@ -717,8 +865,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: space.md,
-    height: 42,
+    height: 44,
   },
+  twice: { color: colors.danger, fontSize: 13, fontFamily: font.semibold },
   help: { color: colors.faint, fontSize: 12, fontFamily: font.regular, marginLeft: 32 },
   vs: { alignItems: 'center', marginVertical: -26, zIndex: 2 },
   vsBadge: {

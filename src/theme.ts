@@ -13,7 +13,8 @@ const NIGHT = {
   borderHi: 'rgba(214,236,200,0.16)',
   text: '#F1F5EE',
   muted: '#98A396',
-  faint: '#5B665C',
+  /** Small print: raised so it still reads at a glance (4.5:1 on the cards). */
+  faint: '#7A867B',
   /** Volt: the one accent. Primary actions, sixes, the live state. */
   accent: '#D7FF3A',
   /** The accent as text or an icon on the page (on night it's the volt itself). */
@@ -51,7 +52,8 @@ const DAY: typeof NIGHT = {
   borderHi: 'rgba(17,24,14,0.14)',
   text: '#0E130D',
   muted: '#5C6358',
-  faint: '#99A094',
+  /** Small print: dark enough to read in the sun (4.5:1 on white). */
+  faint: '#6E7569',
   accent: '#D4FF3A',
   accentInk: '#3B7200',
   accentDim: 'rgba(130,190,0,0.13)',
@@ -84,6 +86,8 @@ export const hero = {
   violet: NIGHT.violet,
   line: NIGHT.borderHi,
   ink: (alpha: number) => `rgba(255,255,255,${alpha})`,
+  /** A recessed strip on a dark panel (the stats under a name): darker than the panel in either theme. */
+  inset: 'rgba(0,0,0,0.32)',
 };
 
 /** How day cards sit on the page: no outline, a soft lift. Nothing at night. */

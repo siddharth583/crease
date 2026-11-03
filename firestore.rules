@@ -7,7 +7,8 @@ rules_version = '2';
 // - Anyone signed in with a copancs.com Google account can read everything (and so export it on their phone).
 // - People the admin adds as 'scorer' (shown as Editor) can start matches and score them; once a match is finished only
 //   the admin can change it. Only the admin changes the squad, sides, auctions and line-ups, or deletes a match.
-// - Anyone signed in can ask to be an editor; only they and the admin can see their request.
+// - Anyone with a copancs.com account, or someone the admin already added, can ask to be an editor; only they and the
+//   admin can see their request.
 // - Everyone in the club can set their own photo; the admin can set anyone's.
 // - People the admin adds as 'viewer' (outside copancs.com) can read everything.
 // - Nobody else can read or write anything.
@@ -72,10 +73,11 @@ service cloud.firestore {
       allow delete: if isAdmin() || (signedIn() && email() == who);
     }
 
-    // Editor requests: anyone signed in can ask for themselves; only they and the admin see it; the admin answers.
+    // Editor requests: a club account (or someone already added) asks for themselves; only they and the admin see it;
+    // the admin answers.
     match /clubs/copan/requests/{who} {
       allow read: if isAdmin() || (signedIn() && email() == who);
-      allow create, update: if signedIn() && email() == who && request.resource.data.email == who
+      allow create, update: if (inDomain() || (signedIn() && role() != '')) && email() == who && request.resource.data.email == who
         && request.resource.data.status == 'pending';
       allow update, delete: if isAdmin();
       allow delete: if signedIn() && email() == who;

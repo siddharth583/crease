@@ -1,44 +1,76 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo, useState, type ComponentProps } from 'react';
+import { useMemo, useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BallChip, Card, Chip, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../components/ui.tsx';
+import { PlayerAvatar } from '../components/Avatar.tsx';
+import { BallChip, Card, Chip, FadeIn, GhostWord, IconButton, inYear, matchYears, PitchStripes, PressableScale, Screen, Segmented, Sheet, useToast, YearChips } from '../components/ui.tsx';
 import { CountUp, Tug } from '../components/motion.tsx';
 import { FaceOff } from '../components/FaceOff.tsx';
+import { Columns, useLayout } from '../components/layout.tsx';
 import { BALLS_TO_CALL, headToHead, matchups, records, rivalryContext, teamNames, verdict } from '../engine/records.ts';
 import { useMatches } from '../store/matches.tsx';
 import { useMatchFiles } from '../store/useMatchFiles.ts';
 import { useSquad } from '../store/squad.ts';
 import { plural } from '../engine/text.ts';
-import { colors, edge, font, hero, radius, space, type, HERO_BG } from '../theme.ts';
+import { colors, edge, font, hero, ownTeamTheme, radius, space, type, HERO_BG } from '../theme.ts';
 
 const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 const openPlayer = (key: string) => () => router.push({ pathname: '/player/[key]', params: { key } });
 const openMatch = (id: string) => () => router.push({ pathname: '/match/[id]/scorecard', params: { id } });
 
 type Tab = 'bat' | 'bowl' | 'team' | 'rivals';
-type Item = { title: string; sub: string; value: number; display: string; unit?: string; onPress?: () => void };
+/** `avatar`: the player's name, for their photo beside the row. */
+type Item = { title: string; sub: string; value: number; display: string; unit?: string; avatar?: string; onPress?: () => void };
+
+/** Standard competition ranks: equal values share a place and the next one skips (1, 2, 2, 4). */
+const ranksOf = (items: Item[]) => items.map((x, i) => items.findIndex((y) => y.value === x.value) + 1 || i + 1);
 type IconName = ComponentProps<typeof Ionicons>['name'];
+
+/**
+ * A record's name over its board: large, bold and in full ink with its icon, so each board reads at a glance (the
+ * small grey labels were missed).
+ */
+function Heading({ icon, children, right }: { icon: IconName; children: ReactNode; right?: ReactNode }) {
+  return (
+    <View style={styles.heading} accessibilityRole="header">
+      <View style={styles.headingIcon}>
+        <Ionicons name={icon} size={16} color={colors.accentInk} />
+      </View>
+      <Text style={styles.headingText} numberOfLines={2}>
+        {children}
+      </Text>
+      {right}
+    </View>
+  );
+}
 
 /** One record: the holder on a card of their own, the chasers under it with a bar against the top mark. */
 function Board({ label, icon, items, empty }: { label: string; icon: IconName; items: Item[]; empty?: string }) {
   const [first, ...rest] = items;
+  const ranks = ranksOf(items);
+  // In the grid every board in a row is as tall as the tallest, so the row ends on one line.
+  const { wide } = useLayout();
+  const fill = wide && { flex: 1 };
   return (
-    <FadeIn>
-      <SectionLabel>{label}</SectionLabel>
+    <FadeIn style={fill}>
+      <Heading icon={icon}>{label}</Heading>
       {!first ? (
-        <Card>
+        <Card style={fill}>
           <Text style={styles.empty}>{empty ?? 'Nothing yet. Play a few more matches.'}</Text>
         </Card>
       ) : (
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <Card style={[{ padding: 0, overflow: 'hidden' }, fill]}>
           <PressableScale disabled={!first.onPress} dimWhenDisabled={false} scaleTo={0.98} onPress={first.onPress} style={styles.champ}>
-            <View style={styles.champIcon}>
-              <Ionicons name={icon} size={20} color={colors.onAccent} />
-            </View>
+            {first.avatar ? (
+              <PlayerAvatar name={first.avatar} size={40} />
+            ) : (
+              <View style={styles.champIcon}>
+                <Ionicons name={icon} size={20} color={colors.onAccent} />
+              </View>
+            )}
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.champLabel}>Record holder</Text>
+              <Text style={styles.champLabel}>{ranks[1] === 1 ? 'Joint record holder' : 'Record holder'}</Text>
               <Text style={styles.champName} numberOfLines={1}>
                 {first.title}
               </Text>
@@ -53,7 +85,8 @@ function Board({ label, icon, items, empty }: { label: string; icon: IconName; i
           </PressableScale>
           {rest.map((x, i) => (
             <PressableScale key={i} disabled={!x.onPress} dimWhenDisabled={false} scaleTo={0.98} onPress={x.onPress} style={styles.row}>
-              <Text style={styles.rank}>{i + 2}</Text>
+              <Text style={styles.rank}>{ranks[i + 1]}</Text>
+              {x.avatar ? <PlayerAvatar name={x.avatar} size={28} /> : null}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={styles.rowTop}>
                   <Text style={styles.title} numberOfLines={1}>
@@ -76,7 +109,7 @@ function Board({ label, icon, items, empty }: { label: string; icon: IconName; i
   );
 }
 
-function Season({ s }: { s: ReturnType<typeof records>['summary'] }) {
+function Season({ s, year, wide }: { s: ReturnType<typeof records>['summary']; year: number | null; wide?: boolean }) {
   const cells = [
     { k: 'Matches', v: s.matches },
     { k: 'Runs', v: s.runs },
@@ -84,16 +117,16 @@ function Season({ s }: { s: ReturnType<typeof records>['summary'] }) {
     { k: 'Sixes', v: s.sixes },
   ];
   return (
-    <View style={styles.season}>
+    <View style={[styles.season, wide && styles.seasonWide]}>
       <PitchStripes opacity={0.06} tint="255,255,255" />
       <GhostWord size={120} style={{ color: hero.ink(0.04) }}>
         SEASON
       </GhostWord>
-      <Text style={styles.seasonLabel}>The season so far</Text>
+      <Text style={styles.seasonLabel}>{year === null ? 'The season so far' : `${year} season`}</Text>
       <View style={styles.seasonRow}>
         {cells.map((c) => (
           <View key={c.k} style={{ flex: 1 }}>
-            <CountUp value={c.v} style={styles.seasonValue} />
+            <CountUp value={c.v} style={[styles.seasonValue, wide && { fontSize: 40, lineHeight: 44 }]} />
             <Text style={styles.seasonKey}>{c.k}</Text>
           </View>
         ))}
@@ -107,8 +140,12 @@ function Season({ s }: { s: ReturnType<typeof records>['summary'] }) {
 
 export default function Records() {
   const insets = useSafeAreaInsets();
-  const { matches } = useMatches();
+  const { matches: everyMatch } = useMatches();
   const { squad } = useSquad();
+  const years = useMemo(() => matchYears(everyMatch), [everyMatch]);
+  const [year, setYear] = useState<number | null>(null);
+  // A season's record book: only its matches count, for every record below.
+  const matches = useMemo(() => inYear(everyMatch, year), [everyMatch, year]);
   const r = useMemo(() => records(matches), [matches, squad]);
   const teams = useMemo(() => teamNames(matches), [matches]);
   const [tab, setTab] = useState<Tab>('bat');
@@ -127,6 +164,20 @@ export default function Records() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const { exportRecordBook, importFile } = useMatchFiles(toast.show);
+  const layout = useLayout();
+  const { wide } = layout;
+  // A tablet or laptop: the page at its reading width (the scroller's children stay direct, for the sticky tabs).
+  const side = wide ? Math.max(layout.gutter, (layout.width - layout.maxWidth) / 2) : space.lg;
+  /** The records as a grid of cards on a tablet or laptop; one under the other on a phone. */
+  const grid = (children: ReactElement<{ children: ReactNode }>) =>
+    wide ? (
+      // The boards come as one fragment; the grid wants each of them.
+      <Columns tablet={2} laptop={3} gap={space.lg}>
+        {children.props.children}
+      </Columns>
+    ) : (
+      <>{children}</>
+    );
   const exportBook = async (format: 'pdf' | 'image' | 'file') => {
     if (saving) return;
     setExporting(false);
@@ -137,8 +188,13 @@ export default function Records() {
 
   return (
     <Screen>
-      <View style={styles.header}>
+      <View style={[styles.header, wide && { paddingHorizontal: side, paddingTop: space.lg, gap: space.lg }]}>
         <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/players'))} />
+        {wide && (
+          <Text style={[styles.pageTitle, styles.pageTitleWide]} numberOfLines={1}>
+            Record book
+          </Text>
+        )}
         <View style={styles.headerActions}>
           <PressableScale accessibilityLabel="Import a record book or match file" onPress={() => importFile('The record book is up to date.')} style={styles.importPill}>
             <Ionicons name="download-outline" size={17} color={colors.text} />
@@ -150,12 +206,23 @@ export default function Records() {
           </PressableScale>
         </View>
       </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }} stickyHeaderIndices={[2]}>
+      <ScrollView
+        contentContainerStyle={{ padding: space.lg, paddingHorizontal: side, paddingTop: wide ? space.md : 0, paddingBottom: insets.bottom + space.xxl }}
+        // The title is the first child on a phone and an empty slot on a tablet or laptop: the tabs are the fourth either way.
+        stickyHeaderIndices={[3]}
+      >
+        {!wide && (
         <Text style={styles.pageTitle}>
           Record book
         </Text>
-        <Season s={r.summary} />
-        <View style={styles.tabs}>
+        )}
+        {/* Always a view, so the tabs below stay the sticky child whether or not there are years to pick. */}
+        <View>
+          <YearChips years={years} value={year} onChange={setYear} />
+        </View>
+        <Season s={r.summary} year={year} wide={wide} />
+        <View style={[styles.tabs, wide && { paddingTop: space.xl, paddingBottom: space.md }]}>
+          <View style={wide ? { maxWidth: 560 } : null}>
           <Segmented<Tab>
             value={tab}
             onChange={setTab}
@@ -166,79 +233,83 @@ export default function Records() {
               { value: 'rivals', label: 'Rivalries' },
             ]}
           />
+          </View>
         </View>
 
-        {tab === 'bat' && (
+        {tab === 'bat' &&
+          grid(
           <>
-            <Board label="Most runs" icon="trending-up" items={r.mostRuns.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
+            <Board label="Most runs" icon="trending-up" items={r.mostRuns.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: x.count, display: String(x.count), avatar: x.name, onPress: openPlayer(x.key) }))} />
             <Board
               label="Highest scores"
               icon="flame"
-              items={r.highScores.map((x) => ({ title: x.name, sub: `${plural(x.balls, 'ball')} v ${x.vs} · ${day(x.date)}`, value: x.runs, display: `${x.runs}${x.notOut ? '*' : ''}`, onPress: openPlayer(x.key) }))}
+              items={r.highScores.map((x) => ({ title: x.name, sub: `${plural(x.balls, 'ball')} v ${x.vs} · ${day(x.date)}`, value: x.runs, display: `${x.runs}${x.notOut ? '*' : ''}`, avatar: x.name, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Best average (3+ innings)"
               icon="analytics"
-              items={r.bestAverage.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: x.rate, display: x.rate.toFixed(1), onPress: openPlayer(x.key) }))}
+              items={r.bestAverage.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: x.rate, display: x.rate.toFixed(1), avatar: x.name, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Best strike rate (30+ balls)"
               icon="speedometer"
-              items={r.bestStrikeRate.map((x) => ({ title: x.name, sub: x.sub, value: x.rate, display: x.rate.toFixed(0), unit: ' SR', onPress: openPlayer(x.key) }))}
+              items={r.bestStrikeRate.map((x) => ({ title: x.name, sub: x.sub, value: x.rate, display: x.rate.toFixed(0), unit: ' SR', avatar: x.name, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Fastest innings (15+ balls)"
               icon="flash"
-              items={r.fastest.map((x) => ({ title: x.name, sub: `${x.runs} off ${x.balls} v ${x.vs} · ${day(x.date)}`, value: (x.runs * 100) / x.balls, display: ((x.runs * 100) / x.balls).toFixed(0), unit: ' SR', onPress: openPlayer(x.key) }))}
+              items={r.fastest.map((x) => ({ title: x.name, sub: `${x.runs} off ${x.balls} v ${x.vs} · ${day(x.date)}`, value: (x.runs * 100) / x.balls, display: ((x.runs * 100) / x.balls).toFixed(0), unit: ' SR', avatar: x.name, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Biggest partnerships"
               icon="people"
               items={r.partnerships.map((x) => ({ title: x.names, sub: `${plural(x.balls, 'ball')} · ${x.team} v ${x.vs} · ${day(x.date)}`, value: x.runs, display: String(x.runs), onPress: openMatch(x.matchId) }))}
             />
-            <Board label="Most sixes" icon="rocket" items={r.mostSixes.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
-            <Board label="Most fours" icon="arrow-forward-circle" items={r.mostFours.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
-            <Board label="Most Man of the Match awards" icon="star" items={r.mostMoM.map((x) => ({ title: x.name, sub: x.team, value: x.count, display: String(x.count), unit: '×', onPress: openPlayer(x.key) }))} />
-          </>
-        )}
+            <Board label="Most sixes" icon="rocket" items={r.mostSixes.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), avatar: x.name, onPress: openPlayer(x.key) }))} />
+            <Board label="Most fours" icon="arrow-forward-circle" items={r.mostFours.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), avatar: x.name, onPress: openPlayer(x.key) }))} />
+            <Board label="Most Man of the Match awards" icon="star" items={r.mostMoM.map((x) => ({ title: x.name, sub: x.team, value: x.count, display: String(x.count), unit: '×', avatar: x.name, onPress: openPlayer(x.key) }))} />
+          </>,
+          )}
 
-        {tab === 'bowl' && (
+        {tab === 'bowl' &&
+          grid(
           <>
-            <Board label="Most wickets" icon="trending-up" items={r.mostWickets.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
+            <Board label="Most wickets" icon="trending-up" items={r.mostWickets.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub}`, value: x.count, display: String(x.count), avatar: x.name, onPress: openPlayer(x.key) }))} />
             <Board
               label="Best bowling"
               icon="flame"
-              items={r.bestBowling.map((x) => ({ title: x.name, sub: `${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: x.wickets * 100 - x.runs, display: `${x.wickets}/${x.runs}`, onPress: openPlayer(x.key) }))}
+              items={r.bestBowling.map((x) => ({ title: x.name, sub: `${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: x.wickets * 100 - x.runs, display: `${x.wickets}/${x.runs}`, avatar: x.name, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Best economy (6+ overs)"
               icon="lock-closed"
-              items={r.bestEconomy.map((x) => ({ title: x.name, sub: x.sub, value: x.rate, display: x.rate.toFixed(2), unit: ' a over', onPress: openPlayer(x.key) }))}
+              items={r.bestEconomy.map((x) => ({ title: x.name, sub: x.sub, value: x.rate, display: x.rate.toFixed(2), unit: ' an over', avatar: x.name, onPress: openPlayer(x.key) }))}
             />
-            <Board label="Most dot balls" icon="ellipse-outline" items={r.mostDots.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))} />
+            <Board label="Most dot balls" icon="ellipse-outline" items={r.mostDots.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), avatar: x.name, onPress: openPlayer(x.key) }))} />
             <Board
               label="Most fours conceded"
               icon="arrow-forward-circle"
-              items={r.mostFoursConceded.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))}
+              items={r.mostFoursConceded.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), avatar: x.name, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Most sixes conceded"
               icon="rocket"
-              items={r.mostSixesConceded.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))}
+              items={r.mostSixesConceded.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), avatar: x.name, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Most wides & no-balls"
               icon="warning"
               empty="Not a wide or no-ball yet."
-              items={r.mostExtras.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))}
+              items={r.mostExtras.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), avatar: x.name, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Most catches, run-outs & stumpings"
               icon="hand-left"
-              items={r.mostDismissals.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), onPress: openPlayer(x.key) }))}
+              items={r.mostDismissals.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), avatar: x.name, onPress: openPlayer(x.key) }))}
             />
-            <SectionLabel>Most expensive overs</SectionLabel>
-            <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <View style={wide && { flex: 1 }}>
+            <Heading icon="cash-outline">Most expensive overs</Heading>
+            <Card style={[{ padding: 0, overflow: 'hidden' }, wide && { flex: 1 }]}>
               {r.dearestOvers.map((o, i) => (
                 <PressableScale key={i} scaleTo={0.98} onPress={openMatch(o.matchId)} style={[styles.overRow, i === 0 && { borderTopWidth: 0 }]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
@@ -255,14 +326,15 @@ export default function Records() {
                 </PressableScale>
               ))}
             </Card>
-          </>
-        )}
+            </View>
+          </>,
+          )}
 
         {tab === 'team' && (
           <>
             {h2h && ta && tb && (
               <FadeIn>
-                <SectionLabel>Head to head</SectionLabel>
+                <Heading icon="git-compare-outline">Head to head</Heading>
                 <Card style={{ gap: space.md }}>
                   <View style={styles.pickRow}>
                     {teams.map((t) => (
@@ -279,7 +351,7 @@ export default function Records() {
                   </View>
                   <View style={styles.h2h}>
                     <View style={styles.h2hSide}>
-                      <Text style={[styles.h2hWins, { color: colors.accentInk }]}>{h2h.winsA}</Text>
+                      <Text style={[styles.h2hWins, { color: ownTeamTheme(ta)?.ink ?? colors.accentInk }]}>{h2h.winsA}</Text>
                       <Text style={styles.h2hName} numberOfLines={1}>
                         {ta}
                       </Text>
@@ -290,7 +362,7 @@ export default function Records() {
                       <Text style={styles.sub}>played{h2h.ties ? ` · ${h2h.ties} tied` : ''}</Text>
                     </View>
                     <View style={[styles.h2hSide, { alignItems: 'flex-end' }]}>
-                      <Text style={[styles.h2hWins, { color: colors.violet }]}>{h2h.winsB}</Text>
+                      <Text style={[styles.h2hWins, { color: ownTeamTheme(tb)?.ink ?? colors.violet }]}>{h2h.winsB}</Text>
                       <Text style={styles.h2hName} numberOfLines={1}>
                         {tb}
                       </Text>
@@ -318,6 +390,8 @@ export default function Records() {
                 </Card>
               </FadeIn>
             )}
+            {grid(
+            <>
             <Board
               label="Biggest wins by runs"
               icon="trophy"
@@ -342,13 +416,15 @@ export default function Records() {
               label="Hall of shame: most ducks"
               icon="egg-outline"
               empty="No ducks yet. Everyone’s got off the mark."
-              items={r.mostDucks.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), unit: '×', onPress: openPlayer(x.key) }))}
+              items={r.mostDucks.map((x) => ({ title: x.name, sub: `${x.team} · ${x.sub ?? ''}`, value: x.count, display: String(x.count), unit: '×', avatar: x.name, onPress: openPlayer(x.key) }))}
             />
             <Board
               label="Hall of shame: most expensive spells"
               icon="cash-outline"
-              items={r.dearestSpells.map((x) => ({ title: x.name, sub: `${x.wickets}/${x.runs} off ${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: x.runs, display: String(x.runs), unit: ' runs', onPress: openPlayer(x.key) }))}
+              items={r.dearestSpells.map((x) => ({ title: x.name, sub: `${x.wickets}/${x.runs} off ${x.overs} overs v ${x.vs} · ${day(x.date)}`, value: x.runs, display: String(x.runs), unit: ' runs', avatar: x.name, onPress: openPlayer(x.key) }))}
             />
+            </>,
+            )}
           </>
         )}
 
@@ -356,9 +432,11 @@ export default function Records() {
           <>
             {duels[0] ? (
               <FadeIn>
-                <SectionLabel>Rivalry of the season</SectionLabel>
+                <Heading icon="flash">Rivalry of the season</Heading>
                 <FaceOff m={duels[0]} big ctx={ctx} />
-                <SectionLabel right={<Text style={styles.count}>{leaning.length}</Text>}>Every rivalry (6+ balls)</SectionLabel>
+                <Heading icon="people" right={<Text style={styles.count}>{leaning.length}</Text>}>
+                  Every rivalry ({BALLS_TO_CALL}+ balls)
+                </Heading>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm, paddingBottom: space.md }}>
                   {(
                     [
@@ -371,11 +449,12 @@ export default function Records() {
                     <Chip key={k} label={l} selected={lean === k} tone={k === 'bowler' ? 'violet' : 'accent'} onPress={() => setLean(k)} />
                   ))}
                 </ScrollView>
-                <View style={{ gap: space.sm }}>
+                {/* A tablet or laptop: the rivalries two to a row (three would cut the names). */}
+                <Columns tablet={2} gap={wide ? space.md : space.sm}>
                   {leaning.slice(0, shown).map((d) => (
                     <FaceOff key={d.id} m={d} ctx={ctx} />
                   ))}
-                </View>
+                </Columns>
                 {leaning.length > shown && (
                   <PressableScale onPress={() => setShown(shown + 10)} style={styles.more}>
                     <Text style={styles.moreText}>Show {Math.min(10, leaning.length - shown)} more</Text>
@@ -384,7 +463,7 @@ export default function Records() {
               </FadeIn>
             ) : (
               <Card style={{ marginTop: space.lg }}>
-                <Text style={styles.empty}>Rivalries appear once a batter has faced a bowler for 6 balls or more.</Text>
+                <Text style={styles.empty}>Rivalries appear once a batter has faced a bowler for {BALLS_TO_CALL} balls or more.</Text>
               </Card>
             )}
           </>
@@ -422,6 +501,9 @@ export default function Records() {
 }
 
 const styles = StyleSheet.create({
+  heading: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xl + 8, marginBottom: space.md, paddingHorizontal: 2 },
+  headingIcon: { width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center' },
+  headingText: { flex: 1, color: colors.text, fontSize: 19, lineHeight: 23, fontFamily: font.posterBlack, letterSpacing: -0.3 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   importPill: {
@@ -433,7 +515,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     paddingHorizontal: space.md,
-    height: 38,
+    height: 44,
   },
   importText: { color: colors.text, fontSize: 13, fontFamily: font.heavy },
   option: {
@@ -450,16 +532,19 @@ const styles = StyleSheet.create({
   optionTitle: { fontFamily: font.poster, fontSize: 17, color: colors.text },
   optionBody: { color: colors.muted, fontSize: 12, fontFamily: font.medium, marginTop: 2 },
   optionNote: { color: colors.muted, fontSize: 12, fontFamily: font.medium, lineHeight: 18 },
-  export: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: space.md, height: 38, ...edge },
+  export: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: space.md, height: 44, ...edge },
   exportText: { color: colors.onAccent, fontSize: 13, fontFamily: font.heavy },
   pageTitle: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
+  pageTitleWide: { flex: 1, minWidth: 0, fontSize: 40, lineHeight: 46, letterSpacing: -1.2 },
+  seasonWide: { padding: space.xl, marginTop: 0 },
   season: { backgroundColor: HERO_BG, borderRadius: radius.xl, padding: space.lg, marginTop: space.md, overflow: 'hidden' },
   seasonLabel: { ...type.label, color: hero.accent },
   seasonRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   seasonValue: { fontFamily: font.posterBlack, fontSize: 23, lineHeight: 26, color: hero.text, ...type.num },
   seasonKey: { ...type.label, fontSize: 9, color: hero.muted },
   seasonLine: { color: hero.muted, fontSize: 12, fontFamily: font.medium, marginTop: space.md },
-  tabs: { backgroundColor: colors.bg, paddingVertical: space.sm, marginTop: space.md },
+  // Room above as padding, not margin: stuck to the top, a margin would leave a strip the boards scroll through.
+  tabs: { backgroundColor: colors.bg, paddingTop: space.sm + space.md, paddingBottom: space.sm },
   empty: { color: colors.muted, fontSize: 13, fontFamily: font.medium, lineHeight: 19 },
   champ: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, backgroundColor: colors.accentDim },
   champIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
@@ -470,7 +555,7 @@ const styles = StyleSheet.create({
   champUnit: { fontFamily: font.poster, fontSize: 14, color: colors.muted },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: 1, borderTopColor: colors.border },
   rowTop: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
-  rank: { width: 18, fontFamily: font.posterBlack, fontSize: 16, color: colors.faint },
+  rank: { minWidth: 18, fontFamily: font.posterBlack, fontSize: 16, color: colors.faint },
   title: { flex: 1, color: colors.text, fontSize: 15, fontFamily: font.bold },
   sub: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 3 },
   value: { fontFamily: font.posterBlack, fontSize: 20, color: colors.text, ...type.num },
@@ -481,7 +566,7 @@ const styles = StyleSheet.create({
   tugBat: { backgroundColor: colors.accent, borderRadius: 4 },
   tugBowl: { backgroundColor: colors.violet, borderRadius: 4 },
   count: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
-  more: { padding: space.md, alignItems: 'center' },
+  more: { padding: space.md, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   moreText: { color: colors.accentInk, fontSize: 13, fontFamily: font.bold },
   pickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   vs: { ...type.label, color: colors.faint, textAlign: 'center' },

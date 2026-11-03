@@ -5,7 +5,7 @@ import { matchState, oversText, playerName, type InningsState } from '../engine/
 import { playerOfTheMatch, seriesState } from '../engine/stats.ts';
 import type { Match } from '../engine/types.ts';
 import { shareImage } from '../store/files.ts';
-import { font } from '../theme.ts';
+import { font, ownTeamTheme } from '../theme.ts';
 import { Button, GhostWord, PitchStripes, Sheet, type ToastTone } from './ui.tsx';
 import { pictureFileName } from '../engine/backup.ts';
 import { AppMark } from './AppMark.tsx';
@@ -35,6 +35,10 @@ function Card({ match, all }: { match: Match; all: Match[] }) {
   const series = match.series ? seriesState(all.filter((m) => m.series?.id === match.series!.id)) : null;
   const winner = match.teams.find((t) => t.id === state.winner);
   const date = new Date(match.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  // The winners' own colours when they have them (the card is always dark, so their bright accent reads); else volt.
+  const win = ownTeamTheme(winner?.name);
+  const volt = win?.accent ?? C.volt;
+  const onVolt = win?.onAccent ?? C.ink;
 
   return (
     <View style={styles.card}>
@@ -48,14 +52,14 @@ function Card({ match, all }: { match: Match; all: Match[] }) {
         <Text style={styles.date}>{date}</Text>
       </View>
       {series && (
-        <Text style={styles.series}>
+        <Text style={[styles.series, { color: volt }]}>
           {series.name.toUpperCase()} · MATCH {match.series!.number} OF {series.of}
         </Text>
       )}
       <Text style={styles.headline} numberOfLines={2}>
         {winner ? `${winner.name} win` : state.result ?? 'Match tied'}
       </Text>
-      {winner && <Text style={styles.margin}>{state.result!.replace(`${winner.name} won `, '').replace(`${winner.name} `, '')}</Text>}
+      {winner && <Text style={[styles.margin, { color: volt }]}>{state.result!.replace(`${winner.name} won `, '').replace(`${winner.name} `, '')}</Text>}
 
       <View style={styles.scores}>
         {state.innings.slice(0, 2).map((inn, i) => {
@@ -64,7 +68,7 @@ function Card({ match, all }: { match: Match; all: Match[] }) {
           return (
             <View key={i} style={styles.team}>
               <View style={styles.teamRow}>
-                <Text style={[styles.teamName, state.winner === inn.battingTeam.id && { color: C.volt }]} numberOfLines={1}>
+                <Text style={[styles.teamName, state.winner === inn.battingTeam.id && { color: volt }]} numberOfLines={1}>
                   {inn.battingTeam.name}
                 </Text>
                 <Text style={styles.teamScore}>
@@ -89,12 +93,12 @@ function Card({ match, all }: { match: Match; all: Match[] }) {
       </View>
 
       {mom && (
-        <View style={styles.mom}>
-          <Text style={styles.momLabel}>MAN OF THE MATCH</Text>
-          <Text style={styles.momName} numberOfLines={1}>
+        <View style={[styles.mom, { backgroundColor: volt }]}>
+          <Text style={[styles.momLabel, { color: onVolt }]}>MAN OF THE MATCH</Text>
+          <Text style={[styles.momName, { color: onVolt }]} numberOfLines={1}>
             {mom.name}
           </Text>
-          <Text style={styles.momLine}>{mom.summary}</Text>
+          <Text style={[styles.momLine, { color: onVolt }]}>{mom.summary}</Text>
         </View>
       )}
       {series && <Text style={styles.footer}>{series.status}</Text>}

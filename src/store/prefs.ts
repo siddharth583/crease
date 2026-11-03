@@ -12,9 +12,11 @@ export type Prefs = {
   lastBackup: number | null;
   /** Which squad player each account on this phone is (by email, or '' signed out), for My profile. */
   me?: Record<string, string>;
+  /** Fours, sixes, wickets and milestones get their flash and confetti. */
+  celebrate: boolean;
 };
 
-const DEFAULTS: Prefs = { theme: 'night', lastBackup: null };
+const DEFAULTS: Prefs = { theme: 'night', lastBackup: null, celebrate: true };
 const KEY = 'crease.prefs.v1';
 
 function prefsFile() {

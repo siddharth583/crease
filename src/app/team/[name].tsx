@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PlayerAvatar } from '../../components/Avatar.tsx';
 import { FormBadge } from '../../components/Ratings.tsx';
+import { Columns, Page, useLayout } from '../../components/layout.tsx';
 import { Card, IconButton, PageToneProvider, PitchStripes, PressableScale, Screen, SectionLabel, usePageTone } from '../../components/ui.tsx';
 import { headToHead, teamNames } from '../../engine/records.ts';
 import { keyFor } from '../../engine/stats.ts';
@@ -64,22 +65,105 @@ export default function TeamScreen() {
   const winPct = t.played ? Math.round((t.won / t.played) * 100) : null;
 
   const tone = ownTeamTheme(name) ?? null;
+  const layout = useLayout();
+  const { wide, desk } = layout;
+  const squadN = (
+    <>
+      {players.length > 0 && (
+        <>
+          <SectionLabel right={together?.form != null ? <Text style={[styles.small, tone && { color: tone.ink }]}>Form {together.form.toFixed(1)} together</Text> : undefined}>Squad</SectionLabel>
+          <Card style={{ gap: 0, paddingVertical: space.xs }}>
+            {players.map(({ p, s, key }, i) => (
+              <PressableScale key={p.id} scaleTo={0.98} onPress={() => openPlayer(key)} style={[styles.member, i > 0 && styles.divided]} accessibilityLabel={p.name}>
+                <PlayerAvatar name={p.name} size={40} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.leaderName} numberOfLines={1}>
+                    {p.name}
+                    {team?.captain === p.id ? <Text style={[styles.mark, { color: side.ink }]}>{'  '}C</Text> : null}
+                    {team?.keeper === p.id ? <Text style={styles.mark}>{'  '}WK</Text> : null}
+                  </Text>
+                  <Text style={styles.small}>
+                    Bat {s.bat} · Bowl {s.bowl}
+                    {s.guest ? ' · not in the squad' : ''}
+                  </Text>
+                </View>
+                {s.form != null && <FormBadge form={s.form} />}
+              </PressableScale>
+            ))}
+          </Card>
+        </>
+      )}
+    </>
+  );
+  const leadersN = (
+    <>
+      {(t.runs.length > 0 || t.wickets.length > 0) && <SectionLabel>Leaders</SectionLabel>}
+      <View style={styles.boards}>
+        <Leaders title="Most runs" unit="runs" rows={t.runs} />
+        <Leaders title="Most wickets" unit="wickets" rows={t.wickets} />
+        <Leaders title="Most sixes" unit="sixes" rows={t.sixes} />
+        <Leaders title="Most catches" unit="catches" rows={t.catches} />
+      </View>
+    </>
+  );
+  const resultsN = (
+    <>
+      {t.results.length > 0 && (
+        <>
+          <SectionLabel right={<Text style={styles.small}>{t.results.length}</Text>}>Results</SectionLabel>
+          <Card style={{ gap: 0, paddingVertical: space.xs }}>
+            {t.results.map((r, i) => (
+              <PressableScale key={r.matchId} scaleTo={0.98} onPress={() => openMatch(r.matchId)} style={[styles.result, i > 0 && styles.divided]} accessibilityLabel={r.result}>
+                <View style={[styles.dot, r.outcome === 'W' ? { backgroundColor: side.accent } : r.outcome === 'L' ? styles.dotLoss : styles.dotTie]}>
+                  <Text style={[styles.dotText, r.outcome === 'W' && { color: side.onAccent }]}>{r.outcome}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.leaderName} numberOfLines={1}>
+                    vs {r.opponent}
+                  </Text>
+                  <Text style={styles.small} numberOfLines={1}>
+                    {r.result}
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.score}>
+                    {r.score} <Text style={styles.small}>· {r.against}</Text>
+                  </Text>
+                  <Text style={styles.small}>{day(r.date)}</Text>
+                </View>
+              </PressableScale>
+            ))}
+          </Card>
+        </>
+      )}
+    </>
+  );
   const tile = [styles.tile, tone && { backgroundColor: tone.card, borderColor: tone.line }];
   return (
     <PageToneProvider value={tone}>
       <Screen>
-        <View style={styles.header}>
-          <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/teams'))} />
+        <View style={[styles.header, wide && { paddingHorizontal: layout.gutter, paddingTop: space.lg, paddingBottom: space.md }]}>
+          <Page>
+            <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/teams'))} />
+          </Page>
         </View>
-        <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl, gap: space.md }}>
-          <LinearGradient colors={side.hero} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.hero}>
+        <ScrollView contentContainerStyle={{ padding: wide ? layout.gutter : space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
+          <Page style={{ gap: space.md }}>
+          <LinearGradient colors={side.hero} start={{ x: 0, y: 0 }} end={{ x: wide ? 1 : 0, y: 1 }} style={[styles.hero, wide && styles.heroWide]}>
             <PitchStripes tint="255,255,255" />
+            {/* A tablet or laptop: the name and form on the left, the record beside them. */}
+            <View style={wide ? styles.heroSplit : { gap: space.sm }}>
+            <View style={wide ? { flex: 1, minWidth: 0, gap: space.md } : { gap: space.sm }}>
             <View style={[styles.tag, { backgroundColor: side.accent }]}>
               <Text style={[styles.tagText, { color: side.onAccent }]}>Team</Text>
             </View>
-            <Text style={styles.name} numberOfLines={2}>
+            <Text style={[styles.name, wide && styles.nameWide]} numberOfLines={2}>
               {t.name}
             </Text>
+            {!t.played ? (
+              <Text style={styles.noGames}>No matches yet. Its record, form and leaders start with its first match.</Text>
+            ) : (
+            <>
             <View style={styles.form}>
               {t.results.slice(0, 5).map((r) => (
                 <View key={r.matchId} style={[styles.dot, r.outcome === 'W' ? { backgroundColor: side.accent } : r.outcome === 'L' ? styles.dotLoss : styles.dotTie]}>
@@ -92,25 +176,36 @@ export default function TeamScreen() {
                 </Text>
               )}
             </View>
-            <View style={styles.stats}>
+            </>
+            )}
+            </View>
+            {t.played > 0 && (
+            <View style={[styles.stats, wide && styles.statsWide]}>
               {[
                 ['Played', String(t.played)],
                 ['Won', String(t.won)],
                 ['Lost', String(t.lost)],
+                // Ties too, so the three add up to the matches played.
+                ['Tied', String(t.tied)],
                 ['Win %', winPct === null ? '–' : `${winPct}`],
               ].map(([label, value]) => (
                 <View key={label} style={{ flex: 1, alignItems: 'center' }}>
-                  <Text style={styles.statValue}>{value}</Text>
+                  <Text style={[styles.statValue, wide && { fontSize: 32, lineHeight: 36 }]}>{value}</Text>
                   <Text style={styles.statLabel}>{label}</Text>
                 </View>
               ))}
             </View>
+            )}
+            </View>
           </LinearGradient>
 
+          {(t.highest || (rival && rival.h.played > 0)) && (
+          // The figures and the head to head side by side end level, every tile the same width.
+          <Columns weights={[3, 2]} tablet={t.highest && rival && rival.h.played > 0 ? 2 : 1} gap={space.md} stretch>
           {(t.highest || rival) && (
-            <View style={styles.tiles}>
+            <View style={[styles.tiles, wide && { flex: 1 }]}>
               {t.highest && (
-                <PressableScale scaleTo={0.97} onPress={() => openMatch(t.highest!.matchId)} style={tile}>
+                <PressableScale scaleTo={0.97} onPress={() => openMatch(t.highest!.matchId)} wrapStyle={styles.tileWrap} style={tile}>
                   <Text style={styles.tileValue}>
                     {t.highest.runs}/{t.highest.wickets}
                   </Text>
@@ -118,7 +213,7 @@ export default function TeamScreen() {
                 </PressableScale>
               )}
               {t.lowest && (
-                <PressableScale scaleTo={0.97} onPress={() => openMatch(t.lowest!.matchId)} style={tile}>
+                <PressableScale scaleTo={0.97} onPress={() => openMatch(t.lowest!.matchId)} wrapStyle={styles.tileWrap} style={tile}>
                   <Text style={styles.tileValue}>
                     {t.lowest.runs}/{t.lowest.wickets}
                   </Text>
@@ -135,19 +230,31 @@ export default function TeamScreen() {
           )}
 
           {rival && rival.h.played > 0 && (
-            <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/team/[name]', params: { name: rival.x } })}>
-              <Card style={styles.h2h}>
-                <Text style={styles.label}>Head to head</Text>
+            <PressableScale
+              scaleTo={0.98}
+              onPress={() => router.push({ pathname: '/team/[name]', params: { name: rival.x } })}
+              accessibilityLabel={`Head to head: open ${rival.x}`}
+              wrapStyle={wide && { flex: 1 }}
+              style={wide && { flex: 1 }}
+            >
+              <Card style={[styles.h2h, wide && { flex: 1, paddingVertical: space.md, justifyContent: 'space-between' }]}>
+                <View style={styles.h2hHead}>
+                  <Text style={styles.label}>Head to head</Text>
+                  {/* Says where the tap goes: the other side's page. */}
+                  <Text style={[styles.h2hOpen, { color: teamTheme(rival.x).ink }]} numberOfLines={1}>
+                    vs {rival.x} ›
+                  </Text>
+                </View>
                 <View style={styles.h2hRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.h2hWins, { color: side.accent }]}>{rival.h.winsA}</Text>
+                    <Text style={[styles.h2hWins, { color: side.ink }]}>{rival.h.winsA}</Text>
                     <Text style={styles.small} numberOfLines={1}>
                       {t.name}
                     </Text>
                   </View>
                   <Text style={styles.small}>{rival.h.ties ? `${rival.h.ties} tied` : 'vs'}</Text>
                   <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                    <Text style={[styles.h2hWins, { color: teamTheme(rival.x).accent }]}>{rival.h.winsB}</Text>
+                    <Text style={[styles.h2hWins, { color: teamTheme(rival.x).ink }]}>{rival.h.winsB}</Text>
                     <Text style={styles.small} numberOfLines={1}>
                       {rival.x}
                     </Text>
@@ -156,74 +263,27 @@ export default function TeamScreen() {
               </Card>
             </PressableScale>
           )}
+          </Columns>
+          )}
 
-          {players.length > 0 && (
+          {wide ? (
+            // A tablet: the squad beside the leaders and results. A laptop: squad, leaders, results, a column each.
+            <View style={styles.wideCols}>
+              <View style={styles.wideCol}>{squadN}</View>
+              <View style={styles.wideCol}>
+                {leadersN}
+                {!desk && resultsN}
+              </View>
+              {desk && <View style={styles.wideCol}>{resultsN}</View>}
+            </View>
+          ) : (
             <>
-              <SectionLabel right={together?.form != null ? <Text style={[styles.small, tone && { color: tone.ink }]}>Form {together.form.toFixed(1)} together</Text> : undefined}>Squad</SectionLabel>
-              <Card style={{ gap: 0, paddingVertical: space.xs }}>
-                {players.map(({ p, s, key }, i) => (
-                  <PressableScale key={p.id} scaleTo={0.98} onPress={() => openPlayer(key)} style={[styles.member, i > 0 && styles.divided]} accessibilityLabel={p.name}>
-                    <PlayerAvatar name={p.name} size={40} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.leaderName} numberOfLines={1}>
-                        {p.name}
-                        {team?.captain === p.id ? <Text style={[styles.mark, { color: side.accent }]}>{'  '}C</Text> : null}
-                        {team?.keeper === p.id ? <Text style={styles.mark}>{'  '}WK</Text> : null}
-                      </Text>
-                      <Text style={styles.small}>
-                        Bat {s.bat} · Bowl {s.bowl}
-                        {s.guest ? ' · not in the squad' : ''}
-                      </Text>
-                    </View>
-                    {s.form != null && <FormBadge form={s.form} />}
-                  </PressableScale>
-                ))}
-              </Card>
+              {squadN}
+              {leadersN}
+              {resultsN}
             </>
           )}
-
-          {(t.runs.length > 0 || t.wickets.length > 0) && <SectionLabel>Leaders</SectionLabel>}
-          <View style={styles.boards}>
-            <Leaders title="Most runs" unit="runs" rows={t.runs} />
-            <Leaders title="Most wickets" unit="wickets" rows={t.wickets} />
-            <Leaders title="Most sixes" unit="sixes" rows={t.sixes} />
-            <Leaders title="Most catches" unit="catches" rows={t.catches} />
-          </View>
-
-          {t.results.length > 0 && (
-            <>
-              <SectionLabel right={<Text style={styles.small}>{t.results.length}</Text>}>Results</SectionLabel>
-              <Card style={{ gap: 0, paddingVertical: space.xs }}>
-                {t.results.map((r, i) => (
-                  <PressableScale key={r.matchId} scaleTo={0.98} onPress={() => openMatch(r.matchId)} style={[styles.result, i > 0 && styles.divided]} accessibilityLabel={r.result}>
-                    <View style={[styles.dot, r.outcome === 'W' ? { backgroundColor: side.accent } : r.outcome === 'L' ? styles.dotLoss : styles.dotTie]}>
-                      <Text style={[styles.dotText, r.outcome === 'W' && { color: side.onAccent }]}>{r.outcome}</Text>
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.leaderName} numberOfLines={1}>
-                        vs {r.opponent}
-                      </Text>
-                      <Text style={styles.small} numberOfLines={1}>
-                        {r.result}
-                      </Text>
-                    </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={styles.score}>
-                        {r.score} <Text style={styles.small}>· {r.against}</Text>
-                      </Text>
-                      <Text style={styles.small}>{day(r.date)}</Text>
-                    </View>
-                  </PressableScale>
-                ))}
-              </Card>
-            </>
-          )}
-
-          {!t.played && !players.length && (
-            <Card>
-              <Text style={styles.small}>No matches for {name} yet.</Text>
-            </Card>
-          )}
+          </Page>
         </ScrollView>
       </Screen>
     </PageToneProvider>
@@ -242,18 +302,29 @@ const styles = StyleSheet.create({
   dotTie: { backgroundColor: hero.ink(0.14) },
   dotText: { color: hero.text, fontSize: 11, fontFamily: font.heavy },
   streak: { color: hero.muted, fontSize: 12, fontFamily: font.semibold, marginLeft: 4 },
-  stats: { flexDirection: 'row', marginTop: space.sm, backgroundColor: colors.inset, borderRadius: radius.md, paddingVertical: space.md },
-  statValue: { color: hero.text, fontSize: 26, lineHeight: 30, fontFamily: font.posterBlack, ...type.num },
-  statLabel: { ...type.label, fontSize: 9, color: hero.faint, marginTop: 2 },
+  // On the dark panel in either theme: a darker strip and the night greys, so it reads in Day mode too.
+  stats: { flexDirection: 'row', marginTop: space.sm, backgroundColor: hero.inset, borderRadius: radius.md, paddingVertical: space.md },
+  statValue: { color: hero.text, fontSize: 24, lineHeight: 28, fontFamily: font.posterBlack, ...type.num },
+  statLabel: { ...type.label, fontSize: 9, letterSpacing: 0.6, color: hero.muted, marginTop: 2 },
+  noGames: { color: hero.muted, fontSize: 14, fontFamily: font.medium, lineHeight: 20 },
   tiles: { flexDirection: 'row', gap: space.sm },
+  tileWrap: { flex: 1, minWidth: 0 },
   tile: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md },
   tileValue: { color: colors.text, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
   h2h: { gap: space.sm },
+  h2hHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  h2hOpen: { flexShrink: 1, fontSize: 13, fontFamily: font.bold },
   h2hRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   h2hWins: { fontSize: 34, lineHeight: 38, fontFamily: font.posterBlack, ...type.num },
   label: { ...type.label, color: colors.muted },
   small: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
   boards: { gap: space.md },
+  heroWide: { padding: space.xxl, minHeight: 240, justifyContent: 'flex-end' },
+  heroSplit: { flexDirection: 'row', alignItems: 'flex-end', gap: space.xl },
+  nameWide: { fontSize: 60, lineHeight: 66, letterSpacing: -2 },
+  statsWide: { width: 420, marginTop: 0, paddingVertical: space.lg },
+  wideCols: { flexDirection: 'row', gap: space.lg, alignItems: 'flex-start' },
+  wideCol: { flex: 1, minWidth: 0 },
   board: { gap: 0 },
   leader: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
   divided: { borderTopWidth: 1, borderTopColor: colors.border },

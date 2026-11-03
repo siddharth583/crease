@@ -6,11 +6,12 @@ import type { Match } from '../engine/types.ts';
 import { colors, font, ink, radius, space, type } from '../theme.ts';
 import { Card, PressableScale, SectionLabel } from './ui.tsx';
 
-const W = 320;
 const H = 150;
 
 /** Both innings' runs over by over on one chart: the chase line catching the first one, or not. */
 export function RunRace({ state }: { state: MatchState }) {
+  // As wide as its card, whatever the phone: a fixed width spilt out of the card on a 360px screen.
+  const [W, setW] = useState(0);
   const lines = state.innings.slice(0, 2).filter((s) => s.legalBalls > 0);
   if (!lines.length) return null;
   const overs = Math.max(...lines.map((s) => s.maxBalls / 6));
@@ -37,21 +38,25 @@ export function RunRace({ state }: { state: MatchState }) {
   return (
     <>
       <SectionLabel>Run race</SectionLabel>
-      <Card style={{ alignItems: 'center', paddingVertical: space.md }}>
-        <Svg width={W} height={H}>
-          {[0.25, 0.5, 0.75, 1].map((f) => (
-            <Line key={f} x1={24} x2={W - 8} y1={y(peak * f)} y2={y(peak * f)} stroke={ink(0.08)} strokeWidth={1} />
-          ))}
-          <Line x1={24} x2={W - 8} y1={y(0)} y2={y(0)} stroke={ink(0.25)} strokeWidth={1} />
-          {series.map(({ pts, wickets }, i) => (
-            <Svg key={i}>
-              <Polyline points={pts.map((p) => p.join(',')).join(' ')} fill="none" stroke={tints[i]} strokeWidth={3} strokeLinejoin="round" />
-              {wickets.map(([wx, wy], j) => (
-                <Circle key={j} cx={wx} cy={wy} r={4} fill={colors.danger} stroke={colors.surface} strokeWidth={1.5} />
+      <Card style={{ paddingVertical: space.md }}>
+        <View onLayout={(e) => setW(Math.floor(e.nativeEvent.layout.width))} style={{ height: H }}>
+          {W > 0 && (
+            <Svg width={W} height={H}>
+              {[0.25, 0.5, 0.75, 1].map((f) => (
+                <Line key={f} x1={24} x2={W - 8} y1={y(peak * f)} y2={y(peak * f)} stroke={ink(0.08)} strokeWidth={1} />
+              ))}
+              <Line x1={24} x2={W - 8} y1={y(0)} y2={y(0)} stroke={ink(0.25)} strokeWidth={1} />
+              {series.map(({ pts, wickets }, i) => (
+                <Svg key={i}>
+                  <Polyline points={pts.map((p) => p.join(',')).join(' ')} fill="none" stroke={tints[i]} strokeWidth={3} strokeLinejoin="round" />
+                  {wickets.map(([wx, wy], j) => (
+                    <Circle key={j} cx={wx} cy={wy} r={4} fill={colors.danger} stroke={colors.surface} strokeWidth={1.5} />
+                  ))}
+                </Svg>
               ))}
             </Svg>
-          ))}
-        </Svg>
+          )}
+        </View>
         <View style={styles.legend}>
           {series.map(({ s }, i) => (
             <View key={i} style={styles.legendItem}>

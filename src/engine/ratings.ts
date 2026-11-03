@@ -34,18 +34,22 @@ export type PlayerRatings = {
 export const MATCHES_TO_RATE = 2;
 const FORM_OF = 5;
 
-/** Points to a rating out of 10: an ordinary game is 6, a match-winning one 9 or more. */
-const toRating = (points: number) => Math.round(Math.min(10, Math.max(1, 6 + points / 8)) * 10) / 10;
+/**
+ * Points to a rating out of 10: an ordinary game is 6, a fine one 8, a match-winning one 9 and more. It bends towards
+ * 10 (and 1) instead of stopping there, so big days still differ: 30 points is 8.6, 60 is 9.6, a 10 is rare.
+ */
+const toRating = (points: number) => Math.round((points >= 0 ? 6 + 4 * Math.tanh(points / 40) : 6 + 5 * Math.tanh(points / 25)) * 10) / 10;
 
 /**
- * What everyone did in one finished match, in points. Batting: a run each, and up to a few more (or fewer) for scoring
+ * What everyone did in one match, in points. Batting: a run each, and up to a few more (or fewer) for scoring
  * faster (or slower) than a run a ball; a duck costs 4. Bowling: 20 a wicket, 5 a maiden, and the runs saved (or given
  * away) against how fast the match was scored. Fielding: 8 a catch, run out or stumping.
  */
 export function matchRatings(match: Match): Map<string, MatchRating> {
   const out = new Map<string, MatchRating>();
   const state = matchState(match);
-  if (!state.result) return out;
+  // Every match with play in it, finished or not, as the stats count it.
+  if (!state.innings.some((inn) => inn.legalBalls > 0)) return out;
   const keyOf = new Map<string, string>();
   for (const team of match.teams) for (const p of team.players) if (!isPlaceholder(p.name)) keyOf.set(p.id, keyFor(team, p));
   const main = state.innings.slice(0, 2);
@@ -61,7 +65,8 @@ export function matchRatings(match: Match): Map<string, MatchRating> {
   for (const inn of main) {
     for (const b of inn.batters) {
       const l = line(b.id, inn.bowlingTeam.name);
-      if (!l || (b.retired && !b.balls)) continue;
+      // Not having faced a ball (the non-striker when it ended, retired before facing) isn't an innings to rate.
+      if (!l || (!b.balls && !b.out)) continue;
       const pace = b.balls >= 6 ? Math.max(-5, Math.min(8, ((b.runs * 100) / b.balls - 100) / 20)) : 0;
       l.bat = b.runs + pace - (b.out && b.runs === 0 ? 4 : 0);
       if (b.out?.fielder && (b.out.kind === 'caught' || b.out.kind === 'runout' || b.out.kind === 'stumped')) {

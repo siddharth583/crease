@@ -8,6 +8,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -18,6 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BallView } from '../engine/engine.ts';
+import { useLayout } from './layout.tsx';
 import { EASE_OUT, useReducedMotion } from './motion.tsx';
 import { ballColors, colors, font, gradients, radius, space, type, edge, isDay, type TeamTheme } from '../theme.ts';
 
@@ -82,10 +84,11 @@ export function GhostWord(_: { children: string; size?: number; style?: StylePro
   return null;
 }
 
-export function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
+/** A section's small caps label. `flush` drops the room above it: the first thing in a column, level with its neighbour's. */
+export function SectionLabel({ children, right, flush }: { children: ReactNode; right?: ReactNode; flush?: boolean }) {
   const tone = usePageTone();
   return (
-    <View style={styles.sectionRow}>
+    <View style={[styles.sectionRow, flush && { marginTop: 0 }]}>
       <Text style={[styles.sectionLabel, tone && { color: tone.ink }]}>{children}</Text>
       {right}
     </View>
@@ -335,6 +338,8 @@ export function Chip({
       accessibilityState={{ selected }}
       disabled={disabled}
       scaleTo={0.92}
+      // 36 high to look at, 44 to the thumb.
+      hitSlop={4}
       onPress={onPress}
       style={[styles.chip, selected && { backgroundColor: on[0], borderColor: on[0] }]}
     >
@@ -344,15 +349,22 @@ export function Chip({
   );
 }
 
+/**
+ * Joined options, one picked. Four or more get smaller type so each word fits a phone's width; `multiline` lets a
+ * long label (a team's full name) wrap onto a second line instead of being cut.
+ */
 export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  multiline,
 }: {
   options: { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
+  multiline?: boolean;
 }) {
+  const dense = options.length >= 4;
   return (
     <View style={styles.segmented}>
       {options.map((o) => {
@@ -365,15 +377,38 @@ export function Segmented<T extends string>({
             scaleTo={0.95}
             onPress={() => onChange(o.value)}
             wrapStyle={{ flex: 1 }}
-            style={[styles.segment, on && styles.segmentOn]}
+            style={[styles.segment, dense && styles.segmentDense, multiline && styles.segmentTall, on && styles.segmentOn]}
           >
-            <Text numberOfLines={1} style={[styles.segmentText, on && { color: colors.bg }]}>
+            <Text
+              numberOfLines={multiline ? 2 : 1}
+              style={[styles.segmentText, dense && styles.segmentTextDense, multiline && { textAlign: 'center', lineHeight: 17 }, on && { color: colors.bg }]}
+            >
               {o.label}
             </Text>
           </PressableScale>
         );
       })}
     </View>
+  );
+}
+
+/** The years with a match in them, newest first. */
+export const matchYears = (matches: { createdAt: number }[]) =>
+  [...new Set(matches.map((m) => new Date(m.createdAt).getFullYear()))].sort((a, b) => b - a);
+/** Only that year's matches; every match for `null`. */
+export const inYear = <M extends { createdAt: number }>(matches: M[], year: number | null) =>
+  year === null ? matches : matches.filter((m) => new Date(m.createdAt).getFullYear() === year);
+
+/** A season to look at: All, then each year with a match. Nothing while every match is in the one year. */
+export function YearChips({ years, value, onChange }: { years: number[]; value: number | null; onChange: (year: number | null) => void }) {
+  if (years.length < 2) return null;
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.years}>
+      <Chip label="All" selected={value === null} onPress={() => onChange(null)} />
+      {years.map((y) => (
+        <Chip key={y} label={String(y)} selected={value === y} onPress={() => onChange(y)} />
+      ))}
+    </ScrollView>
   );
 }
 
@@ -463,6 +498,39 @@ export function BallChip({ ball, size = 36, animate = false }: { ball?: BallView
   );
 }
 
+/**
+ * A pushed screen's head on a tablet or laptop: Back, the page's title large, a line under it, its actions at the
+ * right. The phone keeps each screen's own compact header.
+ */
+export function WideHead({
+  title,
+  sub,
+  onBack,
+  right,
+  lead,
+}: {
+  title: string;
+  sub?: ReactNode;
+  onBack?: () => void;
+  right?: ReactNode;
+  /** Before the title, after Back: a crest or a photo. */
+  lead?: ReactNode;
+}) {
+  return (
+    <View style={styles.wideHead}>
+      {onBack && <IconButton icon="chevron-back" label="Back" onPress={onBack} />}
+      {lead}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.wideTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        {sub ? <Text style={styles.wideSub} numberOfLines={1}>{sub}</Text> : null}
+      </View>
+      {right ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>{right}</View> : null}
+    </View>
+  );
+}
+
 // ─── Overlays ────────────────────────────────────────────────────────────────
 
 export type ToastTone = 'success' | 'error' | 'info';
@@ -486,6 +554,8 @@ export function useToast(placement: 'bottom' | 'top' = 'bottom') {
   );
   useEffect(() => () => clearTimeout(timer.current), []);
   const insets = useSafeAreaInsets();
+  // No tab bar to clear on a tablet or laptop: the toast sits near the foot, centred.
+  const { wide } = useLayout();
   const icon: IconName = toast?.tone === 'error' ? 'alert-circle' : toast?.tone === 'info' ? 'information-circle' : 'checkmark-circle';
   const color = toast?.tone === 'error' ? colors.danger : toast?.tone === 'info' ? colors.cyan : colors.accent;
   const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
@@ -494,7 +564,7 @@ export function useToast(placement: 'bottom' | 'top' = 'bottom') {
       pointerEvents="none"
       style={[
         styles.toastWrap,
-        placement === 'top' ? { top: insets.top + 64 } : { bottom: insets.bottom + 96 },
+        placement === 'top' ? { top: insets.top + 64 } : { bottom: insets.bottom + (wide ? space.xxl : 96) },
         { opacity: v, transform: [{ translateY: placement === 'top' ? Animated.multiply(translateY, -1) : translateY }] },
       ]}
     >
@@ -527,6 +597,31 @@ export function Sheet({
     if (!still) Animated.spring(v, { toValue: 1, useNativeDriver: native, speed: 14, bounciness: 5 }).start();
   }, [visible, v, still]);
   const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [520, 0] });
+  const { wide, height } = useLayout();
+  // A tablet or laptop: not a sheet stretched across the screen but a dialog in the middle, at a reading width.
+  if (wide) {
+    const lift = v.interpolate({ inputRange: [0, 1], outputRange: [24, 0] });
+    const scale = v.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] });
+    return (
+      <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: v }]}>
+          <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+        </Animated.View>
+        <View pointerEvents="box-none" style={styles.dialogWrap}>
+          <Animated.View
+            accessibilityViewIsModal
+            style={[styles.dialog, { maxHeight: height * 0.86, opacity: v, transform: [{ translateY: lift }, { scale }] }]}
+          >
+            <View style={styles.sheetHead}>
+              <Text style={styles.sheetTitle}>{title}</Text>
+              <IconButton icon="close" label="Close" onPress={onClose} />
+            </View>
+            {children}
+          </Animated.View>
+        </View>
+      </Modal>
+    );
+  }
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: v }]}>
@@ -611,6 +706,11 @@ export const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   segment: { height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, paddingHorizontal: 10 },
+  segmentDense: { paddingHorizontal: 4 },
+  segmentTall: { height: undefined, minHeight: 38, paddingVertical: 4, borderRadius: radius.md },
+  segmentTextDense: { fontSize: 13 },
+  // Room above and below for the chips' larger touch area.
+  years: { gap: space.sm, paddingVertical: 4 },
   segmentOn: { backgroundColor: colors.text },
   segmentText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.sm, minHeight: 58 },
@@ -651,6 +751,22 @@ export const styles = StyleSheet.create({
     paddingTop: space.sm,
     maxHeight: '88%',
   },
+  dialogWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: space.xl },
+  dialog: {
+    width: '100%',
+    maxWidth: 560,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl + 4,
+    borderWidth: 1,
+    borderColor: colors.borderHi,
+    paddingHorizontal: space.xl,
+    paddingTop: space.lg,
+    paddingBottom: space.xl,
+    boxShadow: '0px 24px 80px rgba(0,0,0,0.45)',
+  },
+  wideHead: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginBottom: space.xl, minHeight: 56 },
+  wideTitle: { fontFamily: font.posterBlack, fontSize: 40, lineHeight: 46, color: colors.text, letterSpacing: -1.2 },
+  wideSub: { fontFamily: font.medium, fontSize: 15, color: colors.muted, marginTop: 2 },
   grabber: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: colors.borderHi, marginBottom: space.md },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
   sheetTitle: { ...type.title, fontSize: 26, color: colors.text },

@@ -1,12 +1,14 @@
 // After `expo export`, point the page's own links (manifest, icons, offline worker) at the sub-folder the site is
 // served from, and add what GitHub Pages needs: a 404.html that loads the app for any address, and .nojekyll so
-// the _expo folder is served. Does nothing without EXPO_BASE_URL.
+// the _expo folder is served. Every build gets its date stamped into the page, for Settings; the rest does nothing
+// without EXPO_BASE_URL.
 import { copyFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
 const base = (process.env.EXPO_BASE_URL || '').replace(/\/$/, '');
+const html = 'dist/index.html';
+writeFileSync(html, readFileSync(html, 'utf8').replace('<head>', `<head>\n    <meta name="crease-built" content="${new Date().toISOString()}" />`));
 if (!base) process.exit(0);
 
-const html = 'dist/index.html';
 writeFileSync(
   html,
   readFileSync(html, 'utf8')

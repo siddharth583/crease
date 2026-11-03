@@ -3,28 +3,48 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PlayerAvatar } from '../../../components/Avatar.tsx';
 import { NameSuggestions } from '../../../components/NameSuggestions.tsx';
 import { OverEditSheet } from '../../../components/OverEditSheet.tsx';
 import { ExportSheet } from '../../../components/ExportSheet.tsx';
 import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
-import { BallChip, Button, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast } from '../../../components/ui.tsx';
+import { BallChip, Button, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast, WideHead } from '../../../components/ui.tsx';
+import { Columns, Page, useLayout } from '../../../components/layout.tsx';
 import { dismissal, fairBalls, matchState, oversText, playerName, renamePlayer, replaceOver, retirements, setRetirement, type InningsState } from '../../../engine/engine.ts';
 import { isPlaceholder, keyFor, momChoices, playerOfTheMatch } from '../../../engine/stats.ts';
 import type { BallEvent, Match, Team } from '../../../engine/types.ts';
 import { useMatch, useMatches } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
-import { useAccess } from '../../../store/sync.tsx';
+import { useAccess, useClubSync } from '../../../store/sync.tsx';
 import { colors, radius, space, type, font, edge } from '../../../theme.ts';
 
 const econ = (runs: number, balls: number) => (balls ? ((runs * 6) / balls).toFixed(1) : '–');
 const sr = (runs: number, balls: number) => (balls ? ((runs * 100) / balls).toFixed(1) : '–');
 
-/** A player's name that opens their career profile, unless they were never named. */
-function PlayerLink({ match, team, id, style }: { match: Match; team: Team; id: string; style: StyleProp<TextStyle> }) {
+/** A side's name short enough for a tab: "Copan Strikers" v "Copan Royals" is Strikers v Royals. */
+function shortSide(name: string, match: Match) {
+  const words = match.teams.map((t) => t.name.trim().split(/\s+/));
+  const shared = words[0].length > 1 && words[1].length > 1 && words[0][0].toLowerCase() === words[1][0].toLowerCase();
+  return shared ? name.trim().split(/\s+/).slice(1).join(' ') : name.trim();
+}
+
+/**
+ * A player's photo and name that open their career profile, unless they were never named. A long name wraps onto a
+ * second line rather than being cut off on a narrow phone.
+ */
+function PlayerLink({ match, team, id, style, after }: { match: Match; team: Team; id: string; style: StyleProp<TextStyle>; after?: string }) {
   const base = playerName(match, id);
-  const marks = `${match.captains?.[team.id] === id ? ' (c)' : ''}${match.keepers?.[team.id] === id ? ' †' : ''}`;
+  const marks = `${match.captains?.[team.id] === id ? ' (c)' : ''}${match.keepers?.[team.id] === id ? ' †' : ''}${after ?? ''}`;
   const name = base;
-  if (isPlaceholder(name)) return <Text numberOfLines={1} style={style}>{name + marks}</Text>;
+  if (isPlaceholder(name))
+    return (
+      <View style={styles.who}>
+        <PlayerAvatar name="" size={24} />
+        <Text numberOfLines={2} style={[style, { flexShrink: 1 }]}>
+          {name + marks}
+        </Text>
+      </View>
+    );
   return (
     <Pressable
       hitSlop={6}
@@ -32,24 +52,37 @@ function PlayerLink({ match, team, id, style }: { match: Match; team: Team; id: 
       onPress={() => router.push({ pathname: '/player/[key]', params: { key: keyFor(team, team.players.find((p) => p.id === id) ?? { name }) } })}
     >
       {({ pressed }) => (
-        <Text numberOfLines={1} style={[style, pressed && { opacity: 0.6 }]}>
-          {name}
-          {marks}
-        </Text>
+        <View style={[styles.who, pressed && { opacity: 0.6 }]}>
+          <PlayerAvatar name={name} size={24} />
+          <Text numberOfLines={2} style={[style, { flexShrink: 1 }]}>
+            {name}
+            {marks}
+          </Text>
+        </View>
       )}
     </Pressable>
   );
 }
 
-function InningsCard({ match, s }: { match: Match; s: InningsState }) {
+/**
+ * One innings' card: its total, batting, fall of wickets and bowling. `part` draws just one of them, so two innings side
+ * by side can share each row (batting beside batting, bowling beside bowling) and `fill` stretches its card to the row.
+ */
+function InningsCard({ match, s, part, fill }: { match: Match; s: InningsState; part?: 'batting' | 'fow' | 'bowling'; fill?: boolean }) {
+  const show = (p: 'batting' | 'fow' | 'bowling') => !part || part === p;
+  const grow = fill ? { flex: 1 } : null;
   const extras = s.extras.wide + s.extras.noball + s.extras.bye + s.extras.legbye + s.extras.penalty;
   const yetToBat = s.battingTeam.players.filter((p) => !s.batters.some((b) => b.id === p.id));
+  // Once the innings is over, whoever didn't get in never will.
+  const over = s.status === 'done';
   const atCrease = [s.striker, s.nonStriker];
 
   return (
     <>
+      {show('batting') && (
+      <View style={grow}>
       <View style={styles.totalRow}>
-        <Text numberOfLines={1} style={styles.totalTeam}>
+        <Text numberOfLines={2} style={styles.totalTeam}>
           {s.battingTeam.name}
         </Text>
         <Text style={styles.total}>
@@ -59,7 +92,7 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
       </View>
 
       <SectionLabel>Batting</SectionLabel>
-      <Card style={{ padding: 0 }}>
+      <Card style={[{ padding: 0 }, grow]}>
         <View style={styles.head}>
           <Text style={[styles.th, { flex: 1, textAlign: 'left' }]}>BATTER</Text>
           {['R', 'B', '4s', '6s'].map((h) => (
@@ -67,7 +100,7 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
               {h}
             </Text>
           ))}
-          <Text style={[styles.th, { width: 58 }]}>SR</Text>
+          <Text style={[styles.th, styles.wide]}>SR</Text>
         </View>
         {s.batters.map((b) => {
           const notOut = !b.out && !b.retired;
@@ -75,10 +108,9 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
             <View key={b.id} style={styles.row}>
               <View style={{ flex: 1, paddingRight: space.sm }}>
                 <View style={styles.nameRow}>
-                  <PlayerLink match={match} team={s.battingTeam} id={b.id} style={[styles.name, notOut && { color: colors.accentInk }]} />
-                  {notOut && atCrease.includes(b.id) && <Text style={[styles.name, { color: colors.accentInk }]}>*</Text>}
+                  <PlayerLink match={match} team={s.battingTeam} id={b.id} style={[styles.name, notOut && { color: colors.accentInk }]} after={notOut && atCrease.includes(b.id) ? '*' : undefined} />
                 </View>
-                <Text numberOfLines={1} style={styles.how}>
+                <Text numberOfLines={2} style={[styles.how, styles.howIndent]}>
                   {dismissal(match, b)}
                 </Text>
               </View>
@@ -86,7 +118,7 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
               <Text style={styles.td}>{b.balls}</Text>
               <Text style={styles.td}>{b.fours}</Text>
               <Text style={styles.td}>{b.sixes}</Text>
-              <Text style={[styles.td, { width: 58 }]}>{sr(b.runs, b.balls)}</Text>
+              <Text style={[styles.td, styles.wide]}>{sr(b.runs, b.balls)}</Text>
             </View>
           );
         })}
@@ -101,26 +133,30 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
         {yetToBat.length > 0 && (
           <View style={[styles.row, { alignItems: 'flex-start' }]}>
             <Text style={styles.how}>
-              <Text style={{ color: colors.muted, fontFamily: font.bold }}>Yet to bat  </Text>
+              <Text style={{ color: colors.muted, fontFamily: font.bold }}>{over ? 'Did not bat' : 'Yet to bat'}  </Text>
               {yetToBat.map((p) => p.name).join(', ')}
             </Text>
           </View>
         )}
       </Card>
+      </View>
+      )}
 
-      {s.fallOfWickets.length > 0 && (
-        <>
+      {show('fow') && s.fallOfWickets.length > 0 && (
+        <View style={grow}>
           <SectionLabel>Fall of wickets</SectionLabel>
-          <Card>
+          <Card style={grow}>
             <Text style={styles.fow}>
               {s.fallOfWickets.map((f) => `${f.runs}-${f.wicket} (${playerName(match, f.player)}, ${f.over})`).join('   ')}
             </Text>
           </Card>
-        </>
+        </View>
       )}
 
+      {show('bowling') && (
+      <View style={grow}>
       <SectionLabel>Bowling</SectionLabel>
-      <Card style={{ padding: 0 }}>
+      <Card style={[{ padding: 0 }, grow]}>
         <View style={styles.head}>
           <Text style={[styles.th, { flex: 1, textAlign: 'left' }]}>BOWLER</Text>
           {['O', 'M', 'R', 'W'].map((h) => (
@@ -128,16 +164,16 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
               {h}
             </Text>
           ))}
-          <Text style={[styles.th, { width: 58 }]}>ECON</Text>
+          <Text style={[styles.th, styles.wide]}>ECON</Text>
         </View>
         {s.bowlers.map((b) => (
           <View key={b.id} style={styles.row}>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, paddingRight: space.sm }}>
               <View style={styles.nameRow}>
                 <PlayerLink match={match} team={s.bowlingTeam} id={b.id} style={styles.name} />
               </View>
               {(b.wides > 0 || b.noballs > 0) && (
-                <Text style={styles.how}>
+                <Text style={[styles.how, styles.howIndent]}>
                   {b.wides} wd · {b.noballs} nb
                 </Text>
               )}
@@ -146,11 +182,13 @@ function InningsCard({ match, s }: { match: Match; s: InningsState }) {
             <Text style={styles.td}>{b.maidens}</Text>
             <Text style={styles.td}>{b.runs}</Text>
             <Text style={[styles.td, styles.strong, b.wickets > 0 && { color: colors.accentInk }]}>{b.wickets}</Text>
-            <Text style={[styles.td, { width: 58 }]}>{econ(b.runs, b.balls)}</Text>
+            <Text style={[styles.td, styles.wide]}>{econ(b.runs, b.balls)}</Text>
           </View>
         ))}
         {s.bowlers.length === 0 && <Text style={[styles.how, { padding: space.lg }]}>No overs bowled yet</Text>}
       </Card>
+      </View>
+      )}
     </>
   );
 }
@@ -334,6 +372,8 @@ export default function Scorecard() {
   // Only the admin changes a scorecard, picks the Man of the Match or deletes a match.
   const { admin } = useAccess();
   const { deleteMatch } = useMatches();
+  // Signed in to the club, a delete goes to everyone's phone.
+  const { user } = useClubSync();
   const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editingOver, setEditingOver] = useState<number | null>(null);
@@ -343,6 +383,8 @@ export default function Scorecard() {
   const toast = useToast();
   const { exportAs } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
+  const layout = useLayout();
+  const { wide, desk } = layout;
 
   if (!match) return <Screen>{null}</Screen>;
   const state = matchState(match);
@@ -351,34 +393,85 @@ export default function Scorecard() {
   const s = state.innings[Number(shown)];
   const started = match.innings[Number(shown)].events.length > 0;
 
+  const back = () => (router.canGoBack() ? router.back() : router.replace('/'));
+  const tools = (
+    <>
+      {admin && (
+        <IconButton
+          icon={editMode ? 'checkmark' : 'create-outline'}
+          label={editMode ? 'Done editing' : 'Edit scorecard'}
+          onPress={() => setEditMode(!editMode)}
+        />
+      )}
+      <IconButton icon="download-outline" label="Export match" onPress={() => setExporting([match])} />
+      {admin && <IconButton icon="trash-outline" label="Delete this match" onPress={() => setDeleting(true)} />}
+    </>
+  );
+  const names = (
+    <NamesEditor
+      match={match}
+      onRename={(playerId, name) => {
+        const renamed = renamePlayer(match, playerId, name);
+        if (!renamed || renamed === match) return;
+        saveMatch(renamed);
+        toast.show(`${playerName(match, playerId)} is now ${playerName(renamed, playerId)}`, 'success');
+      }}
+    />
+  );
+  // A laptop, not editing: both innings side by side, then the charts for the one picked below them.
+  const sideBySide = desk && !editMode && match.innings[0].events.length > 0;
+  const tabs = (
+    <>
+      {/* The two innings, full names wrapping as needed; super overs on a row of their own, named in words. */}
+      <Segmented multiline value={shown} onChange={setTab} options={state.innings.slice(0, 2).map((inn, i) => ({ value: String(i), label: inn.battingTeam.name }))} />
+      {state.innings.length > 2 && (
+        <View style={{ marginTop: space.sm }}>
+          <Segmented
+            multiline
+            value={shown}
+            onChange={setTab}
+            options={state.innings.slice(2).map((inn, i) => ({ value: String(i + 2), label: `Super over · ${shortSide(inn.battingTeam.name, match)}` }))}
+          />
+        </View>
+      )}
+    </>
+  );
+
   return (
     <Screen>
-      <View style={styles.header}>
-        <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
-        <Text style={styles.headerTitle}>Scorecard</Text>
-        <View style={{ flexDirection: 'row', gap: space.sm }}>
-          {admin && (
-            <IconButton
-              icon={editMode ? 'checkmark' : 'create-outline'}
-              label={editMode ? 'Done editing' : 'Edit scorecard'}
-              onPress={() => setEditMode(!editMode)}
+      {wide ? (
+        <View style={{ paddingHorizontal: layout.gutter, paddingTop: space.lg }}>
+          <Page>
+            <WideHead
+              title={`${match.teams[0].name} v ${match.teams[1].name}`}
+              sub={`Scorecard · ${new Date(match.createdAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} · ${match.rules.overs} overs`}
+              onBack={back}
+              right={tools}
             />
-          )}
-          <IconButton icon="download-outline" label="Export match" onPress={() => setExporting([match])} />
-          {admin && <IconButton icon="trash-outline" label="Delete this match" onPress={() => setDeleting(true)} />}
+          </Page>
         </View>
-      </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, paddingBottom: insets.bottom + space.xxl }}>
-        <View style={[styles.banner, state.result ? styles.bannerDone : null]}>
+      ) : (
+        <View style={styles.header}>
+          <IconButton icon="chevron-back" label="Back" onPress={back} />
+          <Text style={styles.headerTitle}>Scorecard</Text>
+          <View style={{ flexDirection: 'row', gap: space.sm }}>{tools}</View>
+        </View>
+      )}
+      <ScrollView contentContainerStyle={{ padding: wide ? layout.gutter : space.lg, paddingTop: wide ? 0 : space.sm, paddingBottom: insets.bottom + space.xxl }}>
+        <Page>
+        {/* A tablet or laptop: the result and the Man of the Match on one line. */}
+        {/* An upright tablet stacks them: side by side there the Man of the Match line is cut short. */}
+        <Columns weights={mom ? [3, 2] : [1]} tablet={layout.width >= 1000 ? 2 : 1} gap={wide ? space.md : 0} style={wide && { marginBottom: space.md }}>
+        <View style={[styles.banner, state.result ? styles.bannerDone : null, wide && styles.bannerWide]}>
           <Ionicons
             name={state.result ? 'trophy' : 'radio-button-on'}
             size={16}
             color={state.result ? colors.onAccent : colors.danger}
           />
-          <Text style={[styles.bannerText, state.result ? { color: colors.onAccent } : null]}>{state.result ?? 'Live · match in progress'}</Text>
+          <Text style={[styles.bannerText, state.result ? { color: colors.onAccent } : null, wide && { fontSize: 20 }]}>{state.result ?? 'Live · match in progress'}</Text>
         </View>
         {mom && (
-          <View style={styles.mom}>
+          <View style={[styles.mom, wide && styles.momWide]}>
             {/* The player opens their profile; Change sits beside it (a button can't hold another). */}
             <PressableScale
               scaleTo={0.98}
@@ -402,30 +495,77 @@ export default function Scorecard() {
             </View>
             </PressableScale>
             {admin && (
-              <PressableScale accessibilityLabel="Change the Man of the Match" onPress={() => setPickingMom(true)} style={styles.momChange}>
+              <PressableScale accessibilityLabel="Change the Man of the Match" hitSlop={6} onPress={() => setPickingMom(true)} style={styles.momChange}>
                 <Text style={styles.momChangeText}>Change</Text>
               </PressableScale>
             )}
           </View>
         )}
-        <Segmented
-          value={shown}
-          onChange={setTab}
-          options={state.innings.map((inn, i) => ({ value: String(i), label: i >= 2 ? `SO · ${inn.battingTeam.name}` : inn.battingTeam.name }))}
-        />
+        </Columns>
+        {sideBySide ? (
+          <>
+            {/* Row by row, so batting sits beside batting and bowling beside bowling, each pair ending level. */}
+            {(['batting', 'fow', 'bowling'] as const).map((part) =>
+              part === 'fow' && !state.innings.slice(0, 2).some((inn) => inn.fallOfWickets.length) ? null : (
+                <View key={part} style={[styles.wideCols, { alignItems: 'stretch' }]}>
+                  {state.innings.slice(0, 2).map((inn, i) => (
+                    <View key={i} style={styles.wideCol}>
+                      {match.innings[i].events.length > 0 ? (
+                        <InningsCard match={match} s={inn} part={part} fill />
+                      ) : part === 'batting' ? (
+                        <Text style={styles.empty}>{inn.battingTeam.name} haven’t batted yet.</Text>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+              ),
+            )}
+            {state.innings.length > 2 && (
+              <View style={styles.wideCols}>
+                {state.innings.slice(2).map((inn, i) => (
+                  <View key={i} style={styles.wideCol}>
+                    {match.innings[i + 2].events.length > 0 ? <InningsCard match={match} s={inn} /> : null}
+                  </View>
+                ))}
+              </View>
+            )}
+            <RunRace state={state} />
+            <View style={{ marginTop: space.xl + 4 }}>{tabs}</View>
+            {started ? (
+              <View style={styles.wideCols}>
+                <View style={styles.wideCol}>
+                  <Partnerships match={match} s={s} />
+                </View>
+                <View style={styles.wideCol}>
+                  <BallByBall match={match} s={s} />
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.empty}>{s.battingTeam.name} haven’t batted yet.</Text>
+            )}
+          </>
+        ) : (
+        <>
+        {tabs}
         {editMode && admin && (
           <View style={styles.editHint}>
             <Ionicons name="create-outline" size={16} color={colors.accentInk} />
             <Text style={styles.editHintText}>
               Editing. Tap any over below to change its balls, add or take some away, or say who bowled them (a new bowler
-              mid-over takes over from the ball they started). Every over keeps its 6 fair balls. Retirements and
-              players’ names are at the bottom.
+              mid-over takes over from the ball they started). Every over keeps its 6 fair balls.{' '}
+              {wide ? 'Retirements are under the overs, players’ names under the card.' : 'Retirements and players’ names are at the bottom.'}
             </Text>
           </View>
         )}
         {started && editMode && admin ? (
-          <>
+          // A tablet or laptop: the card and the players' names on the left, the overs and retirements beside them, so
+          // neither column runs on alone.
+          <Columns weights={[1, 1]} gap={space.lg}>
+            <View>
             <InningsCard match={match} s={s} />
+            {wide && names}
+            </View>
+            <View>
             <OversEditor match={match} s={s} inningsIndex={Number(shown)} onOpen={setEditingOver} />
             <RetirementsEditor
               match={match}
@@ -438,26 +578,36 @@ export default function Scorecard() {
                 toast.show(`${playerName(match, r.batter)} is now retired ${out ? 'out' : 'hurt'}`, 'success');
               }}
             />
-            <NamesEditor
-              match={match}
-              onRename={(playerId, name) => {
-                const renamed = renamePlayer(match, playerId, name);
-                if (!renamed || renamed === match) return;
-                saveMatch(renamed);
-                toast.show(`${playerName(match, playerId)} is now ${playerName(renamed, playerId)}`, 'success');
-              }}
-            />
-          </>
+            {!wide && names}
+            </View>
+          </Columns>
         ) : started ? (
+          wide ? (
+            // A tablet: the innings on the left, its partnerships and the run race beside it, ball by ball under.
+            <>
+              <Columns weights={[3, 2]} gap={space.lg}>
+                <InningsCard match={match} s={s} />
+                <View>
+                  <Partnerships match={match} s={s} />
+                  <RunRace state={state} />
+                </View>
+              </Columns>
+              <BallByBall match={match} s={s} />
+            </>
+          ) : (
           <>
             <InningsCard match={match} s={s} />
             <Partnerships match={match} s={s} />
             <RunRace state={state} />
             <BallByBall match={match} s={s} />
           </>
+          )
         ) : (
           <Text style={styles.empty}>{s.battingTeam.name} haven’t batted yet.</Text>
         )}
+        </>
+        )}
+        </Page>
       </ScrollView>
       <ExportSheet
         visible={exporting !== null}
@@ -499,12 +649,12 @@ export default function Scorecard() {
         <View style={{ gap: space.md }}>
           <Text style={styles.deleteText}>
             {match.teams[0].name} v {match.teams[1].name}, {new Date(match.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-            {state.result ? ` · ${state.result}` : ''}. Its runs and wickets leave everyone’s stats and the record book. This can’t be undone.
+            {state.result ? ` · ${state.result}` : ''}. Its runs and wickets leave everyone’s stats and the record book{user ? ', for everyone in the club' : ''}. This can’t be undone.
           </Text>
           <Button
             variant="danger"
             icon="trash-outline"
-            label="Delete the match"
+            label={user ? 'Delete it for everyone' : 'Delete the match'}
             onPress={() => {
               setDeleting(false);
               router.replace('/');
@@ -533,6 +683,10 @@ const styles = StyleSheet.create({
     padding: space.md,
     marginBottom: space.md,
   },
+  bannerWide: { flex: 1, marginBottom: 0, paddingHorizontal: space.lg, minHeight: 72 },
+  momWide: { marginBottom: 0, minHeight: 72 },
+  wideCols: { flexDirection: 'row', gap: space.lg, alignItems: 'flex-start' },
+  wideCol: { flex: 1, minWidth: 0 },
   bannerDone: { backgroundColor: colors.accent, borderColor: colors.accent, ...edge },
   mom: {
     flexDirection: 'row',
@@ -568,11 +722,16 @@ const styles = StyleSheet.create({
   momLine: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
   bannerText: { color: colors.text, fontSize: 16, fontFamily: font.poster, flex: 1 },
   totalRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: space.xl, paddingHorizontal: space.xs },
-  totalTeam: { color: colors.text, fontSize: 25, fontFamily: font.poster, flex: 1 },
+  totalTeam: { color: colors.text, fontSize: 22, lineHeight: 26, fontFamily: font.poster, flex: 1, paddingRight: space.sm },
   total: { color: colors.accentInk, fontSize: 39, lineHeight: 44, fontFamily: font.posterBlack, ...type.num },
   totalOvers: { color: colors.muted, fontSize: 18, fontFamily: font.poster },
   head: { flexDirection: 'row', paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.sm },
-  th: { ...type.label, fontSize: 10, color: colors.faint, width: 32, textAlign: 'right' },
+  th: { ...type.label, fontSize: 10, color: colors.faint, width: 28, textAlign: 'right' },
+  /** The strike rate and economy column: room for 234.6, and no more, so a name fits on a phone. */
+  wide: { width: 50 },
+  who: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1, minWidth: 0 },
+  /** Under the name, lined up with it past the photo. */
+  howIndent: { marginLeft: 32 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -581,10 +740,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  name: { color: colors.text, fontSize: 15, fontFamily: font.bold },
+  name: { color: colors.text, fontSize: 14, lineHeight: 18, fontFamily: font.bold },
   nameRow: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, minWidth: 0 },
   how: { color: colors.muted, fontSize: 12, fontFamily: font.regular, marginTop: 2, flexShrink: 1 },
-  td: { width: 32, textAlign: 'right', color: colors.muted, fontSize: 18, fontFamily: font.poster, ...type.num },
+  td: { width: 28, textAlign: 'right', color: colors.muted, fontSize: 15, fontFamily: font.poster, ...type.num },
   strong: { color: colors.text, fontFamily: font.posterBlack, fontSize: 16 },
   fow: { color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 20 },
   editHint: {

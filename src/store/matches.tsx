@@ -8,6 +8,8 @@ import type { Match, Team } from '../engine/types.ts';
 const MATCHES_KEY = 'crease.matches.v1';
 const TEAMS_KEY = 'crease.teams.v1';
 const TEAMS_REVISION_KEY = 'crease.teamsRevision.v1';
+/** Matches deleted on this phone by pressing Delete, until the club has been told. */
+const DELETED_KEY = 'crease.deleted.v1';
 /** Left behind by the club sync that used to be here; cleared on start. */
 const OLD_KEYS = ['crease.club.v1', 'crease.dirty.v1'];
 
@@ -19,8 +21,15 @@ type Store = {
   deleteMatch: (id: string) => void;
   rememberTeams: (teams: Team[]) => void;
   importMatches: (matches: Match[], teams: Team[]) => { added: number; updated: number; unchanged: number };
-  /** The club sync: its newer matches in, its deleted ones out. */
-  fromClub: (take: Match[], remove: string[]) => void;
+  /** Matches deleted here by hand that the club hasn't heard about yet. */
+  deletedIds: string[];
+  /** The club sync: the club now knows these were deleted. */
+  forgetDeleted: (ids: string[]) => void;
+  /**
+   * The club sync: its newer matches in, its deleted ones out. `replace` are taken as the club has them even when
+   * this phone's copy is newer (an editor's change the club didn't accept).
+   */
+  fromClub: (take: Match[], remove: string[], replace?: Match[]) => void;
   /** The club sync: the club's saved sides, as they are. */
   setTeams: (teams: Team[]) => void;
 };
@@ -69,6 +78,7 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [matches, setMatches] = useState<Match[]>([]);
   const [savedTeams, setSavedTeams] = useState<Team[]>([]);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const latest = useRef(matches);
   // Whether each saved list may be saved over: not when it couldn't be read and couldn't be kept aside.
   const writable = useRef({ matches: false, teams: false });
@@ -79,7 +89,9 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
       load<Match[]>(MATCHES_KEY, [], Array.isArray),
       load<Team[]>(TEAMS_KEY, [], Array.isArray),
       load<number>(TEAMS_REVISION_KEY, 1, (v) => typeof v === 'number'),
-    ]).then(([loadedMatches, loadedTeams, loadedRevision]) => {
+      load<string[]>(DELETED_KEY, [], Array.isArray),
+    ]).then(([loadedMatches, loadedTeams, loadedRevision, loadedDeleted]) => {
+      setDeletedIds(loadedDeleted.value);
       writable.current = { matches: loadedMatches.writable, teams: loadedTeams.writable };
       const revision = loadedRevision.value;
       // Copan A and B became Copan Strikers and Copan Royals in revision 3: the matches already played follow.
@@ -102,6 +114,7 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
   };
   useEffect(() => persist(MATCHES_KEY, matches, writable.current.matches), [ready, matches]);
   useEffect(() => persist(TEAMS_KEY, savedTeams, writable.current.teams), [ready, savedTeams]);
+  useEffect(() => persist(DELETED_KEY, deletedIds, true), [ready, deletedIds]);
 
   const saveMatch = useCallback((match: Match) => {
     const saved = { ...match, updatedAt: Date.now() };
@@ -110,6 +123,11 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
 
   const deleteMatch = useCallback((id: string) => {
     setMatches((all) => all.filter((m) => m.id !== id));
+    setDeletedIds((all) => (all.includes(id) ? all : [...all, id]));
+  }, []);
+
+  const forgetDeleted = useCallback((ids: string[]) => {
+    if (ids.length) setDeletedIds((all) => all.filter((id) => !ids.includes(id)));
   }, []);
 
   const rememberTeams = useCallback((teams: Team[]) => {
@@ -128,17 +146,22 @@ export function MatchesProvider({ children }: { children: ReactNode }) {
     return { added: result.added, updated: result.updated, unchanged: result.unchanged };
   }, []);
 
-  const fromClub = useCallback((take: Match[], remove: string[]) => {
-    if (!take.length && !remove.length) return;
+  const fromClub = useCallback((take: Match[], remove: string[], replace: Match[] = []) => {
+    if (!take.length && !remove.length && !replace.length) return;
     const gone = new Set(remove);
-    setMatches((all) => mergeMatches(all, take).matches.filter((m) => !gone.has(m.id)));
+    const theirs = new Map(replace.map((m) => [m.id, m]));
+    setMatches((all) =>
+      mergeMatches(all, take)
+        .matches.filter((m) => !gone.has(m.id))
+        .map((m) => theirs.get(m.id) ?? m),
+    );
   }, []);
 
   const setTeams = useCallback((teams: Team[]) => setSavedTeams(teams), []);
 
   const value = useMemo<Store>(
-    () => ({ ready, matches, savedTeams, saveMatch, deleteMatch, rememberTeams, importMatches, fromClub, setTeams }),
-    [ready, matches, savedTeams, saveMatch, deleteMatch, rememberTeams, importMatches, fromClub, setTeams],
+    () => ({ ready, matches, savedTeams, saveMatch, deleteMatch, rememberTeams, importMatches, deletedIds, forgetDeleted, fromClub, setTeams }),
+    [ready, matches, savedTeams, saveMatch, deleteMatch, rememberTeams, importMatches, deletedIds, forgetDeleted, fromClub, setTeams],
   );
   return <MatchesContext.Provider value={value}>{children}</MatchesContext.Provider>;
 }

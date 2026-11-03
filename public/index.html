@@ -44,10 +44,58 @@
     <script>
       // Offline support: only the built site has a service worker (npm run build:web), not the dev server.
       if ('serviceWorker' in navigator && !['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname)) {
+        // A new version waits until the user says so: reloading by itself could drop someone out of the match they're
+        // scoring. A small banner offers it; Reload tells the waiting version to take over, and the page reloads once.
+        var offer = function (worker) {
+          if (!worker || document.getElementById('crease-update')) return;
+          var bar = document.createElement('div');
+          bar.id = 'crease-update';
+          bar.setAttribute('role', 'status');
+          bar.style.cssText =
+            'position:fixed;z-index:2147483647;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top, 0px) + 10px);' +
+            'display:flex;align-items:center;gap:6px;padding:4px 4px 4px 16px;border-radius:999px;max-width:calc(100% - 32px);' +
+            'background:#121814;color:#F1F5EE;border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 24px rgba(0,0,0,0.35);' +
+            'font:600 14px/1.2 Inter_600SemiBold, system-ui, -apple-system, sans-serif;white-space:nowrap';
+          var text = document.createElement('span');
+          text.textContent = 'Update ready';
+          var go = document.createElement('button');
+          go.type = 'button';
+          go.textContent = 'Reload';
+          go.style.cssText =
+            'min-height:44px;padding:0 18px;border:0;border-radius:999px;background:#D7FF3A;color:#0A0D06;font:inherit;font-weight:700;cursor:pointer';
+          var later = document.createElement('button');
+          later.type = 'button';
+          later.textContent = '\u2715';
+          later.setAttribute('aria-label', 'Later');
+          later.style.cssText = 'width:44px;height:44px;border:0;border-radius:999px;background:transparent;color:inherit;font:inherit;cursor:pointer';
+          go.onclick = function () {
+            go.disabled = true;
+            worker.postMessage({ type: 'SKIP_WAITING' });
+          };
+          later.onclick = function () {
+            bar.remove();
+          };
+          bar.append(text, go, later);
+          document.body.appendChild(bar);
+        };
         window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/sw.js');
+          navigator.serviceWorker.register('/sw.js').then(function (reg) {
+            if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
+            reg.addEventListener('updatefound', function () {
+              var next = reg.installing;
+              if (!next) return;
+              next.addEventListener('statechange', function () {
+                // Installed while an older version runs the page: that's an update (the first install isn't).
+                if (next.state === 'installed' && navigator.serviceWorker.controller) offer(next);
+              });
+            });
+            // A phone left open at the ground: look for a new version whenever the app comes back to the front.
+            document.addEventListener('visibilitychange', function () {
+              if (document.visibilityState === 'visible') reg.update().catch(function () {});
+            });
+          });
         });
-        // A new version took over: reload once so the page and its files come from the same version.
+        // The new version took over because Reload was tapped: reload once so the page and its files match.
         var hadController = !!navigator.serviceWorker.controller;
         navigator.serviceWorker.addEventListener('controllerchange', function () {
           if (hadController && !window.__creaseReloaded) {

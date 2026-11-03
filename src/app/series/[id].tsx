@@ -1,19 +1,23 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PlayerAvatar } from '../../components/Avatar.tsx';
 import { ExportSheet } from '../../components/ExportSheet.tsx';
+import { Columns, Page, useLayout } from '../../components/layout.tsx';
 import { Button, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, useToast } from '../../components/ui.tsx';
 import { matchState, oversText } from '../../engine/engine.ts';
 import { careerStats, playerOfTheMatch, seriesState, type SeriesState } from '../../engine/stats.ts';
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
-import { colors, font, radius, space, type, hero, edge } from '../../theme.ts';
+import { colors, font, radius, space, type, hero, edge, ownTeamTheme } from '../../theme.ts';
 
-/** A dot per match of the series: who won it, or still to play. */
-export function SeriesPips({ series, size = 14 }: { series: SeriesState; size?: number }) {
+/**
+ * A dot per match of the series: who won it, in the winner's own colour when it has one, or still to play. `onHero`
+ * for the dark panel, where the second side's fallback is light rather than the page's ink.
+ */
+export function SeriesPips({ series, size = 14, onHero }: { series: SeriesState; size?: number; onHero?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', gap: 6 }}>
       {Array.from({ length: series.of }, (_, i) => {
@@ -27,10 +31,10 @@ export function SeriesPips({ series, size = 14 }: { series: SeriesState; size?: 
             style={[
               { width: size, height: size, borderRadius: 3, transform: [{ skewX: '-12deg' }] },
               winner === null
-                ? { borderWidth: 1.5, borderColor: colors.borderHi, borderStyle: m ? 'solid' : 'dashed' }
+                ? { borderWidth: 1.5, borderColor: onHero ? hero.ink(0.3) : colors.borderHi, borderStyle: m ? 'solid' : 'dashed' }
                 : winner === 'tie'
-                  ? { backgroundColor: colors.faint }
-                  : { backgroundColor: first ? colors.accent : colors.text },
+                  ? { backgroundColor: onHero ? hero.faint : colors.faint }
+                  : { backgroundColor: ownTeamTheme(winner)?.accent ?? (first ? colors.accent : onHero ? hero.text : colors.text) },
             ]}
           />
         );
@@ -60,6 +64,7 @@ function Leaders({ matches }: { matches: Match[] }) {
           style={styles.leaderRow}
         >
           <Text style={[styles.leaderRank, i === 0 && { color: colors.accentInk }]}>{i + 1}</Text>
+          <PlayerAvatar name={c.name} size={22} />
           <Text style={styles.leaderName} numberOfLines={1}>
             {short(c.name)}
           </Text>
@@ -87,12 +92,22 @@ export default function SeriesScreen() {
   const { exportAs } = useMatchFiles(toast.show);
   const [exporting, setExporting] = useState<Match[] | null>(null);
   const inSeries = matches.filter((m) => m.series?.id === id);
+  const layout = useLayout();
+  const { wide } = layout;
 
-  const back = (
-    <View style={styles.header}>
+  const bar = (
+    <View style={[styles.header, wide && { paddingHorizontal: 0, paddingTop: space.lg, paddingBottom: space.md }]}>
       <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
       {inSeries.length > 0 && <IconButton icon="download-outline" label="Export series" onPress={() => setExporting(inSeries)} />}
     </View>
+  );
+  // A tablet or laptop: the bar lines up with the page under it.
+  const back = wide ? (
+    <View style={{ paddingHorizontal: layout.gutter }}>
+      <Page>{bar}</Page>
+    </View>
+  ) : (
+    bar
   );
   if (!inSeries.length) {
     return (
@@ -106,60 +121,71 @@ export default function SeriesScreen() {
   const s = seriesState(inSeries);
   const last = s.matches[s.matches.length - 1];
   const live = s.matches.find((m) => !matchState(m).result);
+  const mosN = (
+    <>
+    {s.best && (
+      <FadeIn delay={80}>
+        <PressableScale
+          scaleTo={0.98}
+          onPress={() => router.push({ pathname: '/player/[key]', params: { key: s.best!.key } })}
+          style={styles.mos}
+        >
+          <PlayerAvatar name={s.best.name} size={40} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.mosLabel}>{s.over ? 'MAN OF THE SERIES' : 'LEADING FOR MAN OF THE SERIES'}</Text>
+            <Text style={styles.mosName} numberOfLines={1}>
+              {s.best.name}
+            </Text>
+            <Text style={styles.mosLine}>
+              {s.best.team} · {s.best.summary}
+            </Text>
+          </View>
+        </PressableScale>
+      </FadeIn>
+    )}
+    </>
+  );
 
   return (
     <Screen>
       {back}
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
+      <ScrollView contentContainerStyle={{ padding: wide ? layout.gutter : space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
+        <Page>
+        {/* A tablet or laptop: the scoreline, what's next and the leaders on the left; the man of the series and every
+            match on the right. */}
+        <Columns weights={[3, 2]} gap={wide ? space.lg : 0}>
+        <View>
+        {/* Each column opens on a label, so the scoreline and the right column start level. */}
+        {wide && <SectionLabel flush>The series</SectionLabel>}
         <FadeIn>
-          <View style={styles.hero}>
+          <View style={[styles.hero, wide && { padding: space.xxl }]}>
             <PitchStripes tint="255,255,255" />
             <GhostWord size={200} style={{ right: -20, bottom: -50, color: hero.ink(0.05) }}>
               SERIES
             </GhostWord>
             <Text style={styles.eyebrow}>SERIES · BEST OF {s.of}</Text>
-            <Text style={styles.name}>{s.name}</Text>
+            <Text style={[styles.name, wide && { fontSize: 48, lineHeight: 54 }]}>{s.name}</Text>
             <View style={styles.scoreline}>
               <View style={styles.side}>
-                <Text style={[styles.sideScore, s.wins[0] >= s.wins[1] && s.played > 0 && { color: hero.accent }]}>{s.wins[0]}</Text>
+                <Text style={[styles.sideScore, s.wins[0] >= s.wins[1] && s.played > 0 && { color: ownTeamTheme(s.teams[0])?.accent ?? hero.accent }]}>{s.wins[0]}</Text>
                 <Text style={styles.sideName} numberOfLines={1}>
                   {s.teams[0]}
                 </Text>
               </View>
               <Text style={styles.dash}>–</Text>
               <View style={[styles.side, { alignItems: 'flex-end' }]}>
-                <Text style={[styles.sideScore, s.wins[1] >= s.wins[0] && s.played > 0 && { color: hero.text }]}>{s.wins[1]}</Text>
+                <Text style={[styles.sideScore, s.wins[1] >= s.wins[0] && s.played > 0 && { color: ownTeamTheme(s.teams[1])?.accent ?? hero.text }]}>{s.wins[1]}</Text>
                 <Text style={styles.sideName} numberOfLines={1}>
                   {s.teams[1]}
                 </Text>
               </View>
             </View>
-            <SeriesPips series={s} />
+            <SeriesPips series={s} onHero />
             <Text style={styles.status}>{s.status}</Text>
           </View>
         </FadeIn>
 
-        {s.best && (
-          <FadeIn delay={80}>
-            <PressableScale
-              scaleTo={0.98}
-              onPress={() => router.push({ pathname: '/player/[key]', params: { key: s.best!.key } })}
-              style={styles.mos}
-            >
-              <MaterialCommunityIcons name="trophy-award" size={30} color={colors.onAccent} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.mosLabel}>{s.over ? 'MAN OF THE SERIES' : 'LEADING FOR MAN OF THE SERIES'}</Text>
-                <Text style={styles.mosName} numberOfLines={1}>
-                  {s.best.name}
-                </Text>
-                <Text style={styles.mosLine}>
-                  {s.best.team} · {s.best.summary}
-                </Text>
-              </View>
-            </PressableScale>
-          </FadeIn>
-        )}
-
+        {!wide && mosN}
         {s.next !== null && (
           <Button
             label={`Play match ${s.next}`}
@@ -183,8 +209,16 @@ export default function SeriesScreen() {
             <Leaders matches={s.matches} />
           </>
         )}
+        </View>
 
-        <SectionLabel>Matches</SectionLabel>
+        <View>
+        {wide && s.best && (
+          <>
+            <SectionLabel flush>{s.over ? 'Man of the series' : 'Leading the series'}</SectionLabel>
+            <View style={{ marginTop: -space.md }}>{mosN}</View>
+          </>
+        )}
+        <SectionLabel flush={wide && !s.best}>Matches</SectionLabel>
         <View style={{ gap: space.sm }}>
           {s.matches.map((m) => {
             const st = matchState(m);
@@ -238,6 +272,9 @@ export default function SeriesScreen() {
             </View>
           ))}
         </View>
+        </View>
+        </Columns>
+        </Page>
       </ScrollView>
       <ExportSheet
         visible={exporting !== null}
@@ -298,7 +335,7 @@ const styles = StyleSheet.create({
     ...edge,
   },
   leaderTitle: { ...type.label, fontSize: 10, color: colors.muted, marginBottom: 2 },
-  leaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  leaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
   leaderRank: { fontFamily: font.posterBlack, fontSize: 18, color: colors.faint, width: 14 },
   leaderName: { flex: 1, color: colors.text, fontSize: 13, fontFamily: font.bold },
   leaderValue: { fontFamily: font.posterBlack, fontSize: 16, color: colors.text, ...type.num },

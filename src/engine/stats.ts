@@ -41,14 +41,18 @@ const squash = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 /** Players who now go by a longer name: matches scored under the old one are theirs too. */
 export const RENAMED: Record<string, string> = { chirag: 'Chirag Taneja', rohit: 'Rohit Kumar', ajayvir: 'Ajayvir Singh Ghai' };
 
+/** Renames made in the squad: an old name to the name the player goes by now. */
+let aliases: Record<string, string> = {};
+
 /** A name as the stats know it: trimmed, any case, and an old short name read as the full one. */
 const norm = (s: string) => {
   const n = squash(s);
-  return RENAMED[n] ? squash(RENAMED[n]) : n;
+  const now = aliases[n] ?? RENAMED[n];
+  return now ? squash(now) : n;
 };
 
 /** How a name is shown: the full name for a player who was renamed. */
-export const displayName = (s: string) => RENAMED[squash(s)] ?? s.trim();
+export const displayName = (s: string) => aliases[squash(s)] ?? RENAMED[squash(s)] ?? s.trim();
 
 /** Names the setup screen fills in for blanks: these could be anyone, so they get no career. */
 export const isPlaceholder = (name: string) => /^player \d+$/.test(norm(name));
@@ -56,7 +60,8 @@ export const isPlaceholder = (name: string) => /^player \d+$/.test(norm(name));
 let regulars = new Set<string>();
 
 /** The squad's names: their stats follow them across teams (auction sides change every week). */
-export function setRegulars(names: string[]) {
+export function setRegulars(names: string[], renamed: Record<string, string> = {}) {
+  aliases = Object.fromEntries(Object.entries(renamed).map(([old, now]) => [squash(old), now.trim()]));
   regulars = new Set(names.map(norm).filter(Boolean));
 }
 

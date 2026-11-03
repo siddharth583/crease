@@ -32,7 +32,7 @@ test('matches: new ones go both ways, the newer copy of the same match wins', ()
 
 test('matches: deleted on this phone is marked deleted in the club, and deleted in the club goes here', () => {
   const gone = match('g', 5);
-  const plan = planMatches([match('h', 5)], new Map([['g', remote(gone)], ['h', { deleted: true, updatedAt: 8 }]]), { g: fingerprint(JSON.stringify(gone)) });
+  const plan = planMatches([match('h', 5)], new Map([['g', remote(gone)], ['h', { deleted: true, updatedAt: 8 }]]), { g: fingerprint(JSON.stringify(gone)) }, ['g']);
   assert.deepEqual(plan.bury, ['g']);
   assert.deepEqual(plan.remove, ['h']);
   // A match changed here after it was deleted elsewhere comes back.
@@ -48,4 +48,16 @@ test('shared things: the side that changed wins; a phone joining takes the clubâ
   assert.equal(planShared(old, '{"v":3}', fingerprint(old)), 'take', 'changed in the club');
   assert.equal(planShared('{"v":2}', '{"v":3}', fingerprint(old)), 'take', 'both: the club wins');
   assert.equal(planShared('{"v":2}', '{"v":3}', undefined), 'take', 'first sync on this phone');
+});
+
+test('matches: one missing from the phone without a Delete comes back from the club, never deleted there', () => {
+  const lost = match('l', 5);
+  const plan = planMatches([], new Map([['l', remote(lost)]]), { l: fingerprint(JSON.stringify(lost)) });
+  assert.deepEqual(plan.bury, []);
+  assert.deepEqual(plan.take.map((m) => m.id), ['l']);
+});
+
+test('matches: a club entry that is not a match is left alone', () => {
+  const plan = planMatches([], new Map([['x', { json: '{"nope":1}', updatedAt: 5 }], ['y', { json: 'not json', updatedAt: 5 }]]), {}, [], () => false);
+  assert.deepEqual(plan.take, []);
 });

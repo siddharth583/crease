@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stars } from '../../components/Stars.tsx';
-import { Button, Card, FadeIn, GhostWord, IconButton, PitchStripes, PopText, PressableScale, Screen, SectionLabel, tap, useToast } from '../../components/ui.tsx';
+import { Columns, Page, useLayout } from '../../components/layout.tsx';
+import { Button, Card, FadeIn, GhostWord, IconButton, PitchStripes, PopText, PressableScale, Screen, SectionLabel, tap, useToast, WideHead } from '../../components/ui.tsx';
 import { auctionState, money, nextBid, passPlayer, rosterPlayer, sell, undoAuction, type Auction, type AuctionState } from '../../engine/auction.ts';
 import { CATEGORY_LABEL, categoryOf, overall, ROLE_LABEL } from '../../engine/squad.ts';
 import { careerStats, playerKey } from '../../engine/stats.ts';
@@ -12,20 +13,26 @@ import { plural } from '../../engine/text.ts';
 import { CountUp, PopIn } from '../../components/motion.tsx';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
-import { colors, edge, font, hero, radius, space, type, HERO_BG } from '../../theme.ts';
+import { colors, edge, font, hero, ownTeamTheme, radius, space, type, HERO_BG } from '../../theme.ts';
 
-const SIDE_TINT = [colors.accent, colors.violet];
+/**
+ * Each side's colour: its own team colours when it has them, else volt and the light violet. Both are bright, so they
+ * read on the dark panels and carry dark type as a fill, in day or night.
+ */
+const tintOf = (name: string, i: number) => ownTeamTheme(name)?.accent ?? [colors.accent, hero.violet][i];
+const onTintOf = (name: string) => ownTeamTheme(name)?.onAccent ?? colors.onAccent;
 
 /** A captain's purse and side so far. */
 function SidePanel({ s, i, leading }: { s: AuctionState['sides'][number]; i: 0 | 1; leading: boolean }) {
   return (
-    <View style={[styles.side, leading && { borderColor: SIDE_TINT[i] }]}>
-      <View style={[styles.sideBar, { backgroundColor: SIDE_TINT[i] }]} />
+    <View style={[styles.side, leading && { borderColor: tintOf(s.name, i) }]}>
+      <View style={[styles.sideBar, { backgroundColor: tintOf(s.name, i) }]} />
       <Text style={styles.sideName} numberOfLines={1}>
         {s.name}
       </Text>
       <CountUp value={s.left} format={money} style={styles.purse} duration={800} />
-      <Text style={styles.sideMeta} numberOfLines={1}>
+      {/* Two lines if it needs them: on a phone the max bid was cut off at the card's edge. */}
+      <Text style={styles.sideMeta} numberOfLines={2}>
         {plural(s.players.length, 'player')} · {s.slots ? `max bid ${money(s.maxBid)}` : 'full'}
       </Text>
     </View>
@@ -34,12 +41,14 @@ function SidePanel({ s, i, leading }: { s: AuctionState['sides'][number]; i: 0 |
 
 /** Both sides as they came out of the auction. */
 function Results({ a, s }: { a: Auction; s: AuctionState }) {
+  // Side by side on a tablet or laptop, both as tall as the bigger side.
+  const { wide } = useLayout();
   return (
-    <View style={{ gap: space.md }}>
+    <Columns tablet={2} gap={space.md}>
       {s.sides.map((side, i) => (
-        <FadeIn key={i} delay={i * 80}>
-          <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <View style={[styles.resultHead, { borderLeftColor: SIDE_TINT[i] }]}>
+        <FadeIn key={i} delay={i * 80} style={wide && { flex: 1 }}>
+          <Card style={[{ padding: 0, overflow: 'hidden' }, wide && { flex: 1 }]}>
+            <View style={[styles.resultHead, { borderLeftColor: tintOf(side.name, i) }]}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.resultTeam} numberOfLines={1}>
                   {side.name}
@@ -70,7 +79,7 @@ function Results({ a, s }: { a: Auction; s: AuctionState }) {
           </Card>
         </FadeIn>
       ))}
-    </View>
+    </Columns>
   );
 }
 
@@ -93,6 +102,8 @@ export default function AuctionScreen() {
   }, [sold]);
   useEffect(() => setBid(null), [s?.current]);
   const careers = useMemo(() => careerStats(matches), [matches]);
+  const layout = useLayout();
+  const { wide } = layout;
 
   if (!a || !s) {
     return (
@@ -109,6 +120,14 @@ export default function AuctionScreen() {
   const career = p ? careers.find((c) => c.key === playerKey({ id: '', name: '', players: [] }, p.name)) : undefined;
   const lot = a.order.length - s.queue.length + 1;
   const amount = nextBid(a, bid?.amount ?? null);
+
+  const sidesN = (
+    <View style={styles.sides}>
+      {s.sides.map((side, i) => (
+        <SidePanel key={i} s={side} i={i as 0 | 1} leading={bid?.side === i} />
+      ))}
+    </View>
+  );
 
   const raise = (side: 0 | 1) => {
     tap('medium');
@@ -132,21 +151,34 @@ export default function AuctionScreen() {
 
   return (
     <Screen>
-      <View style={styles.header}>
-        <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
-        <Text style={styles.headerTitle}>{s.done ? 'Teams' : `Lot ${lot} of ${a.order.length}`}</Text>
-        <IconButton icon="arrow-undo" label="Undo" disabled={!bid && !a.events.length} onPress={undo} />
-      </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, paddingBottom: insets.bottom + 120 }}>
-        <View style={styles.sides}>
-          {s.sides.map((side, i) => (
-            <SidePanel key={i} s={side} i={i as 0 | 1} leading={bid?.side === i} />
-          ))}
+      {wide ? (
+        // Back, the title and Undo on one line, as on every other page.
+        <View style={{ paddingHorizontal: layout.gutter, paddingTop: space.lg }}>
+          <Page>
+            <WideHead
+              title={s.done ? 'Teams' : `Lot ${lot} of ${a.order.length}`}
+              sub={`${a.sides[0].name} v ${a.sides[1].name} · the auction`}
+              onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+              right={<IconButton icon="arrow-undo" label="Undo" disabled={!bid && !a.events.length} onPress={undo} />}
+            />
+          </Page>
         </View>
+      ) : (
+        <View style={styles.header}>
+          <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+          <Text style={styles.headerTitle}>{s.done ? 'Teams' : `Lot ${lot} of ${a.order.length}`}</Text>
+          <IconButton icon="arrow-undo" label="Undo" disabled={!bid && !a.events.length} onPress={undo} />
+        </View>
+      )}
+      <ScrollView contentContainerStyle={{ padding: wide ? layout.gutter : space.lg, paddingTop: wide ? 0 : space.sm, paddingBottom: insets.bottom + 120 }}>
+        <Page>
+        {!wide && sidesN}
 
         {p ? (
-          <>
-            <View style={styles.lot}>
+          // A tablet or laptop: the lot and the bidding on the left; the purses and who's next beside them.
+          <Columns weights={[3, 2]} gap={wide ? space.lg : 0}>
+          <View>
+            <View style={[styles.lot, wide && { marginTop: 0, padding: space.xxl }]}>
               <PitchStripes opacity={0.06} tint="255,255,255" />
               <GhostWord size={130} style={{ color: hero.ink(0.05) }}>
                 {String(lot)}
@@ -164,7 +196,7 @@ export default function AuctionScreen() {
                   <Text style={styles.overall}>★ {overall(p).toFixed(1)}</Text>
                 )}
               </View>
-              <Text style={styles.lotName} numberOfLines={2}>
+              <Text style={[styles.lotName, wide && { fontSize: 52, lineHeight: 58 }]} numberOfLines={2}>
                 {p.name}
               </Text>
               <View style={styles.ratings}>
@@ -182,7 +214,7 @@ export default function AuctionScreen() {
               </Text>
               <View style={styles.bidBox}>
                 <Text style={styles.bidLabel}>{bid ? `${s.sides[bid.side].name} bids` : `Base price · ${CATEGORY_LABEL[categoryOf(p)]}`}</Text>
-                <PopText value={money(bid ? bid.amount : s.opening)} style={[styles.bidValue, bid && { color: SIDE_TINT[bid.side] }]} />
+                <PopText value={money(bid ? bid.amount : s.opening)} style={[styles.bidValue, bid && { color: tintOf(s.sides[bid.side].name, bid.side) }]} />
               </View>
             </View>
 
@@ -197,12 +229,12 @@ export default function AuctionScreen() {
                     onPress={() => raise(k)}
                     wrapStyle={{ flex: 1 }}
                     accessibilityLabel={`${side.name} bids ${money(amount)}`}
-                    style={[styles.bidButton, { backgroundColor: SIDE_TINT[i] }]}
+                    style={[styles.bidButton, { backgroundColor: tintOf(side.name, i) }]}
                   >
-                    <Text style={styles.bidWho} numberOfLines={1}>
+                    <Text style={[styles.bidWho, { color: onTintOf(side.name) }]} numberOfLines={2}>
                       {side.name}
                     </Text>
-                    <Text style={styles.bidAmount}>{bid?.side === k ? 'LEADING' : `BID ${money(amount)}`}</Text>
+                    <Text style={[styles.bidAmount, { color: onTintOf(side.name) }]}>{bid?.side === k ? 'LEADING' : `BID ${money(amount)}`}</Text>
                   </PressableScale>
                 );
               })}
@@ -219,7 +251,10 @@ export default function AuctionScreen() {
             ) : (
               <Text style={styles.help}>Nobody took {p.name} the first time. One of the captains has to now, at {money(s.opening)} or more.</Text>
             )}
+          </View>
 
+          <View>
+            {wide && sidesN}
             {s.queue.length > 1 && (
               <>
                 <SectionLabel right={<Text style={styles.count}>{s.queue.length - 1} to come</Text>}>Up next</SectionLabel>
@@ -239,9 +274,11 @@ export default function AuctionScreen() {
                 </Card>
               </>
             )}
-          </>
+          </View>
+          </Columns>
         ) : (
           <>
+            {wide && sidesN}
             <View style={styles.doneHead}>
               <Ionicons name="trophy" size={22} color={colors.onAccent} />
               <Text style={styles.doneText}>Auction done. Here are the teams.</Text>
@@ -249,16 +286,30 @@ export default function AuctionScreen() {
             <Results a={a} s={s} />
           </>
         )}
+        </Page>
       </ScrollView>
       {s.done && (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
-          <Button label="Start a match with these teams" icon="play" onPress={() => router.push({ pathname: '/new', params: { auction: a.id } })} />
+        <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }, wide && { paddingHorizontal: layout.gutter }]}>
+          {wide ? (
+            // As on New match: the teams on the left, the start at the right.
+            <Page style={styles.footWide}>
+              <Text style={styles.footSummary} numberOfLines={1}>
+                <Text style={styles.footStrong}>
+                  {s.sides[0].name} v {s.sides[1].name}
+                </Text>
+                {`  ·  ${s.sides[0].players.length} and ${s.sides[1].players.length} players`}
+              </Text>
+              <Button style={styles.startWide} label="Start a match with these teams" icon="play" onPress={() => router.push({ pathname: '/new', params: { auction: a.id } })} />
+            </Page>
+          ) : (
+            <Button label="Start a match with these teams" icon="play" onPress={() => router.push({ pathname: '/new', params: { auction: a.id } })} />
+          )}
         </View>
       )}
       {sold && (
         <View pointerEvents="none" style={styles.stampWrap}>
-          <PopIn key={sold.key} turn={-18} style={[styles.stamp, { borderColor: SIDE_TINT[sold.side] }]}>
-            <Text style={[styles.stampWord, { color: SIDE_TINT[sold.side] }]}>Sold!</Text>
+          <PopIn key={sold.key} turn={-18} style={[styles.stamp, { borderColor: tintOf(s.sides[sold.side].name, sold.side) }]}>
+            <Text style={[styles.stampWord, { color: tintOf(s.sides[sold.side].name, sold.side) }]}>Sold!</Text>
             <Text style={styles.stampName} numberOfLines={1}>
               {sold.name}
             </Text>
@@ -275,6 +326,10 @@ export default function AuctionScreen() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
+  footWide: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  footSummary: { flex: 1, minWidth: 0, color: colors.muted, fontSize: 15, fontFamily: font.medium },
+  footStrong: { color: colors.text, fontFamily: font.bold },
+  startWide: { width: 340 },
   headerTitle: { color: colors.text, fontSize: 20, fontFamily: font.poster },
   lead: { color: colors.muted, fontSize: 15, fontFamily: font.medium },
   sides: { flexDirection: 'row', gap: space.sm },

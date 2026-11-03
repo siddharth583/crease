@@ -70,7 +70,7 @@ function looksLikeTeam(t: unknown): t is Team {
   return isObject(t) && typeof t.id === 'string' && typeof t.name === 'string' && Array.isArray(t.players);
 }
 
-function looksLikeMatch(m: unknown): m is Match {
+export function looksLikeMatch(m: unknown): m is Match {
   if (!isObject(m) || typeof m.id !== 'string' || typeof m.createdAt !== 'number') return false;
   if (!Array.isArray(m.teams) || m.teams.length !== 2 || !m.teams.every(looksLikeTeam)) return false;
   // Two innings, or four once a tie went to a super over.

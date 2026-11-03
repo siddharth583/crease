@@ -84,10 +84,13 @@ export function BallEditSheet({
   const [how, setHow] = useState<WicketKind>('bowled');
   const [fielder, setFielder] = useState<string | undefined>();
   const [bowler, setBowler] = useState<string | null>(null);
+  // A bounce keeps its call (and its place in the over's allowance) unless it's said not to have been one.
+  const [bounce, setBounce] = useState(false);
   useEffect(() => {
     if (!event) return;
     setKind(event.extra ?? 'none');
     setRuns(event.runs);
+    setBounce(Boolean(event.bouncer));
     setBowler(ball?.bowler ?? null);
     setError(null);
     if (event.wicket) {
@@ -99,6 +102,14 @@ export function BallEditSheet({
   }, [event, ball?.event, ball?.bowler]);
   if (!ball || !event) return null;
   const byes = kind === 'bye' || kind === 'legbye';
+  // A wide is the one wide run the rules give, nothing more: a bounce called wide too.
+  const calledWide = bounce && ball.label.startsWith('BWd');
+  const wide = bounce ? calledWide : kind === 'wide';
+  const pickKind = (k: 'none' | Extra) => {
+    setKind(k);
+    if (k === 'wide') setRuns(0);
+    else if ((k === 'bye' || k === 'legbye') && runs === 0) setRuns(1);
+  };
   const keeper = match.keepers?.[s.bowlingTeam.id];
 
   // Where the ball sits: its over, and whether it opened it. The bowlers of the overs either side can't bowl it.
@@ -169,7 +180,7 @@ export function BallEditSheet({
                 ))}
               </View>
             )}
-            {how === 'runout' && (
+            {how === 'runout' && event.extra !== 'wide' && (
               <Segmented value={String(runs)} onChange={(v) => setRuns(Number(v))} options={['0', '1', '2', '3'].map((v) => ({ value: v, label: `${v} run${v === '1' ? '' : 's'}` }))} />
             )}
             {bowlerPart}
@@ -190,20 +201,32 @@ export function BallEditSheet({
           </>
         ) : (
           <>
-            <Segmented value={kind} onChange={setKind} options={EDIT_KINDS} />
+            {event.bouncer && (
+              <View style={styles.wrap}>
+                <Chip label="Bounce" icon={bounce ? 'checkmark' : undefined} selected={bounce} onPress={() => setBounce(!bounce)} />
+              </View>
+            )}
+            {bounce ? (
+              <Text style={styles.note}>
+                A bounce{calledWide ? ', called a wide' : ball.label.startsWith('BNb') ? ', called a no ball' : ''}. Untick Bounce if it wasn’t one.
+              </Text>
+            ) : (
+              <Segmented value={kind} onChange={pickKind} options={EDIT_KINDS} />
+            )}
             <View style={styles.wrap}>
               {[0, 1, 2, 3, 4, 5, 6].map((r) => (
-                <Chip key={r} label={String(r)} selected={runs === r} disabled={byes && r === 0} onPress={() => setRuns(r)} />
+                <Chip key={r} label={String(r)} selected={runs === r} disabled={(!bounce && byes && r === 0) || (wide && r > 0)} onPress={() => setRuns(r)} />
               ))}
             </View>
             {bowlerPart}
             <Button
               label="Save"
               icon="checkmark"
-              disabled={byes && runs === 0}
+              disabled={!bounce && byes && runs === 0}
               onPress={() => {
-                const same = (event.extra ?? 'none') === kind && event.runs === runs;
-                save(same ? event : { type: 'ball', runs, extra: kind === 'none' ? undefined : kind }, bowler);
+                const same = (event.extra ?? 'none') === kind && event.runs === runs && bounce === Boolean(event.bouncer);
+                const extra = kind === 'none' ? undefined : kind;
+                save(same ? event : { type: 'ball', runs: wide ? 0 : runs, extra, ...(bounce ? { bouncer: event.bouncer } : {}) }, bowler);
               }}
             />
             <Button variant="ghost" label="Delete this ball" icon="trash-outline" onPress={() => save(null, null)} />

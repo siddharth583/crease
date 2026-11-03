@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { PlayerAvatar } from '../../components/Avatar.tsx';
 import { NameSuggestions } from '../../components/NameSuggestions.tsx';
 import { FormBadge } from '../../components/Ratings.tsx';
-import { Button, Card, Chip, FadeIn, PressableScale, Screen, SectionLabel, Segmented, useToast, type IconName } from '../../components/ui.tsx';
+import { Columns, Page, useLayout, widePad } from '../../components/layout.tsx';
+import { Button, Card, Chip, FadeIn, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, useToast, WideHead, type IconName } from '../../components/ui.tsx';
 import { LINEUP_IMAGE, lineupFileName, lineupHtml } from '../../engine/lineup.ts';
 import { DEFAULT_SQUAD } from '../../engine/squad.ts';
 import {
@@ -21,40 +24,52 @@ import {
   type SideStrength,
   type Strength,
 } from '../../engine/teams.ts';
-import type { Team } from '../../engine/types.ts';
+import { isPlaceholder } from '../../engine/stats.ts';
+import { teamProfile } from '../../engine/teamPage.ts';
+import type { Match, Team } from '../../engine/types.ts';
 import { newId, useMatches } from '../../store/matches.tsx';
 import { saveReportImage } from '../../store/files.ts';
 import { useSquad } from '../../store/squad.ts';
 import { useAccess } from '../../store/sync.tsx';
-import { colors, font, ownTeamTheme, radius, space, type } from '../../theme.ts';
+import { colors, font, hero, ownTeamTheme, radius, space, teamTheme, type } from '../../theme.ts';
 
 // The sides: how strong each is on current form, and two even sides from whoever turns up today.
 
 const TINTS = [colors.accentInk, colors.violet];
 
+/** A side's colour: its own when it has one, else the usual first or second. `ink` is that colour as text. */
+const tintOf = (name: string, i: number) => ownTeamTheme(name)?.accent ?? TINTS[i % 2];
+const inkOf = (name: string, i: number) => ownTeamTheme(name)?.ink ?? TINTS[i % 2];
+
 /** Changing a recommended side: rename it, pick a player to swap, or send one to the other side. */
 type SideEdit = { other: string; picked: string | null; onRename: (name: string) => void; onPick: (player: string) => void; onMove: (player: string) => void };
 
-/** A side's strength in a few numbers, then its players best first. With `edit`, the side can be changed. */
-/** A side's colour: its own when it has one, else the usual first or second. */
-const tintOf = (name: string, i: number) => ownTeamTheme(name)?.accent ?? TINTS[i % 2];
-
+/**
+ * A side's strength in a few numbers, then its players best first. With `edit`, the side can be changed. `i` is
+ * which side it is (first or second), for its colour when it has none of its own. `byTotal` leads with the players'
+ * strengths added up (what the sides are evened on) rather than their average.
+ */
 function SideCard({
   name,
   s,
-  tint,
+  i: side,
+  byTotal,
   captain,
   note,
   edit,
   tagged = [],
   results,
   onOpen,
+  fill,
 }: {
+  /** As tall as its row, beside the other side. */
+  fill?: boolean;
   /** Opens the side's own page. */
   onOpen?: () => void;
   name: string;
   s: SideStrength;
-  tint: string;
+  i: number;
+  byTotal?: boolean;
   captain?: string;
   note?: string;
   edit?: SideEdit;
@@ -65,8 +80,9 @@ function SideCard({
 }) {
   const isTagged = (n: string) => tagged.some((x) => nameKey(x) === nameKey(n));
   const isCaptain = (n: string) => Boolean(captain) && nameKey(captain!) === nameKey(n);
+  const tint = tintOf(name, side);
   return (
-    <Card style={{ padding: 0, overflow: 'hidden' }}>
+    <Card style={[{ padding: 0, overflow: 'hidden' }, fill && { flex: 1 }]}>
       <View style={styles.sideHead}>
         <View style={[styles.sideBar, { backgroundColor: tint }]} />
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -80,7 +96,7 @@ function SideCard({
               accessibilityLabel={`Rename ${name}`}
             />
           ) : onOpen ? (
-            <PressableScale scaleTo={0.97} onPress={onOpen} accessibilityLabel={`${name} team page`} style={styles.sideLink}>
+            <PressableScale scaleTo={0.97} hitSlop={10} onPress={onOpen} accessibilityLabel={`${name} team page`} style={styles.sideLink}>
               <Text style={styles.sideName} numberOfLines={1}>
                 {name}
               </Text>
@@ -106,11 +122,20 @@ function SideCard({
           )}
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={[styles.power, { color: tint }]}>
-            {s.power.toFixed(1)}
-            <Text style={styles.powerOf}>/10</Text>
-          </Text>
-          <Text style={styles.sideMeta}>Strength</Text>
+          {byTotal ? (
+            <>
+              <Text style={[styles.power, { color: inkOf(name, side) }]}>{s.total.toFixed(1)}</Text>
+              <Text style={styles.sideMeta}>Total · avg {s.power.toFixed(1)}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.power, { color: inkOf(name, side) }]}>
+                {s.power.toFixed(1)}
+                <Text style={styles.powerOf}>/10</Text>
+              </Text>
+              <Text style={styles.sideMeta}>Strength</Text>
+            </>
+          )}
         </View>
       </View>
       <View style={styles.facts}>
@@ -131,6 +156,7 @@ function SideCard({
         const picked = edit?.picked !== null && edit?.picked !== undefined && nameKey(edit.picked) === nameKey(p.name);
         const row = (
           <>
+          <PlayerAvatar name={p.name} size={28} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.playerName} numberOfLines={1}>
               {p.name}
@@ -167,7 +193,7 @@ function SideCard({
             >
               {row}
             </PressableScale>
-            <PressableScale accessibilityLabel={`Move ${p.name} to ${edit.other}`} hitSlop={6} onPress={() => edit.onMove(p.name)} style={styles.move}>
+            <PressableScale accessibilityLabel={`Move ${p.name} to ${edit.other}`} hitSlop={7} onPress={() => edit.onMove(p.name)} style={styles.move}>
               <Ionicons name="swap-vertical" size={16} color={colors.muted} />
             </PressableScale>
           </View>
@@ -181,15 +207,69 @@ function SideCard({
   );
 }
 
-/** Which of two sides is stronger, and by how much. */
+/** Which of two whole squads is stronger, player for player (their average: squads differ in size), and by how much. */
 function verdict(names: [string, string], a: SideStrength, b: SideStrength): string {
   const d = Math.round(Math.abs(a.power - b.power) * 10) / 10;
-  if (d < 0.2) return 'Dead level on form';
-  return `${a.power > b.power ? names[0] : names[1]} ${d < 0.6 ? 'just ahead' : 'stronger'} by ${d.toFixed(1)}`;
+  if (d < 0.2) return 'Dead level on form, player for player';
+  return `${a.power > b.power ? names[0] : names[1]} ${d < 0.6 ? 'just ahead' : 'stronger'} by ${d.toFixed(1)} a player`;
+}
+
+/** The two usual sides (the club's own, else the last pair kept), then any other side kept from a one-off match. */
+function splitSides<T extends { team: Team }>(sides: T[]): { usual: T[]; others: T[] } {
+  const own = sides.filter((x) => ownTeamTheme(x.team.name));
+  const usual = (own.length >= 2 ? own : [...own, ...sides.filter((x) => !own.includes(x))]).slice(0, 2);
+  return { usual, others: sides.filter((x) => !usual.includes(x)) };
+}
+
+/**
+ * The way into each usual side's own page, at the top of the tab: a card in the side's colours with its name, its
+ * record and View team. The whole card opens the page.
+ */
+function TeamDoors() {
+  const { savedTeams, matches } = useMatches();
+  const { wide } = useLayout();
+  const { usual } = splitSides(savedTeams.filter((t) => t.players.length >= 2).map((team) => ({ team })));
+  if (!usual.length) return null;
+  return (
+    <View style={styles.doors}>
+      {usual.map(({ team }) => {
+        const th = teamTheme(team.name);
+        const t = teamProfile(matches, team.name);
+        return (
+          <PressableScale
+            key={team.id}
+            scaleTo={0.97}
+            onPress={() => router.push({ pathname: '/team/[name]', params: { name: team.name } })}
+            accessibilityRole="link"
+            accessibilityLabel={`View team: ${team.name}`}
+            wrapStyle={{ flex: 1, minWidth: 0 }}
+            style={{ flex: 1 }}
+          >
+            <LinearGradient colors={th.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.door, wide && styles.doorWide]}>
+              <PitchStripes opacity={0.04} tint="255,255,255" />
+              <View style={[styles.doorBar, { backgroundColor: th.accent }]} />
+              <Text style={[styles.doorName, wide && { fontSize: 30, lineHeight: 34 }]} numberOfLines={2}>
+                {team.name}
+              </Text>
+              <Text style={styles.doorRecord} numberOfLines={1}>
+                {t.played ? `${t.played} played · ${t.won} won` : 'No matches yet'}
+              </Text>
+              <View style={[styles.doorGo, { backgroundColor: th.accent }]}>
+                <Text style={[styles.doorGoText, { color: th.onAccent }]}>View team</Text>
+                <Ionicons name="arrow-forward" size={15} color={th.onAccent} />
+              </View>
+            </LinearGradient>
+          </PressableScale>
+        );
+      })}
+    </View>
+  );
 }
 
 function StrengthView({ table }: { table: Map<string, Strength> }) {
   const { savedTeams, matches } = useMatches();
+  const [showOthers, setShowOthers] = useState(false);
+  const { wide, desk } = useLayout();
   const sides = savedTeams
     .map((t) => ({ team: t, s: sideStrength(t.players.filter((p) => !p.common).map((p) => strengthOf(table, p.name))) }))
     .filter((x) => x.team.players.length >= 2);
@@ -200,7 +280,12 @@ function StrengthView({ table }: { table: Map<string, Strength> }) {
       </Card>
     );
   }
-  const [a, b] = sides;
+  // The two usual sides first; any other side kept from a one-off match waits under Other sides.
+  const { usual, others } = splitSides(sides);
+  const [a, b] = usual;
+  const card = (x: (typeof sides)[number], i: number) => (
+    <SideCard fill={wide} name={x.team.name} s={x.s} i={i} onOpen={() => router.push({ pathname: '/team/[name]', params: { name: x.team.name } })} captain={x.team.players.find((p) => p.id === x.team.captain)?.name} results={recentResults(matches, x.team.name)} />
+  );
   return (
     <View style={{ gap: space.md }}>
       {b && (
@@ -208,7 +293,7 @@ function StrengthView({ table }: { table: Map<string, Strength> }) {
           <Card style={styles.compare}>
             {[a, b].map((x, i) => (
               <View key={x.team.id} style={[styles.compareSide, i === 1 && { alignItems: 'flex-end' }]}>
-                <Text style={[styles.comparePower, { color: tintOf(x.team.name, i) }]}>{x.s.power.toFixed(1)}</Text>
+                <Text style={[styles.comparePower, { color: inkOf(x.team.name, i) }]}>{x.s.power.toFixed(1)}</Text>
                 <Text style={styles.compareName} numberOfLines={1}>
                   {x.team.name}
                 </Text>
@@ -218,11 +303,36 @@ function StrengthView({ table }: { table: Map<string, Strength> }) {
           <Text style={styles.verdict}>{verdict([a.team.name, b.team.name], a.s, b.s)}</Text>
         </FadeIn>
       )}
-      {sides.map((x, i) => (
-        <FadeIn key={x.team.id} delay={60 + i * 60}>
-          <SideCard name={x.team.name} s={x.s} tint={tintOf(x.team.name, i)} onOpen={() => router.push({ pathname: '/team/[name]', params: { name: x.team.name } })} captain={x.team.players.find((p) => p.id === x.team.captain)?.name} results={recentResults(matches, x.team.name)} />
-        </FadeIn>
-      ))}
+      {/* On a tablet or laptop the two usual sides stand side by side, player against player. */}
+      <Columns tablet={2} gap={space.md}>
+        {usual.map((x, i) => (
+          <FadeIn key={x.team.id} delay={60 + i * 60} style={wide && { flex: 1 }}>
+            {card(x, i)}
+          </FadeIn>
+        ))}
+      </Columns>
+      {others.length > 0 && (
+        <PressableScale
+          scaleTo={0.98}
+          onPress={() => setShowOthers(!showOthers)}
+          accessibilityState={{ selected: showOthers }}
+          accessibilityLabel={showOthers ? 'Hide the other sides' : `Show the other ${others.length} sides`}
+          style={styles.fold}
+        >
+          <Text style={styles.foldText}>Other sides ({others.length})</Text>
+          <Ionicons name={showOthers ? 'chevron-up' : 'chevron-down'} size={18} color={colors.muted} />
+        </PressableScale>
+      )}
+      {showOthers &&
+        (wide ? (
+          <Columns tablet={2} laptop={desk ? 3 : 2} gap={space.md}>
+            {others.map((x, i) => (
+              <View key={x.team.id} style={{ flex: 1 }}>{card(x, i + 2)}</View>
+            ))}
+          </Columns>
+        ) : (
+          others.map((x, i) => <View key={x.team.id}>{card(x, i + 2)}</View>)
+        ))}
       <Text style={styles.hint}>
         Strength is out of 10: mostly each player’s form (their last five match ratings), steadied by their stars so one
         big game doesn’t swing it. A player with no matches yet plays to their stars.
@@ -231,17 +341,21 @@ function StrengthView({ table }: { table: Map<string, Strength> }) {
   );
 }
 
-/** One action under the sides: an icon, its words for screen readers. `primary` is the one in volt. */
-function Action({ icon, label, onPress, primary, armed, disabled }: { icon: IconName; label: string; onPress: () => void; primary?: boolean; armed?: boolean; disabled?: boolean }) {
+/** One action under the sides: an icon and its few words; `label` is the whole sentence for screen readers. */
+function Action({ icon, text, label, onPress, armed, disabled }: { icon: IconName; text: string; label: string; onPress: () => void; armed?: boolean; disabled?: boolean }) {
+  // On a tablet or laptop they share the bar's width, so each row of them ends on the bar's right edge.
+  const { wide } = useLayout();
   return (
     <PressableScale
       accessibilityLabel={label}
       disabled={disabled}
-      scaleTo={0.9}
+      scaleTo={0.94}
       onPress={onPress}
-      style={[styles.action, primary && styles.actionPrimary, armed && styles.actionArmed, disabled && { opacity: 0.35 }]}
+      wrapStyle={wide && { flexGrow: 1 }}
+      style={[styles.action, wide && { justifyContent: 'center' }, armed && styles.actionArmed]}
     >
-      <Ionicons name={icon} size={primary ? 24 : 20} color={primary || armed ? colors.onAccent : colors.text} />
+      <Ionicons name={icon} size={17} color={armed ? colors.onAccent : colors.text} />
+      <Text style={[styles.actionText, armed && { color: colors.onAccent }]}>{text}</Text>
     </PressableScale>
   );
 }
@@ -261,7 +375,10 @@ function LineupCard({
   onShare,
   onDelete,
   onStartAllowed,
+  fill,
 }: {
+  /** As tall as its row. */
+  fill?: boolean;
   l: SavedLineup;
   table: Map<string, Strength>;
   onStart: () => void;
@@ -274,7 +391,7 @@ function LineupCard({
   const [arming, setArming] = useState(false);
   const s = l.sides.map((side) => sideStrength(side.players.map((n) => strengthOf(table, n))));
   return (
-    <Card style={{ gap: space.sm }}>
+    <Card style={[{ gap: space.sm }, fill && { flex: 1 }]}>
       <View style={styles.lineupHead}>
         <Text style={styles.lineupTitle} numberOfLines={1}>
           {l.sides[0].name} v {l.sides[1].name}
@@ -283,14 +400,14 @@ function LineupCard({
       </View>
       {l.sides.map((side, i) => (
         <Text key={i} style={styles.hint} numberOfLines={2}>
-          <Text style={{ color: TINTS[i], fontFamily: font.bold }}>
-            {side.name} {s[i].power.toFixed(1)}
+          <Text style={{ color: inkOf(side.name, i), fontFamily: font.bold }}>
+            {side.name} {s[i].total.toFixed(1)}
           </Text>
           {'  '}
           {side.players.map((n) => (side.captain && nameKey(n) === nameKey(side.captain) ? `${n} (c)` : n)).join(', ')}
         </Text>
       ))}
-      <Text style={styles.playerSub}>Strength on today’s form, so it moves as players’ form does.</Text>
+      <Text style={styles.playerSub}>Total strength on today’s form, so it moves as players’ form does.</Text>
       <View style={styles.wrap}>
         {onStartAllowed && <Chip icon="play" label="Start a match" onPress={onStart} />}
         <Chip icon="create-outline" label="Edit" onPress={onEdit} />
@@ -304,11 +421,12 @@ function LineupCard({
 }
 
 function RecommendView({ table }: { table: Map<string, Strength> }) {
-  const { savedTeams, rememberTeams } = useMatches();
+  const { savedTeams, rememberTeams, matches } = useMatches();
   // Editors start matches from here; only the admin changes the usual sides or the saved line-ups.
   const access = useAccess();
   const { squad, lineups, saveLineup, deleteLineup } = useSquad();
   const toast = useToast();
+  const { wide, desk } = useLayout();
   const everyone = useMemo(() => [...table.values()].sort((a, b) => a.name.localeCompare(b.name)), [table]);
   const [out, setOut] = useState<Set<string>>(new Set());
   const [guests, setGuests] = useState<string[]>([]);
@@ -336,9 +454,12 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
   );
   const edited = edit !== null;
   const strength = lists ? (lists.map((l) => sideStrength(l.map((n) => strengthOf(table, n)))) as [SideStrength, SideStrength]) : null;
-  // How far apart the sides are, on the same out-of-10 strength the cards show.
-  const apart = strength ? Math.round(Math.abs(strength[0].power - strength[1].power) * 10) / 10 : 0;
-  const ahead = strength && strength[0].power > strength[1].power ? 0 : 1;
+  // How far apart the sides are, on the measure the sides are evened on: the players' strengths added up. On the
+  // average, a fair 6 v 5 (the five a little better each) would read as lopsided.
+  const apart = !strength ? 0 : !edited && split ? split.gap : Math.round(Math.abs(strength[0].total - strength[1].total) * 10) / 10;
+  const ahead = strength && strength[0].total > strength[1].total ? 0 : 1;
+  /** Far enough apart to say they aren't even any more: about a player's worth between them. */
+  const uneven = apart >= 1;
   const has = (list: string[], name: string) => list.some((n) => nameKey(n) === nameKey(name));
   // A pick only counts while that player is still on a side.
   const pickedNow = picked && lists && (has(lists[0], picked) || has(lists[1], picked)) ? picked : null;
@@ -396,6 +517,26 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
   const toggleCaptain = (name: string) => {
     setCaptains((c) => (c.includes(name) ? c.filter((x) => x !== name) : [...c, name].slice(-2)));
     fresh();
+  };
+  /** Nobody playing: a clean start to tap today's players in. */
+  const clearAll = () => {
+    setOut(new Set(everyone.map((p) => nameKey(p.name))));
+    setGuests([]);
+    fresh();
+  };
+  /**
+   * Whoever played the newest match with named players (one set up with blanks doesn't count), both sides; anyone the
+   * squad doesn't know comes in as a guest.
+   */
+  const named = (m: Match) => [...new Set(m.teams.flatMap((t) => t.players.map((p) => p.name.trim())).filter((n) => n && !isPlaceholder(n)))];
+  const lastMatch = useMemo(() => [...matches].sort((a, b) => b.createdAt - a.createdAt).find((m) => named(m).length >= 2), [matches]);
+  const sameAsLast = () => {
+    if (!lastMatch) return;
+    const names = named(lastMatch);
+    setOut(new Set(everyone.filter((p) => !has(names, p.name)).map((p) => nameKey(p.name))));
+    setGuests(names.filter((n) => !table.has(nameKey(n)) && strengthOf(table, n).guest));
+    fresh();
+    toast.show(`Playing: everyone from ${lastMatch.teams[0].name} v ${lastMatch.teams[1].name}`, 'info');
   };
   const addGuest = () => {
     const name = guestDraft.trim().replace(/\s+/g, ' ');
@@ -464,7 +605,7 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
     try {
       toast.show('Making the picture…', 'info');
       const pair = sides as [SideDraft, SideDraft];
-      const result = await saveReportImage(lineupFileName(pair), lineupHtml(pair, table), LINEUP_IMAGE);
+      const result = await saveReportImage(lineupFileName(pair), lineupHtml(pair, table, new Date(), [ownTeamTheme(pair[0].name)?.accent, ownTeamTheme(pair[1].name)?.accent]), LINEUP_IMAGE);
       if (result === 'downloaded') toast.show('Line-up picture saved to your downloads', 'success');
       if (result === 'shared') toast.show('Line-up picture ready to send', 'success');
     } catch {
@@ -475,9 +616,16 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
   const tagged = suggestion ? fixPlayers(suggestion.fix) : [];
   return (
     <View style={{ gap: space.md }}>
+      {/* A tablet or laptop: who's playing and the captains side by side, then the two sides side by side. */}
+      <Columns weights={[3, 2]} gap={space.md} stretch>
+      <View style={wide && { flex: 1 }}>
       <SectionLabel right={<Text style={styles.count}>{playing.length} playing</Text>}>Who’s playing today</SectionLabel>
-      <Card style={{ gap: space.sm }}>
+      <Card style={[{ gap: space.sm }, wide && { flex: 1 }]}>
         <Text style={styles.hint}>Tap anyone who isn’t here to leave them out. Add anyone else as a guest: they count as an average player.</Text>
+        <View style={styles.wrap}>
+          {lastMatch && <Chip icon="refresh" label="Same as last match" onPress={sameAsLast} />}
+          <Chip icon="close-circle-outline" label="Clear all" disabled={playing.length === 0} onPress={clearAll} />
+        </View>
         <View style={styles.wrap}>
           {everyone.map((p) => (
             <Chip key={p.name} label={p.name} selected={!out.has(nameKey(p.name))} onPress={() => toggle(p.name)} />
@@ -502,9 +650,10 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
         </View>
         <NameSuggestions value={guestDraft} taken={playing.map((p) => p.name)} onPick={setGuestDraft} />
       </Card>
-
+      </View>
+      <View style={wide && { flex: 1 }}>
       <SectionLabel right={<Text style={styles.count}>{caps.length ? `${caps.length} of 2` : 'Optional'}</Text>}>Captains</SectionLabel>
-      <Card style={{ gap: space.sm }}>
+      <Card style={[{ gap: space.sm }, wide && { flex: 1 }]}>
         <Text style={styles.hint}>Pick up to two and they lead opposite sides; the rest are shared out around them.</Text>
         <View style={styles.wrap}>
           {playing.map((p) => {
@@ -513,29 +662,33 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
           })}
         </View>
       </Card>
+      </View>
+      </Columns>
 
       {split && lists && strength ? (
         <>
+          <View>
           <SectionLabel right={edited ? <Text style={styles.count}>Edited by you</Text> : undefined}>Two even sides</SectionLabel>
           <Card style={[styles.even, { flexDirection: 'column', alignItems: 'stretch' }]}>
             <View style={{ flexDirection: 'row', gap: space.md }}>
-              <Ionicons name={edited && apart >= 0.4 ? 'warning-outline' : 'scale-outline'} size={22} color={edited && apart >= 0.4 ? colors.gold : colors.accentInk} />
+              <Ionicons name={edited && uneven ? 'warning-outline' : 'scale-outline'} size={22} color={edited && uneven ? colors.gold : colors.accentInk} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.evenTitle}>
-                  {strength[0].power.toFixed(1)} v {strength[1].power.toFixed(1)}
+                  {strength[0].total.toFixed(1)} v {strength[1].total.toFixed(1)}
+                  <Text style={styles.evenUnit}>  total strength</Text>
                 </Text>
                 <Text style={styles.hint}>
-                  {apart < 0.2
+                  {apart < 0.5
                     ? edited
                       ? 'Still as even as they come. '
                       : 'As even as they come. '
                     : edited
-                    ? `${names[ahead]} are ${apart.toFixed(1)} stronger${apart >= 0.4 ? ': not quite even any more' : ''}. `
-                    : `${names[ahead]} are ${apart.toFixed(1)} stronger, the closest these players split. `}
+                    ? `${names[ahead]} are ${apart.toFixed(1)} stronger in total${uneven ? ': not quite even any more' : ''}. `
+                    : `${names[ahead]} are ${apart.toFixed(1)} stronger in total, the closest these players split. `}
                   {strength[0].keepers && strength[1].keepers ? 'A keeper each, ' : ''}
                   {strength[0].bowlers} and {strength[1].bowlers} bowlers.
                   {lists[0].length !== lists[1].length
-                    ? ` ${lists[0].length > lists[1].length ? names[0] : names[1]} have ${Math.abs(lists[0].length - lists[1].length) === 1 ? 'a player' : `${Math.abs(lists[0].length - lists[1].length)} players`} more.`
+                    ? ` ${lists[0].length > lists[1].length ? names[0] : names[1]} have ${Math.abs(lists[0].length - lists[1].length) === 1 ? 'a player' : `${Math.abs(lists[0].length - lists[1].length)} players`} more, so the other side gets the stronger players.`
                     : ''}
                 </Text>
               </View>
@@ -543,26 +696,30 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
             {suggestion && (
               <View style={styles.suggest}>
                 <Text style={styles.suggestText}>
-                  To even it up, {fixText(suggestion.fix, names)}: {suggestion.strength[0].power.toFixed(1)} v {suggestion.strength[1].power.toFixed(1)}
+                  To even it up, {fixText(suggestion.fix, names)}: {suggestion.strength[0].total.toFixed(1)} v {suggestion.strength[1].total.toFixed(1)} in total
                   {suggestion.fix.kind === 'move' ? ', and the sides level in numbers' : ''}. The players you moved stay where you put them.
                 </Text>
                 <Button icon="git-compare-outline" label="Even it up" onPress={evenUp} />
               </View>
             )}
           </Card>
+          </View>
           <Text style={styles.hint}>
             {pickedNow
               ? `${pickedNow} picked: tap a player in ${names[1 - sideOf(pickedNow)]} to swap them, or ${pickedNow} again to let go.`
               : 'To change the sides, tap a player and then one on the other side to swap them, or ⇅ to send one across. Tap a side’s name to rename it.'}
           </Text>
+          <Columns tablet={2} gap={space.md}>
           {lists.map((_, i) => {
             const cap = captainOf(i);
             return (
               <SideCard
                 key={i}
+                fill={wide}
                 name={names[i]}
                 s={strength[i]}
-                tint={TINTS[i]}
+                i={i}
+                byTotal
                 captain={cap}
                 note={cap ? `led by ${cap}` : undefined}
                 tagged={tagged}
@@ -576,13 +733,14 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
               />
             );
           })}
+          </Columns>
+          {/* On a tablet or laptop the actions are one bar: start across the top, the rest sharing a line under it. */}
+          <View style={wide ? styles.actionBar : { gap: space.md }}>
+          {access.score && <Button icon="play" label="Start a match with these sides" onPress={() => start(current())} />}
           <View style={styles.actions}>
-            {access.score && <Action primary icon="play" label="Start a match with these sides" onPress={() => start(current())} />}
-            {access.admin && <Action icon="bookmark-outline" label="Save this line-up for later" onPress={keep} />}
-            <Action icon="share-outline" label="Share the line-up as a picture" onPress={() => share(current())} />
-            <Action icon="arrow-undo-outline" label="Back to the suggestion" disabled={!edited} onPress={() => (fresh(), toast.show('Back to the suggestion', 'info'))} />
             <Action
               icon="shuffle"
+              text="Shuffle"
               label={edited ? 'Shuffle: start again from a new split' : 'Shuffle: another even split'}
               onPress={() => {
                 setSeed((s) => s + 1);
@@ -590,9 +748,13 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
                 toast.show('Another even split', 'info');
               }}
             />
+            <Action icon="arrow-undo-outline" text="Undo my changes" label="Back to the suggestion" disabled={!edited} onPress={() => (fresh(), toast.show('Back to the suggestion', 'info'))} />
+            <Action icon="share-outline" text="Share picture" label="Share the line-up as a picture" onPress={() => share(current())} />
+            {access.admin && <Action icon="bookmark-outline" text="Save for later" label="Save this line-up for later, under Saved line-ups" onPress={keep} />}
             {access.admin && (
             <Action
-              icon="save-outline"
+              icon="swap-horizontal"
+              text={saving ? 'Tap again to replace' : 'Replace usual sides'}
               armed={saving}
               label={saving ? `Tap again: ${names[0]} and ${names[1]} change` : `Make these the new ${names[0]} and ${names[1]}`}
               onPress={() => {
@@ -603,6 +765,13 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
             />
             )}
           </View>
+          </View>
+          {access.admin && (
+            <Text style={styles.hint}>
+              Save for later keeps this line-up under Saved line-ups and changes nothing else. Replace usual sides makes these
+              the players of {names[0]} and {names[1]} for every match from now on.
+            </Text>
+          )}
         </>
       ) : (
         <Card>
@@ -612,10 +781,13 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
 
       {lineups.length > 0 && (
         <>
+          <View>
           <SectionLabel right={<Text style={styles.count}>{lineups.length}</Text>}>Saved line-ups</SectionLabel>
+          <Columns tablet={2} laptop={desk ? 3 : 2} minItem={300} gap={space.md}>
           {lineups.map((l) => (
             <LineupCard
               key={l.id}
+              fill={wide}
               l={l}
               table={table}
               onStart={() => start(l.sides)}
@@ -632,6 +804,8 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
               }
             />
           ))}
+          </Columns>
+          </View>
         </>
       )}
       {toast.element}
@@ -644,21 +818,39 @@ export default function TeamsScreen() {
   const { squad } = useSquad();
   const table = useMemo(() => strengths(matches, squad), [matches, squad]);
   const [view, setView] = useState<'strength' | 'recommend'>('strength');
+  const layout = useLayout();
+  const switcher = (
+    <Segmented
+      value={view}
+      onChange={setView}
+      options={[
+        { value: 'strength', label: 'Strength' },
+        { value: 'recommend', label: 'Recommend' },
+      ]}
+    />
+  );
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Text style={styles.title}>Teams</Text>
-        </View>
-        <View style={{ gap: space.md }}>
-          <Segmented
-            value={view}
-            onChange={setView}
-            options={[
-              { value: 'strength', label: 'Strength' },
-              { value: 'recommend', label: 'Recommend' },
-            ]}
+      <ScrollView
+        contentContainerStyle={layout.wide ? widePad(layout.gutter) : styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Page>
+        {layout.wide ? (
+          // A tablet or laptop: the title large, what to look at beside it.
+          <WideHead
+            title="Teams"
+            sub={view === 'strength' ? 'The sides on current form' : 'Two even sides from whoever turns up'}
+            right={<View style={{ width: 320 }}>{switcher}</View>}
           />
+        ) : (
+          <View style={styles.header}>
+            <Text style={styles.title}>Teams</Text>
+          </View>
+        )}
+        <View style={{ gap: space.md }}>
+          <TeamDoors />
+          {!layout.wide && switcher}
           {/* Both stay mounted: switching to Strength and back keeps the sides being worked on. */}
           <View style={view === 'strength' ? null : styles.hidden}>
             <StrengthView table={table} />
@@ -667,6 +859,7 @@ export default function TeamsScreen() {
             <RecommendView table={table} />
           </View>
         </View>
+        </Page>
       </ScrollView>
     </Screen>
   );
@@ -708,10 +901,21 @@ const styles = StyleSheet.create({
   mark: { color: colors.accentInk, fontSize: 10, fontFamily: font.heavy },
 
   hidden: { display: 'none' },
-  actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
-  action: { width: 46, height: 46, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.border },
-  actionPrimary: { width: 58, height: 58, backgroundColor: colors.accent, borderColor: colors.accent },
+  doors: { flexDirection: 'row', gap: space.md },
+  door: { flex: 1, borderRadius: radius.lg, padding: space.lg, paddingTop: space.lg + 6, gap: 6, overflow: 'hidden', borderWidth: 1, borderColor: hero.line, minHeight: 150 },
+  doorWide: { padding: space.xl, paddingTop: space.xl + 6, minHeight: 176 },
+  doorBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
+  doorName: { fontFamily: font.posterBlack, fontSize: 22, lineHeight: 26, color: hero.text, letterSpacing: -0.6 },
+  doorRecord: { color: hero.muted, fontSize: 13, fontFamily: font.semibold, ...type.num },
+  doorGo: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', minHeight: 36, paddingHorizontal: space.md, borderRadius: radius.pill, marginTop: 'auto' },
+  doorGoText: { fontSize: 14, fontFamily: font.bold },
+  actionBar: { gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.border },
+  actionText: { color: colors.text, fontSize: 13, fontFamily: font.bold },
   actionArmed: { backgroundColor: colors.gold, borderColor: colors.gold },
+  fold: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, paddingHorizontal: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceHi },
+  foldText: { color: colors.text, fontSize: 14, fontFamily: font.bold },
   markDim: { color: colors.faint, fontSize: 10, fontFamily: font.heavy },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.gold },
   tagText: { color: colors.onAccent, fontSize: 10, fontFamily: font.bold },
@@ -722,9 +926,10 @@ const styles = StyleSheet.create({
   won: { backgroundColor: colors.accentDim, color: colors.accentInk },
   lost: { backgroundColor: colors.dangerDim, color: colors.danger },
   guestRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  guestInput: { flex: 1, minWidth: 0, height: 38, paddingHorizontal: space.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg, color: colors.text, fontSize: 14, fontFamily: font.regular },
+  guestInput: { flex: 1, minWidth: 0, height: 44, paddingHorizontal: space.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg, color: colors.text, fontSize: 14, fontFamily: font.regular },
   lineupHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   lineupTitle: { flex: 1, color: colors.text, fontSize: 16, fontFamily: font.bold },
   even: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, borderRadius: radius.lg },
   evenTitle: { color: colors.text, fontSize: 18, fontFamily: font.posterBlack, marginBottom: 2 },
+  evenUnit: { color: colors.muted, fontSize: 12, fontFamily: font.semibold },
 });

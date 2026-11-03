@@ -3,9 +3,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PlayerAvatar } from '../components/Avatar.tsx';
 import { FaceOff } from '../components/FaceOff.tsx';
-import { BallChip, Card, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel } from '../components/ui.tsx';
+import { BallChip, Card, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, WideHead } from '../components/ui.tsx';
 import { Tug } from '../components/motion.tsx';
+import { Columns, Page, useLayout } from '../components/layout.tsx';
 import { matchups, rivalry, rivalryContext, verdict } from '../engine/records.ts';
 import type { WicketKind } from '../engine/types.ts';
 import { useMatches } from '../store/matches.tsx';
@@ -43,6 +45,8 @@ export default function RivalryScreen() {
   const r = useMemo(() => (bat && bowl ? rivalry(matches, bat, bowl) : null), [matches, bat, bowl, squad]);
   const ctx = useMemo(() => rivalryContext(matchups(matches)), [matches, squad]);
   const back = () => (router.canGoBack() ? router.back() : router.replace('/records'));
+  const layout = useLayout();
+  const { wide } = layout;
 
   if (!r) {
     return (
@@ -59,7 +63,8 @@ export default function RivalryScreen() {
   const sr = r.balls ? (r.runs * 100) / r.balls : 0;
   const avg = r.outs ? (r.runs / r.outs).toFixed(1) : '∞';
   const perOut = r.outs ? (r.balls / r.outs).toFixed(1) : '–';
-  const tone = v.side === 'batter' ? hero.accent : v.side === 'bowler' ? colors.violet : hero.text;
+  // On the dark panel: the night violet, readable in either theme.
+  const tone = v.side === 'batter' ? hero.accent : v.side === 'bowler' ? hero.violet : hero.text;
   const parts = [
     { k: 'Dots', n: r.dots, c: colors.faint },
     { k: '1s, 2s, 3s', n: r.singles, c: colors.cyan },
@@ -71,37 +76,56 @@ export default function RivalryScreen() {
 
   return (
     <Screen>
-      <View style={styles.header}>
-        <IconButton icon="chevron-back" label="Back" onPress={back} />
-        <Text style={styles.headerTitle}>Rivalry</Text>
-        <View style={{ width: 42 }} />
-      </View>
-      <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, paddingBottom: insets.bottom + space.xxl }}>
+      {wide ? (
+        <View style={{ paddingHorizontal: layout.gutter, paddingTop: space.lg }}>
+          <Page>
+            <WideHead title={`${r.batter.split(' ')[0]} v ${r.bowler.split(' ')[0]}`} sub={`Every ball ${r.bowler.split(' ')[0]} has bowled to ${r.batter.split(' ')[0]}`} onBack={back} />
+          </Page>
+        </View>
+      ) : (
+        <View style={styles.header}>
+          <IconButton icon="chevron-back" label="Back" onPress={back} />
+          <Text style={styles.headerTitle}>Rivalry</Text>
+          <View style={{ width: 42 }} />
+        </View>
+      )}
+      <ScrollView contentContainerStyle={{ padding: wide ? layout.gutter : space.lg, paddingTop: wide ? 0 : space.sm, paddingBottom: insets.bottom + space.xxl }}>
+        <Page>
+        {/* A tablet or laptop: the duel and its numbers on the left, every ball and every meeting on the right. */}
+        <Columns weights={[1, 1]} gap={wide ? space.lg : 0}>
+        <View>
+        {wide && <SectionLabel flush>The duel</SectionLabel>}
         <FadeIn>
           <View style={styles.hero}>
             <PitchStripes opacity={0.06} tint="255,255,255" />
             <GhostWord size={140} style={{ color: hero.ink(0.04) }}>
               VS
             </GhostWord>
-            <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/player/[key]', params: { key: r.batterKey } })}>
-              <Text style={styles.heroRole}>Bats</Text>
-              <Text style={[styles.heroName, { color: hero.accent }]} numberOfLines={1}>
-                {r.batter}
-              </Text>
+            <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/player/[key]', params: { key: r.batterKey } })} style={styles.heroWho}>
+              <PlayerAvatar name={r.batter} size={44} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.heroRole}>Bats</Text>
+                <Text style={[styles.heroName, { color: hero.accent }]} numberOfLines={2}>
+                  {r.batter}
+                </Text>
+              </View>
             </PressableScale>
             <Text style={styles.heroVs}>versus</Text>
-            <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/player/[key]', params: { key: r.bowlerKey } })} style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.heroRole}>Bowls</Text>
-              <Text style={[styles.heroName, { color: colors.violet }]} numberOfLines={1}>
-                {r.bowler}
-              </Text>
+            <PressableScale scaleTo={0.98} onPress={() => router.push({ pathname: '/player/[key]', params: { key: r.bowlerKey } })} style={styles.heroWho}>
+              <View style={{ flex: 1, minWidth: 0, alignItems: 'flex-end' }}>
+                <Text style={styles.heroRole}>Bowls</Text>
+                <Text style={[styles.heroName, { color: hero.violet, textAlign: 'right' }]} numberOfLines={2}>
+                  {r.bowler}
+                </Text>
+              </View>
+              <PlayerAvatar name={r.bowler} size={44} />
             </PressableScale>
             <View style={styles.tugWrap}>
               <Text style={[styles.tugEnd, { color: hero.accent }]}>BAT</Text>
               <View style={styles.tug}>
                 <Tug edge={v.edge} style={StyleSheet.absoluteFill} leftStyle={styles.tugBat} rightStyle={styles.tugBowl} delay={300} />
               </View>
-              <Text style={[styles.tugEnd, { color: colors.violet }]}>BALL</Text>
+              <Text style={[styles.tugEnd, { color: hero.violet }]}>BALL</Text>
             </View>
             <Text style={[styles.verdictTitle, { color: tone }]}>{v.title}</Text>
             <Text style={styles.verdictLine}>{v.line}</Text>
@@ -133,8 +157,10 @@ export default function RivalryScreen() {
             />
           )}
         </View>
+        </View>
 
-        <SectionLabel>Every ball, added up</SectionLabel>
+        <View>
+        <SectionLabel flush={wide}>Every ball, added up</SectionLabel>
         <Card style={{ gap: space.md }}>
           <View style={styles.stack}>
             {parts.map((p) => (
@@ -213,6 +239,9 @@ export default function RivalryScreen() {
             <FaceOff m={r.reverse} ctx={ctx} />
           </>
         )}
+        </View>
+        </Columns>
+        </Page>
       </ScrollView>
     </Screen>
   );
@@ -223,6 +252,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: colors.text, fontSize: 20, fontFamily: font.poster },
   lead: { color: colors.muted, fontSize: 15, fontFamily: font.medium },
   hero: { backgroundColor: HERO_BG, borderRadius: radius.xl, padding: space.xl, overflow: 'hidden', gap: 2 },
+  heroWho: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   heroRole: { ...type.label, fontSize: 9, color: hero.muted },
   heroName: { fontFamily: font.posterBlack, fontSize: 31, lineHeight: 35 },
   heroVs: { fontFamily: font.poster, fontSize: 15, color: hero.faint, textAlign: 'center', marginVertical: 2 },
@@ -230,7 +260,7 @@ const styles = StyleSheet.create({
   tugEnd: { fontSize: 10, fontFamily: font.heavy, letterSpacing: 1 },
   tug: { flex: 1, flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2, backgroundColor: hero.ink(0.1) },
   tugBat: { backgroundColor: colors.accent, borderRadius: 5 },
-  tugBowl: { backgroundColor: colors.violet, borderRadius: 5 },
+  tugBowl: { backgroundColor: hero.violet, borderRadius: 5 },
   verdictTitle: { fontFamily: font.posterBlack, fontSize: 26, lineHeight: 29, marginTop: space.lg },
   verdictLine: { color: hero.text, fontSize: 14, fontFamily: font.medium, lineHeight: 20 },
   met: { color: hero.muted, fontSize: 12, fontFamily: font.medium, marginTop: space.sm },

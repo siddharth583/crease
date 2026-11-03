@@ -15,7 +15,8 @@ module.exports = {
   swDest: 'dist/sw.js',
   // On GitHub Pages the site lives under /crease, so every address falls back to that copy of the page.
   navigateFallback: `${(process.env.EXPO_BASE_URL || '').replace(/\/$/, '')}/index.html`,
-  // New versions take over on the next open instead of waiting for every tab to close.
-  skipWaiting: true,
+  // A new version waits rather than taking over mid-match: the page shows "Update ready · Reload" (public/index.html),
+  // and Reload sends SKIP_WAITING, which the generated worker answers by taking over. Once it does, it claims the page.
+  skipWaiting: false,
   clientsClaim: true,
 };

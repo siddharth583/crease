@@ -1,5 +1,5 @@
 import { File, Paths } from 'expo-file-system';
-import { createContext, createElement, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { createContext, createElement, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import type { Auction } from '../engine/auction.ts';
 import { mergeAuctions, mergeSquad } from '../engine/backup.ts';
@@ -84,11 +84,26 @@ function write(s: Saved) {
 }
 
 const startup = read();
-setRegulars(startup.squad.map((p) => p.name));
+/**
+ * Everyone who is or was in the squad is a regular (one career across sides, even after leaving), and every old name
+ * of a renamed player reads as their name now.
+ */
+const regulars = (squad: SquadPlayer[]) =>
+  setRegulars(
+    squad.map((p) => p.name),
+    Object.fromEntries(squad.flatMap((p) => (p.aka ?? []).map((old) => [old, p.name]))),
+  );
+regulars(startup.squad);
 
 type SquadStore = {
+  /** The squad as it is now: without the players taken off it. */
   squad: SquadPlayer[];
+  /** Everyone who has been in the squad, for the club sync. */
+  allSquad: SquadPlayer[];
+  /** The squad as it is now. Anyone left out is taken off it but stays one person in the stats. */
   setSquad: (squad: SquadPlayer[]) => void;
+  /** Rename a player: their matches under the old name stay theirs, and so does their photo. */
+  renamePlayer: (oldName: string, newName: string) => void;
   auctions: Auction[];
   saveAuction: (a: Auction) => void;
   deleteAuction: (id: string) => void;
@@ -115,11 +130,39 @@ export function SquadProvider({ children }: { children: ReactNode }) {
     set((s) => {
       const next = fn(s);
       write(next);
-      if (next.squad !== s.squad) setRegulars(next.squad.map((p) => p.name));
+      if (next.squad !== s.squad) regulars(next.squad);
       return next;
     });
   }, []);
-  const setSquad = useCallback((squad: SquadPlayer[]) => update((s) => ({ ...s, squad })), [update]);
+  const setSquad = useCallback(
+    (squad: SquadPlayer[]) =>
+      update((s) => {
+        const ids = new Set(squad.map((p) => p.id));
+        const names = new Set(squad.map((p) => p.name.trim().toLowerCase()));
+        // Those taken off stay, marked, so their career isn't split into one per side; one added back returns.
+        const gone = s.squad.filter((p) => !ids.has(p.id) && !names.has(p.name.trim().toLowerCase())).map((p) => ({ ...p, left: true }));
+        return { ...s, squad: [...squad.map((p) => (p.left ? { ...p, left: undefined } : p)), ...gone] };
+      }),
+    [update],
+  );
+  const renamePlayer = useCallback(
+    (oldName: string, newName: string) =>
+      update((s) => {
+        const from = oldName.trim();
+        const to = newName.trim().replace(/\s+/g, ' ');
+        if (!to || from.toLowerCase() === to.toLowerCase()) return s;
+        const squad = s.squad.map((p) =>
+          p.name.trim().toLowerCase() === from.toLowerCase() ? { ...p, name: to, aka: [...new Set([...(p.aka ?? []), from])] } : p,
+        );
+        const photos = { ...(s.photos ?? {}) };
+        if (photos[photoKey(from)] && !photos[photoKey(to)]) {
+          photos[photoKey(to)] = photos[photoKey(from)];
+          delete photos[photoKey(from)];
+        }
+        return { ...s, squad, photos };
+      }),
+    [update],
+  );
   const saveAuction = useCallback(
     (a: Auction) => update((s) => ({ ...s, auctions: [a, ...s.auctions.filter((x) => x.id !== a.id)].sort((x, y) => y.createdAt - x.createdAt) })),
     [update],
@@ -159,9 +202,10 @@ export function SquadProvider({ children }: { children: ReactNode }) {
     },
     [update],
   );
+  const active = useMemo(() => state.squad.filter((p) => !p.left), [state.squad]);
   return createElement(
     SquadContext.Provider,
-    { value: { squad: state.squad, setSquad, auctions: state.auctions, saveAuction, deleteAuction, lineups: state.lineups ?? [], saveLineup, deleteLineup, importSquad, setShared, photos: state.photos ?? {}, setPhoto } },
+    { value: { squad: active, allSquad: state.squad, setSquad, renamePlayer, auctions: state.auctions, saveAuction, deleteAuction, lineups: state.lineups ?? [], saveLineup, deleteLineup, importSquad, setShared, photos: state.photos ?? {}, setPhoto } },
     children,
   );
 }

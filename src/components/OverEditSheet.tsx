@@ -85,11 +85,16 @@ export function OverEditSheet({
   const comers = couldComeIn(match, inningsIndex).filter((id) => !taken.has(id));
 
   const set = (patch: Partial<OverBall['ball']>, incoming?: string | null) => {
-    // A changed ball is a plain one: a bounce call goes with the old version of it.
+    // A bounce stays one while its runs or wicket are fixed; a ball changed to another kind is a plain one.
+    const bouncer = 'extra' in patch ? undefined : ball.bouncer;
     setDraft(
       draft.map((d, i) =>
         i === at
-          ? { ...d, ball: { type: 'ball', runs: ball.runs, extra: ball.extra, wicket: ball.wicket, ...patch }, incoming: incoming === undefined ? d.incoming : incoming ?? undefined }
+          ? {
+              ...d,
+              ball: { type: 'ball', runs: ball.runs, extra: ball.extra, wicket: ball.wicket, ...(bouncer ? { bouncer } : {}), ...patch },
+              incoming: incoming === undefined ? d.incoming : incoming ?? undefined,
+            }
           : d,
       ),
     );
@@ -149,7 +154,8 @@ export function OverEditSheet({
               if (v === 'out') return makeOut(true);
               if (ball.wicket) makeOut(false);
               setDraft((d) =>
-                d.map((x, i) => (i === at ? { ...x, ball: { type: 'ball', runs: (v === 'bye' || v === 'legbye') && x.ball.runs === 0 ? 1 : x.ball.runs, extra: v === 'none' ? undefined : v } } : x)),
+                // A wide is the one wide run the rules give: no runs on top.
+                d.map((x, i) => (i === at ? { ...x, ball: { type: 'ball', runs: v === 'wide' ? 0 : (v === 'bye' || v === 'legbye') && x.ball.runs === 0 ? 1 : x.ball.runs, extra: v === 'none' ? undefined : v } } : x)),
               );
             }}
             options={WITH_OUT}
@@ -206,7 +212,7 @@ export function OverEditSheet({
                 ))}
               </View>
             )}
-            {ball.wicket.kind === 'runout' && (
+            {ball.wicket.kind === 'runout' && kind !== 'wide' && (
               <Segmented value={String(ball.runs)} onChange={(v) => set({ runs: Number(v) })} options={['0', '1', '2', '3'].map((v) => ({ value: v, label: `${v} run${v === '1' ? '' : 's'}` }))} />
             )}
           </>
@@ -214,7 +220,7 @@ export function OverEditSheet({
           <>
             <View style={styles.wrap}>
               {[0, 1, 2, 3, 4, 5, 6].map((r) => (
-                <Chip key={r} label={String(r)} selected={ball.runs === r} disabled={byes && r === 0} onPress={() => set({ runs: r })} />
+                <Chip key={r} label={String(r)} selected={ball.runs === r} disabled={(byes && r === 0) || (kind === 'wide' && r > 0)} onPress={() => set({ runs: r })} />
               ))}
             </View>
           </>

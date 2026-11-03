@@ -18,10 +18,17 @@ export const lineupFileName = (sides: LineupSide[], when = new Date()) =>
 /** A strength's colour, as the app shows ratings: volt for the best, cyan for good, red for poor. */
 const tone = (n: number) => (n >= 8 ? 'best' : n >= 6.5 ? 'good' : n < 5 ? 'poor' : 'plain');
 
-export function lineupHtml(sides: [LineupSide, LineupSide], table: Map<string, Strength>, when = new Date()): string {
+/**
+ * `accents`: each side's own colour (its team theme) where it has one; otherwise the app's volt and violet. The verdict
+ * compares the sides' total strength, as the balancer does, so an extra player counts.
+ */
+export function lineupHtml(sides: [LineupSide, LineupSide], table: Map<string, Strength>, when = new Date(), accents: [string?, string?] = []): string {
   const s = sides.map((side) => sideStrength(side.players.map((n) => strengthOf(table, n))));
-  const apart = Math.round(Math.abs(s[0].power - s[1].power) * 10) / 10;
-  const verdict = apart < 0.2 ? 'Dead even' : `${esc(s[0].power > s[1].power ? sides[0].name : sides[1].name)} +${apart.toFixed(1)}`;
+  const total = s.map((x) => x.players.reduce((n, p) => n + p.power, 0));
+  const apart = Math.round(Math.abs(total[0] - total[1]) * 10) / 10;
+  const verdict = apart < 0.5 ? 'Dead even' : `${esc(total[0] > total[1] ? sides[0].name : sides[1].name)} +${apart.toFixed(1)}`;
+  const safe = (c: string | undefined, fallback: string) => (c && /^#[0-9a-f]{3,8}$/i.test(c) ? c : fallback);
+  const [a, b] = [safe(accents[0], '#D7FF3A'), safe(accents[1], '#B9A6FF')];
 
   const side = (i: number) => {
     const { name, captain } = sides[i];
@@ -65,12 +72,12 @@ ${REPORT_HEAD}
   .lu-board .lu-n { flex: 1; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 46px; line-height: 1; letter-spacing: -1.5px; }
   .lu-board .lu-n small { display: block; margin-top: 4px; font-family: Inter, sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #98A396; }
   .lu-board .lu-n.lu-b { text-align: right; }
-  .lu-n.lu-a { color: #D7FF3A; } .lu-n.lu-b { color: #B9A6FF; }
+  .lu-n.lu-a { color: ${a}; } .lu-n.lu-b { color: ${b}; }
   .lu-pill { padding: 7px 14px; border-radius: 99px; background: #D7FF3A; color: #0A0D06; font-weight: 800; font-size: 13px; white-space: nowrap; }
   .lu-sides { display: flex; gap: 10px; margin-top: 14px; align-items: flex-start; }
   .lu-side { position: relative; flex: 1; min-width: 0; border-radius: 18px; background: #121814; border: 1px solid rgba(214,236,200,.08); overflow: hidden; }
   .lu-band { height: 5px; }
-  .lu-s0 .lu-band { background: #D7FF3A; } .lu-s1 .lu-band { background: #B9A6FF; }
+  .lu-s0 .lu-band { background: ${a}; } .lu-s1 .lu-band { background: ${b}; }
   .lu-side-head { padding: 12px 14px 10px; border-bottom: 1px solid rgba(214,236,200,.08); }
   .lu-side-name { font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 19px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lu-facts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
@@ -91,9 +98,9 @@ ${REPORT_HEAD}
   <div class="lu-eyebrow">Today’s sides</div>
   <div class="lu-match">${esc(sides[0].name)} <em>v</em> ${esc(sides[1].name)}</div>
   <div class="lu-board">
-    <div class="lu-n lu-a">${s[0].power.toFixed(1)}<small>${esc(sides[0].name)}</small></div>
+    <div class="lu-n lu-a">${total[0].toFixed(1)}<small>${esc(sides[0].name)} · total</small></div>
     <div class="lu-pill">${verdict}</div>
-    <div class="lu-n lu-b">${s[1].power.toFixed(1)}<small>${esc(sides[1].name)}</small></div>
+    <div class="lu-n lu-b">${total[1].toFixed(1)}<small>${esc(sides[1].name)} · total</small></div>
   </div>
   <div class="lu-sides">${side(0)}${side(1)}</div>
   <div class="lu-foot">Strength out of 10, on current form · picked with Crease</div>

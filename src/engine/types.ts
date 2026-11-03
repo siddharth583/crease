@@ -91,6 +91,13 @@ export type Match = {
   mom?: string;
   /** When this phone last saved it: an imported copy only replaces it if it's newer. */
   updatedAt?: number;
+  /**
+   * False while a result waits for the scorer to confirm it (a wrong tap on the last ball can still be undone); missing
+   * on matches from before, which count as confirmed.
+   */
+  confirmed?: boolean;
+  /** Who last saved a ball, for one scorer at a time on a match. */
+  scoringBy?: { email: string; name: string; at: number };
 };
 
 import type { Interruption } from './dls.ts';

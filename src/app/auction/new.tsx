@@ -3,11 +3,13 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, tap } from '../../components/ui.tsx';
+import { Button, Card, Chip, IconButton, PressableScale, Screen, SectionLabel, Segmented, tap, WideHead } from '../../components/ui.tsx';
 import { NameSuggestions } from '../../components/NameSuggestions.tsx';
+import { Columns, Page, useLayout } from '../../components/layout.tsx';
 import { auctionState, DEFAULT_BASES, money, moneyShort, newAuction, reserveFor, type AuctionSettings } from '../../engine/auction.ts';
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_NAME, categoryOf, overall, type Category, type SquadPlayer } from '../../engine/squad.ts';
 import { ratedSquad } from '../../engine/ratings.ts';
+import { isPlaceholder } from '../../engine/stats.ts';
 import { newId, useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { colors, edge, font, radius, space, type } from '../../theme.ts';
@@ -84,6 +86,26 @@ export default function NewAuction() {
     setPlaying(next);
     setCaptains(([a, b]) => [a && next.has(a) ? a : null, b && next.has(b) ? b : null]);
   };
+  /** Nobody playing: a clean start to tap today's players in. */
+  const clearAll = () => {
+    setPlaying(new Set());
+    setCaptains([null, null]);
+  };
+  /**
+   * Whoever played the newest match with named players (one set up with blanks doesn't count): the squad players among
+   * them (anyone else can be added as a guest).
+   */
+  const lastMatch = useMemo(
+    () => [...matches].sort((a, b) => b.createdAt - a.createdAt).find((m) => m.teams.some((t) => t.players.some((p) => p.name.trim() && !isPlaceholder(p.name)))),
+    [matches],
+  );
+  const sameAsLast = () => {
+    if (!lastMatch) return;
+    const names = new Set(lastMatch.teams.flatMap((t) => t.players.map((p) => p.name.trim().toLowerCase())));
+    const next = new Set(everyone.filter((p) => names.has(p.name.trim().toLowerCase())).map((p) => p.id));
+    setPlaying(next);
+    setCaptains(([a, b]) => [a && next.has(a) ? a : null, b && next.has(b) ? b : null]);
+  };
   const addGuest = () => {
     const n = guest.trim();
     if (!n) return;
@@ -92,6 +114,8 @@ export default function NewAuction() {
     setPlaying(new Set([...playing, p.id]));
     setGuest('');
   };
+  const layout = useLayout();
+  const { wide } = layout;
   const start = () => {
     if (!ready) return;
     const a = newAuction(newId(), today, [
@@ -103,18 +127,50 @@ export default function NewAuction() {
     router.replace({ pathname: '/auction/[id]', params: { id: a.id } });
   };
 
+  const startButton = (
+    <Button
+      style={wide ? styles.startWide : undefined}
+      label={today.length < 4 ? 'Pick at least 4 players' : !captains[0] || !captains[1] ? 'Pick two captains' : 'Start the auction'}
+      icon="hammer"
+      disabled={!ready}
+      onPress={start}
+    />
+  );
+  const purseLabel = ({ '50000': '₹50,000', '100000': '₹1 lakh', '200000': '₹2 lakh' } as Record<string, string>)[purse] ?? money(settings.purse);
+  const lead = `Two captains, a wallet of ${purseLabel} each. Players come up one at a time and go to the highest bid.`;
   return (
     <Screen>
-      <View style={styles.header}>
-        <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
-        <IconButton icon="people-outline" label="Edit the squad" onPress={() => router.push('/squad')} />
-      </View>
+      {wide ? (
+        // Back, the title and the squad on one line, as on every other page.
+        <View style={{ paddingHorizontal: layout.gutter, paddingTop: space.lg }}>
+          <Page>
+            <WideHead
+              title="The auction"
+              sub={lead}
+              onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+              right={<IconButton icon="people-outline" label="Edit the squad" onPress={() => router.push('/squad')} />}
+            />
+          </Page>
+        </View>
+      ) : (
+        <View style={styles.header}>
+          <IconButton icon="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+          <IconButton icon="people-outline" label="Edit the squad" onPress={() => router.push('/squad')} />
+        </View>
+      )}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>
-            The auction
-          </Text>
-          <Text style={styles.lead}>Two captains, a wallet of ₹1 lakh each. Players come up one at a time and go to the highest bid.</Text>
+        <ScrollView contentContainerStyle={{ padding: wide ? layout.gutter : space.lg, paddingTop: 0, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
+          <Page>
+          {!wide && (
+            <>
+              <Text style={styles.title}>The auction</Text>
+              <Text style={styles.lead}>{lead}</Text>
+            </>
+          )}
+
+          {/* A tablet or laptop: who's playing on the left, the captains and the wallet beside it. */}
+          <Columns weights={[3, 2]} gap={wide ? space.lg : 0}>
+          <View>
 
           {auctions.length > 0 && (
             <>
@@ -139,6 +195,10 @@ export default function NewAuction() {
           <SectionLabel right={<Text style={styles.count}>{today.length} playing · {perSide} a side</Text>}>Who’s playing today</SectionLabel>
           <Card style={{ gap: space.md }}>
             <View style={styles.chips}>
+              {lastMatch && <Chip icon="refresh" label="Same as last match" onPress={sameAsLast} />}
+              <Chip icon="close-circle-outline" label="Clear all" disabled={playing.size === 0} onPress={clearAll} />
+            </View>
+            <View style={styles.chips}>
               {everyone.map((p) => (
                 <Chip key={p.id} label={p.name} selected={playing.has(p.id)} onPress={() => toggle(p.id)} />
               ))}
@@ -159,6 +219,9 @@ export default function NewAuction() {
             </View>
             <NameSuggestions value={guest} taken={everyone.map((p) => p.name)} onPick={setGuest} />
           </Card>
+          </View>
+
+          <View>
 
           <SectionLabel>Captains</SectionLabel>
           <Card style={{ gap: space.lg }}>
@@ -212,15 +275,24 @@ export default function NewAuction() {
                 : `Filling a side costs at least ${money(needed)}, more than the ${money(settings.purse)} wallet. Raise the wallet or lower some base prices.`}
             </Text>
           </Card>
+          </View>
+          </Columns>
+          </Page>
         </ScrollView>
       </KeyboardAvoidingView>
-      <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
-        <Button
-          label={today.length < 4 ? 'Pick at least 4 players' : !captains[0] || !captains[1] ? 'Pick two captains' : 'Start the auction'}
-          icon="hammer"
-          disabled={!ready}
-          onPress={start}
-        />
+      <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }, wide && { paddingHorizontal: layout.gutter }]}>
+        {wide ? (
+          // As on New match: what's about to happen on the left, the start at the right.
+          <Page style={styles.footWide}>
+            <Text style={styles.footSummary} numberOfLines={1}>
+              <Text style={styles.footStrong}>{today.length} playing</Text>
+              {`  ·  ${perSide} a side  ·  ${purseLabel} each`}
+            </Text>
+            {startButton}
+          </Page>
+        ) : (
+          startButton
+        )}
       </View>
     </Screen>
   );
@@ -267,6 +339,10 @@ const styles = StyleSheet.create({
   pastText: { flex: 1, color: colors.muted, fontSize: 14, fontFamily: font.medium },
   pastStrong: { color: colors.text, fontFamily: font.bold },
   pastMeta: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
+  footWide: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  footSummary: { flex: 1, minWidth: 0, color: colors.muted, fontSize: 15, fontFamily: font.medium },
+  footStrong: { color: colors.text, fontFamily: font.bold },
+  startWide: { width: 320 },
   footer: {
     position: 'absolute',
     left: 0,

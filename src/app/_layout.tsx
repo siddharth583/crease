@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ErrorBoundary } from '../components/ErrorBoundary.tsx';
 import { MatchesProvider } from '../store/matches.tsx';
 import { PrefsProvider } from '../store/prefs.ts';
 import { SquadProvider } from '../store/squad.ts';
@@ -47,6 +48,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      <ErrorBoundary>
       <PrefsProvider>
       <SquadProvider>
       <MatchesProvider>
@@ -63,6 +65,7 @@ export default function RootLayout() {
       </MatchesProvider>
       </SquadProvider>
       </PrefsProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

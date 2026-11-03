@@ -61,7 +61,7 @@ export function ExportSheet({
                 onPress={() => setFormat(f.value)}
                 style={[styles.format, on && styles.formatOn]}
               >
-                <Ionicons name={f.icon} size={22} color={on ? colors.onAccent : colors.accent} />
+                <Ionicons name={f.icon} size={22} color={on ? colors.onAccent : colors.accentInk} />
                 <Text style={[styles.formatTitle, on && { color: colors.onAccent }]}>{f.title}</Text>
                 <Text style={[styles.formatBody, on && { color: colors.onAccent }]}>{f.body}</Text>
               </PressableScale>
@@ -76,7 +76,7 @@ export function ExportSheet({
             <Text style={styles.listTitle}>
               MATCHES <Text style={{ color: colors.accentInk }}>{n}</Text>/{matches.length}
             </Text>
-            <PressableScale onPress={() => setChosen(new Set(all ? [] : matches.map((m) => m.id)))} style={styles.allButton}>
+            <PressableScale onPress={() => setChosen(new Set(all ? [] : matches.map((m) => m.id)))} hitSlop={7} style={styles.allButton}>
               <Text style={styles.allText}>{all ? 'Select none' : 'Select all'}</Text>
             </PressableScale>
           </View>

@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
+import { looksLikeMatch } from '../engine/backup.ts';
 import { matchState } from '../engine/engine.ts';
 import { photoKey, type Photos } from '../engine/photos.ts';
 import { fingerprint, planMatches, planShared, type RemoteMatch } from '../engine/sync.ts';
+import { DEFAULT_TEAMS } from '../engine/squad.ts';
 import type { Match } from '../engine/types.ts';
 import { useMatches } from './matches.tsx';
 import { useSquad } from './squad.ts';
@@ -32,6 +34,8 @@ export const LIVE_HOST = 'siddharth583.github.io';
 const SHARED = ['squad', 'teams', 'auctions', 'lineups'] as const;
 type SharedKey = (typeof SHARED)[number];
 const LAST_KEY = 'crease.sync.v1';
+/** Each account's role as last heard from the club, so an editor can score at a ground with no signal. */
+const ROLE_KEY = 'crease.role.v1';
 
 export type ClubRole = 'owner' | 'scorer' | 'viewer';
 /** Someone asking the admin to be an editor (scorer). Kept under their email; only they and the admin can see it. */
@@ -44,6 +48,12 @@ type ClubSync = {
   members: Record<string, 'scorer' | 'viewer'>;
   lastSync: number | null;
   error: string | null;
+  /** The phone has a connection. */
+  online: boolean;
+  /** Changes sent from here that the club hasn't confirmed yet. */
+  pending: boolean;
+  /** May ask the admin for editor access: a club (copancs.com) account, or someone the admin already added. */
+  canRequest: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   /** The owner only: add someone as a scorer or viewer, or take them off (null). */
@@ -82,6 +92,24 @@ const writeLast = (last: Last) => {
   }
 };
 
+const readRoles = (): Record<string, ClubRole> => {
+  try {
+    return JSON.parse(localStorage.getItem(ROLE_KEY) ?? '{}');
+  } catch {
+    return {};
+  }
+};
+const rememberRole = (email: string, role: ClubRole | null) => {
+  try {
+    const all = readRoles();
+    if (role) all[email] = role;
+    else delete all[email];
+    localStorage.setItem(ROLE_KEY, JSON.stringify(all));
+  } catch {
+    // Only a convenience for offline starts.
+  }
+};
+
 type Firebase = {
   auth: import('firebase/auth').Auth;
   db: import('firebase/firestore').Firestore;
@@ -92,7 +120,15 @@ let loading: Promise<Firebase> | null = null;
 function firebase(): Promise<Firebase> {
   loading ??= Promise.all([import('firebase/app'), import('firebase/auth'), import('firebase/firestore')]).then(([app, A, F]) => {
     const fb = app.initializeApp(FIREBASE);
-    return { auth: A.getAuth(fb), db: F.getFirestore(fb), A, F };
+    // Kept on the phone between visits: only what changed is downloaded again (the photos, above all), and the club's
+    // data is there at a ground with no signal.
+    let db: import('firebase/firestore').Firestore;
+    try {
+      db = F.initializeFirestore(fb, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) });
+    } catch {
+      db = F.getFirestore(fb);
+    }
+    return { auth: A.getAuth(fb), db, A, F };
   });
   return loading;
 }
@@ -111,15 +147,15 @@ const why = (e: unknown) => {
  */
 const finished = (m: Match) => {
   const r = matchState(m).result;
-  return Boolean(r) && r !== 'Match tied';
+  return Boolean(r) && r !== 'Match tied' && m.confirmed !== false;
 };
 
 const Context = createContext<ClubSync | null>(null);
 
 export function SyncProvider({ children }: { children: ReactNode }) {
   const web = Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname === LIVE_HOST;
-  const { ready, matches, savedTeams, fromClub, setTeams } = useMatches();
-  const { squad, auctions, lineups, setShared } = useSquad();
+  const { ready, matches, savedTeams, fromClub, setTeams, deletedIds, forgetDeleted } = useMatches();
+  const { allSquad: squad, auctions, lineups, setShared } = useSquad();
   const [status, setStatus] = useState<SyncStatus>(web ? 'starting' : 'unavailable');
   const [user, setUser] = useState<ClubSync['user']>(null);
   const [role, setRole] = useState<ClubRole | null>(null);
@@ -129,12 +165,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [requests, setRequests] = useState<EditorRequest[]>([]);
   const [myRequest, setMyRequest] = useState<EditorRequest | null>(null);
   const [clubPhotos, setClubPhotos] = useState<Record<string, string>>({});
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
+  const [pending, setPending] = useState(false);
   // The club as last heard, and the phone as it is now, for the sync to compare whenever either changes.
   const remote = useRef<{ matches: Map<string, RemoteMatch> | null; shared: Partial<Record<SharedKey, string | null>> }>({ matches: null, shared: {} });
-  const local = useRef({ matches, shared: { squad, teams: savedTeams, auctions, lineups } as Record<SharedKey, unknown> });
-  local.current = { matches, shared: { squad, teams: savedTeams, auctions, lineups } };
-  const apply = useRef({ fromClub, setTeams, setShared });
-  apply.current = { fromClub, setTeams, setShared };
+  const local = useRef({ matches, deleted: deletedIds, shared: { squad, teams: savedTeams, auctions, lineups } as Record<SharedKey, unknown> });
+  local.current = { matches, deleted: deletedIds, shared: { squad, teams: savedTeams, auctions, lineups } };
+  const apply = useRef({ fromClub, setTeams, setShared, forgetDeleted });
+  apply.current = { fromClub, setTeams, setShared, forgetDeleted };
   const last = useRef<Last>(web ? readLast() : { matches: {}, shared: {} });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roleRef = useRef<ClubRole | null>(null);
@@ -152,7 +190,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     const base = fb.F.collection(fb.db, 'clubs', CLUB, 'matches');
     const writes: Promise<unknown>[] = [];
 
-    const plan = planMatches(local.current.matches, r.matches, last.current.matches);
+    const plan = planMatches(local.current.matches, r.matches, last.current.matches, local.current.deleted, looksLikeMatch);
     // What only the admin may change, an editor's phone takes back from the club instead: a finished match changed
     // here, a match deleted here or there.
     const clubs = (id: string) => {
@@ -162,19 +200,28 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     const send: Match[] = [];
     const take = [...plan.take];
     const remove = [...plan.remove];
+    // Taken back as the club has it, even though this phone's copy is newer.
+    const replace: Match[] = [];
     for (const m of plan.send) {
       const doc = r.matches.get(m.id);
       if (!writer) continue;
       if (!admin && doc?.deleted) remove.push(m.id);
-      else if (!admin && doc && (doc.finished ?? true)) take.push(clubs(m.id)!);
-      else send.push(m);
+      else if (!admin && doc && (doc.finished ?? true)) {
+        const theirs = clubs(m.id);
+        if (theirs && looksLikeMatch(theirs)) replace.push(theirs);
+      } else send.push(m);
     }
     const bury = admin ? plan.bury : [];
-    if (!admin) for (const id of plan.bury) take.push(clubs(id)!);
-    apply.current.fromClub(take.filter(Boolean), remove);
+    if (!admin) for (const id of plan.bury) {
+      const theirs = clubs(id);
+      if (theirs && looksLikeMatch(theirs)) take.push(theirs);
+    }
+    // A Delete here the club has heard of (or can't hear of: an editor's) needs no more telling.
+    apply.current.forgetDeleted(local.current.deleted.filter((id) => !admin || !r.matches!.get(id) || r.matches!.get(id)!.deleted || bury.includes(id)));
+    apply.current.fromClub(take, remove, replace);
     const agreed = { ...last.current.matches, ...plan.agreed };
     for (const id of remove) delete agreed[id];
-    for (const m of take) if (m) agreed[m.id] = fingerprint(r.matches.get(m.id)!.json!);
+    for (const m of [...take, ...replace]) agreed[m.id] = fingerprint(r.matches.get(m.id)!.json!);
     for (const m of send) {
       const json = JSON.stringify(m);
       writes.push(fb.F.setDoc(fb.F.doc(base, m.id), { json, updatedAt: m.updatedAt ?? m.createdAt, finished: finished(m), by }));
@@ -198,11 +245,18 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       } else if (step === 'send' && admin) {
         writes.push(fb.F.setDoc(fb.F.doc(fb.db, 'clubs', CLUB, 'shared', key), { json: mine, updatedAt: Date.now(), by }));
         shared[key] = fingerprint(mine);
+      } else if (step === 'send' && theirs !== null) {
+        // Only the admin changes these: anyone else's phone keeps the club's, so it never drifts from everyone else's.
+        const value = JSON.parse(theirs);
+        if (key === 'teams') apply.current.setTeams(value);
+        else apply.current.setShared({ [key]: value });
+        shared[key] = fingerprint(theirs);
       } else if (step === 'none') shared[key] = fingerprint(mine);
     }
 
     last.current = { matches: agreed, shared };
     writeLast(last.current);
+    if (writes.length) setPending(true);
     try {
       await Promise.all(writes);
       setError(null);
@@ -211,6 +265,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       setError(why(e));
       setStatus('error');
+    } finally {
+      setPending(false);
     }
   }, [email]);
 
@@ -218,6 +274,19 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => void reconcile(), 600);
   }, [reconcile]);
+
+  // Whether there's a connection.
+  useEffect(() => {
+    if (!web) return;
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, [web]);
 
   // Who's signed in.
   useEffect(() => {
@@ -234,6 +303,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             setStatus('signed-out');
           }
         });
+        // Back from signing in on a page of its own (phones that block pop-ups): say so if it failed, rather than
+        // staying on "Signing in…".
+        fb.A.getRedirectResult(fb.auth).catch((e) => {
+          setError(why(e));
+          setStatus('signed-out');
+        });
       })
       .catch(() => setStatus('error'));
     return () => {
@@ -248,14 +323,21 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     let stop = () => {};
     let gone = false;
     setStatus('syncing');
+    // The role this account had last time, straight away: an editor offline at the ground can still score.
+    const known = email === CLUB_OWNER ? 'owner' : readRoles()[email];
+    if (known) setRole(known);
     firebase().then((fb) => {
       if (gone) return;
       const club = fb.F.doc(fb.db, 'clubs', CLUB);
       stop = fb.F.onSnapshot(
         club,
+        { includeMetadataChanges: true },
         (snap) => {
           const data = snap.data() as { members?: Record<string, 'scorer' | 'viewer'> } | undefined;
           if (!snap.exists()) {
+            // Offline, a club not in this phone's cache only looks missing: never make it again from here (that would
+            // wipe its members). Only the club's own answer that it doesn't exist counts.
+            if (snap.metadata.fromCache) return;
             if (email === CLUB_OWNER) void fb.F.setDoc(club, { owner: CLUB_OWNER, members: {}, createdAt: Date.now() }).catch((e) => setError(why(e)));
             else setStatus('not-member');
             return;
@@ -263,10 +345,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           setMembers(data?.members ?? {});
           const mine: ClubRole | null =
             email === CLUB_OWNER ? 'owner' : (data?.members?.[email] ?? (email.endsWith(`@${CLUB_DOMAIN}`) ? 'viewer' : null));
+          if (!snap.metadata.fromCache) rememberRole(email, mine);
           setRole(mine);
           if (!mine) setStatus('not-member');
         },
-        () => {
+        (e) => {
+          // No connection: keep the role last heard. Turned away by the club: not a member.
+          if (known && !String((e as { code?: string })?.code ?? '').includes('permission-denied')) return;
+          rememberRole(email, null);
           setRole(null);
           setStatus('not-member');
         },
@@ -397,20 +483,34 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     if (!web) return;
     const fb = await firebase();
     await fb.A.signOut(fb.auth);
-  }, [web]);
+    // The club's data leaves this phone with the account: the matches the club already has (anything not sent yet
+    // stays), the squad with its emails, auctions and line-ups. It all comes back on signing in again.
+    const agreed = last.current.matches;
+    const synced = local.current.matches.filter((m) => agreed[m.id] && agreed[m.id] === fingerprint(JSON.stringify(m))).map((m) => m.id);
+    apply.current.fromClub([], synced);
+    apply.current.setShared({ squad: [], auctions: [], lineups: [] });
+    apply.current.setTeams(DEFAULT_TEAMS);
+    last.current = { matches: {}, shared: {} };
+    writeLast(last.current);
+    rememberRole(email, null);
+    setClubPhotos({});
+    setMembers({});
+    // And the club's copy kept for offline use: cleared, then a fresh start once the phone has saved the above.
+    await fb.F.terminate(fb.db).catch(() => {});
+    await fb.F.clearIndexedDbPersistence(fb.db).catch(() => {});
+    setTimeout(() => window.location.reload(), 400);
+  }, [web, email]);
 
   const setMember = useCallback(
     async (who: string, as: 'scorer' | 'viewer' | null) => {
       if (role !== 'owner') return;
       const fb = await firebase();
-      const next = { ...members };
       const key = who.trim().toLowerCase();
-      if (as) next[key] = as;
-      else delete next[key];
-      // The whole club at once: an email's dots would read as a path in a partial update.
-      await fb.F.setDoc(fb.F.doc(fb.db, 'clubs', CLUB), { owner: CLUB_OWNER, members: next, updatedAt: Date.now() });
+      // Only this one member changes (a field path, so the email's dots aren't read as a path): two answers given
+      // quickly both stand, instead of the second writing back a list without the first.
+      await fb.F.updateDoc(fb.F.doc(fb.db, 'clubs', CLUB), new fb.F.FieldPath('members', key), as ?? fb.F.deleteField(), 'updatedAt', Date.now());
     },
-    [role, members],
+    [role],
   );
 
   const requestEditor = useCallback(async () => {
@@ -454,9 +554,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     [web, user],
   );
 
+  const canRequest = Boolean(user && (user.email.endsWith(`@${CLUB_DOMAIN}`) || members[user.email]));
   const value = useMemo<ClubSync>(
-    () => ({ status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, clubPhotos, setClubPhoto }),
-    [status, user, role, members, lastSync, error, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, clubPhotos, setClubPhoto],
+    () => ({ status, user, role, members, lastSync, error, online, pending, canRequest, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, clubPhotos, setClubPhoto }),
+    [status, user, role, members, lastSync, error, online, pending, canRequest, signIn, signOut, setMember, requests, myRequest, requestEditor, cancelRequest, answerRequest, clubPhotos, setClubPhoto],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
@@ -476,8 +577,10 @@ export function useAccess() {
   const local = status === 'unavailable';
   const admin = local || role === 'owner';
   const score = admin || role === 'scorer';
-  const why = score ? null : user ? 'Only editors can score. Ask the admin for editor access in My profile.' : 'Sign in, as an editor, to score for the club.';
-  return { admin, score, why };
+  // Still finding out who this is: say nothing about access yet, rather than flash a refusal.
+  const loading = !local && !role && (status === 'starting' || status === 'signing-in' || (Boolean(user) && status === 'syncing'));
+  const why = score || loading ? null : user ? 'Only editors can score. Ask the admin for editor access in My profile.' : 'Sign in, as an editor, to score for the club.';
+  return { admin, score, why, loading };
 }
 
 /** Where a player's photo is kept in the club: under their email, or under their name when they have none. */
@@ -488,13 +591,16 @@ export const photoId = (player: { name: string; email?: string }) => (player.ema
  * before signing in).
  */
 export function usePhotos(): Photos {
-  const { photos, squad } = useSquad();
+  const { photos, allSquad: squad } = useSquad();
   const { clubPhotos } = useClubSync();
   return useMemo(() => {
     if (!Object.keys(clubPhotos).length) return photos;
     const all = { ...photos };
     for (const [id, photo] of Object.entries(clubPhotos)) if (id.startsWith('name:')) all[id.slice(5)] = photo;
     for (const p of squad) {
+      // A renamed player's photo kept under an old name follows them.
+      const old = (p.aka ?? []).map((a) => clubPhotos[`name:${photoKey(a)}`]).find(Boolean);
+      if (old && !all[photoKey(p.name)]) all[photoKey(p.name)] = old;
       const own = p.email && clubPhotos[p.email.trim().toLowerCase()];
       if (own) all[photoKey(p.name)] = own;
     }
