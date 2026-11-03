@@ -52,9 +52,18 @@ const PHOTO_MAX = 1600;
 /** What one photo may take in the club (a database entry holds about 1 MB). */
 const PHOTO_BYTES = 950_000;
 
+/** True when any part of the picture is see-through (a cut-out PNG): checked on a sample of its pixels. */
+function seeThrough(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const { data } = ctx.getImageData(0, 0, width, height);
+  const step = Math.max(1, Math.floor(data.length / 4 / 40_000)) * 4;
+  for (let i = 3; i < data.length; i += step) if (data[i] < 250) return true;
+  return false;
+}
+
 /**
  * Lets the person pick a picture and returns it whole (never cropped), at its own size unless it's bigger than
- * `PHOTO_MAX`, as a high-quality JPEG data URL; null if they backed out. Web only: the app's photos are set in the browser.
+ * `PHOTO_MAX`, as a high-quality data URL; null if they backed out. A cut-out keeps its see-through background (WebP,
+ * or PNG where the browser can't make WebP); any other photo is a JPEG. Web only: the app's photos are set in the browser.
  */
 export async function pickPhoto(): Promise<string | null> {
   if (Platform.OS !== 'web') throw new Error('Set photos in the web app.');
@@ -69,12 +78,14 @@ export async function pickPhoto(): Promise<string | null> {
       i.onerror = () => reject(new Error('That file isn’t a picture this browser can open.'));
       i.src = url;
     });
+    let clear: boolean | null = null;
     // Only as small as it has to be: full quality first, then a touch less, then smaller, until it fits the club.
     for (const [max, quality] of [
       [PHOTO_MAX, 0.92],
       [PHOTO_MAX, 0.85],
       [1280, 0.85],
       [1024, 0.82],
+      [800, 0.8],
     ] as const) {
       const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
       const canvas = document.createElement('canvas');
@@ -83,7 +94,9 @@ export async function pickPhoto(): Promise<string | null> {
       const ctx = canvas.getContext('2d')!;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const photo = canvas.toDataURL('image/jpeg', quality);
+      clear ??= seeThrough(ctx, canvas.width, canvas.height);
+      // A browser that can't make WebP hands back a PNG, which keeps the see-through parts too.
+      const photo = clear ? canvas.toDataURL('image/webp', quality) : canvas.toDataURL('image/jpeg', quality);
       if (photo.length <= PHOTO_BYTES) return photo;
     }
     throw new Error('That picture is too big to share. Try a smaller one.');
