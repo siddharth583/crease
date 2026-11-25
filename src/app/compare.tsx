@@ -16,7 +16,7 @@ import { Columns, Page, useLayout } from '../components/layout.tsx';
 import { COMMON_TEAM, displayName, battingAverage, bestFigures, bowlingAverage, bowlingOvers, careerStats, economy, strikeRate, type Career } from '../engine/stats.ts';
 import { useMatches } from '../store/matches.tsx';
 import { useSquad } from '../store/squad.ts';
-import { colors, edge, font, HERO_BG, hero, ink, radius, space, teamTheme, type } from '../theme.ts';
+import { colors, edge, font, HERO_BG, hero, ink, radius, space, teamTheme, type, glass } from '../theme.ts';
 
 // Two players side by side: their main numbers in one card, the better of each pair picked out. Opened from a
 // player's page; the second player is picked here.
@@ -39,8 +39,8 @@ function lines(a: Career, b: Career): { title: string; rows: Line[] }[] {
       title: 'Batting',
       rows: [
         line('Runs', a.batting.runs, b.batting.runs, whole),
-        line('Average (runs per dismissal)', battingAverage(a), battingAverage(b), (n) => fmt(n)),
-        line('Strike rate (per 100 balls)', strikeRate(a), strikeRate(b), (n) => fmt(n)),
+        line('Average', battingAverage(a), battingAverage(b), (n) => fmt(n)),
+        line('Strike rate', strikeRate(a), strikeRate(b), (n) => fmt(n)),
         { ...line('Highest score', a.batting.highest, b.batting.highest, whole), a: `${a.batting.highest}${a.batting.highestNotOut ? '*' : ''}`, b: `${b.batting.highest}${b.batting.highestNotOut ? '*' : ''}` },
         line('50s', a.batting.fifties, b.batting.fifties, whole),
         line('Sixes', a.batting.sixes, b.batting.sixes, whole),
@@ -50,8 +50,8 @@ function lines(a: Career, b: Career): { title: string; rows: Line[] }[] {
       title: 'Bowling',
       rows: [
         line('Wickets', a.bowling.wickets, b.bowling.wickets, whole),
-        line('Economy (runs per over, lower wins)', economy(a), economy(b), (n) => fmt(n, 2), true),
-        line('Average (runs per wicket, lower wins)', bowlingAverage(a), bowlingAverage(b), (n) => fmt(n), true),
+        line('Economy', economy(a), economy(b), (n) => fmt(n, 2), true),
+        line('Average', bowlingAverage(a), bowlingAverage(b), (n) => fmt(n), true),
         { ...line('Best figures', bestValue(a), bestValue(b), whole), a: bestFigures(a), b: bestFigures(b) },
         { ...line('Overs bowled', a.bowling.balls, b.bowling.balls, whole), a: bowlingOvers(a), b: bowlingOvers(b), better: null },
       ],
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   faceName: { color: hero.text, fontSize: 19, lineHeight: 22, fontFamily: font.posterBlack, letterSpacing: -0.5, marginTop: space.sm },
   faceNameWide: { fontSize: 30, lineHeight: 34 },
   faceTeam: { fontSize: 12, fontFamily: font.bold, marginTop: 2 },
-  score: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: hero.inset, borderRadius: radius.md, paddingVertical: space.sm, paddingHorizontal: space.lg },
+  score: { flexDirection: 'row', alignItems: 'center', gap: space.md, ...glass, borderRadius: radius.md, paddingVertical: space.sm, paddingHorizontal: space.lg },
   scoreNum: { color: hero.text, fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, ...type.num },
   scoreLabel: { ...type.label, color: hero.muted },
   scoreSub: { color: hero.faint, fontSize: 11, fontFamily: font.medium },

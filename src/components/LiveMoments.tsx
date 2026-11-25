@@ -7,7 +7,7 @@ import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { oversText, type BallView, type InningsState, type MatchState } from '../engine/engine.ts';
 import { isPlaceholder, playerOfTheMatch, seriesState } from '../engine/stats.ts';
 import type { Match } from '../engine/types.ts';
-import { colors, edge, font, gradients, hero, HERO_BG, radius, space, type } from '../theme.ts';
+import { colors, edge, font, gradients, hero, HERO_BG, radius, space, type, glass } from '../theme.ts';
 import { OvalGround, SeamDivider, Stumps } from './cricket.tsx';
 import { Confetti, EASE_OUT, Pulse, PopIn, Sheen, Ticker, useReducedMotion } from './motion.tsx';
 import { TeamCrest } from './TeamCrest.tsx';
@@ -337,7 +337,7 @@ const m = StyleSheet.create({
   breakTarget: { fontFamily: font.posterBlack, fontSize: 104, color: hero.accent, letterSpacing: -5, ...type.num },
   breakTitle: { ...type.poster, fontSize: 20, color: hero.text },
   breakChips: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
-  breakChip: { flex: 1, backgroundColor: hero.inset, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: 'rgba(205,235,215,0.1)' },
+  breakChip: { flex: 1, ...glass, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12 },
   breakChipLabel: { ...type.label, fontSize: 8.5, color: hero.faint },
   breakChipValue: { color: hero.text, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
   breakSub: { color: hero.muted, fontSize: 13, fontFamily: font.medium, marginTop: space.lg },
@@ -358,7 +358,7 @@ const m = StyleSheet.create({
   winner: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 44, color: hero.text, letterSpacing: -1.4, textAlign: 'center', marginTop: space.md },
   margin: { fontFamily: font.poster, fontSize: 19, color: hero.gold, letterSpacing: -0.2, marginTop: 2, textAlign: 'center' },
   scores: { alignSelf: 'stretch', marginTop: space.xl, gap: 6 },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: hero.inset, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: space.md },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, ...glass, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: space.md },
   scoreWon: { borderWidth: 1, borderColor: colors.gold },
   scoreTeam: { color: hero.text, fontFamily: font.bold, fontSize: 15 },
   scoreSub: { color: hero.faint, fontFamily: font.semibold, fontSize: 11 },

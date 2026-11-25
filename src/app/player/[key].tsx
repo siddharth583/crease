@@ -11,7 +11,7 @@ import { OvalGround, SeamDivider } from '../../components/cricket.tsx';
 import { TeamCrest } from '../../components/TeamCrest.tsx';
 import { Columns, Page, useLayout } from '../../components/layout.tsx';
 import { PlayerPhoto } from '../../components/MomAward.tsx';
-import { RatingChips } from '../../components/Ratings.tsx';
+import { MatchRatings } from '../../components/Ratings.tsx';
 import { BigHits } from '../../components/BigHits.tsx';
 import { playerRatings } from '../../engine/ratings.ts';
 import { oversText } from '../../engine/engine.ts';
@@ -33,7 +33,7 @@ import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
 import { useAccess, usePhotos, useSetPhoto } from '../../store/sync.tsx';
 import { pickPhoto } from '../../store/files.ts';
-import { colors, edge, gradients, radius, space, type, font, ink, hero, ownTeamTheme, teamTheme } from '../../theme.ts';
+import { colors, edge, gradients, radius, space, type, font, ink, hero, ownTeamTheme, teamTheme, glass } from '../../theme.ts';
 import { photoFor, photoKey } from '../../engine/photos.ts';
 
 const fmt = (n: number | null, digits = 1) => (n === null ? '–' : n.toFixed(digits));
@@ -346,6 +346,8 @@ export default function PlayerProfile() {
         ? `Scored 30+ in ${thirty} of last ${recent.length}${fifties ? `, with ${fifties} fifty${fifties === 1 ? '' : ' or more'}` : ''}`
         : `No 30+ score in the last ${recent.length} innings yet`;
   const role = c.batting.innings && c.bowling.balls ? (c.batting.runs >= 50 && c.bowling.wickets >= 3 ? 'All-rounder' : c.bowling.wickets * 12 > c.batting.runs ? 'Bowler' : 'Batter') : c.bowling.balls ? 'Bowler' : c.batting.innings ? 'Batter' : 'Fielder';
+  /** The role as a scorer would write it on the card: AR, BAT, BOW (FLD if they've only fielded). */
+  const roleShort = ({ 'All-rounder': 'AR', Batter: 'BAT', Bowler: 'BOW', Fielder: 'FLD' } as const)[role];
   const boundaryRuns = c.batting.fours * 4 + c.batting.sixes * 6;
   const running = Math.max(0, c.batting.runs - boundaryRuns);
   const concededBound = c.bowling.fours * 4 + c.bowling.sixes * 6;
@@ -356,11 +358,8 @@ export default function PlayerProfile() {
     ratings: rated.history.length > 0 && (
       <>
         <SectionLabel right={<Text style={styles.formHint}>Out of 10</Text>}>Match ratings</SectionLabel>
-        <Card style={{ gap: space.md }}>
-          <RatingChips history={rated.history} />
-          <Text style={styles.formHint}>
-            A rating for each match from what they did with the bat, the ball and in the field. Form is the average of their last {Math.min(5, rated.history.length)}.
-          </Text>
+        <Card>
+          <MatchRatings history={rated.history} />
         </Card>
       </>
     ),
@@ -415,8 +414,8 @@ export default function PlayerProfile() {
           <Tiles
             items={[
               ['Runs', c.batting.runs, true],
-              ['Average (runs/dismissal)', fmt(battingAverage(c))],
-              ['Strike rate (per 100 balls)', fmt(strikeRate(c))],
+              ['Average', fmt(battingAverage(c))],
+              ['Strike rate', fmt(strikeRate(c))],
               ['Innings', c.batting.innings],
               ['Highest score', `${c.batting.highest}${c.batting.highestNotOut ? '*' : ''}`],
               ['Not outs', c.batting.notOuts],
@@ -439,9 +438,9 @@ export default function PlayerProfile() {
         rows={[
           { label: 'Sixes', value: c.batting.sixes * 6, color: colors.accent },
           { label: 'Fours', value: c.batting.fours * 4, color: colors.cyan },
-          { label: 'Running (1s, 2s and 3s)', value: running, color: ink(0.3) },
+          { label: 'Running', value: running, color: ink(0.3) },
         ]}
-        note={`${pct(boundaryRuns, c.batting.runs)}% of ${c.name.split(' ')[0]}’s runs came in boundaries (${c.batting.fours} fours, ${c.batting.sixes} sixes).`}
+        note={`${pct(boundaryRuns, c.batting.runs)}% of ${c.name.split(' ')[0]}’s runs came in boundaries.`}
       />
     ),
     bigHits: <BigHits hits={hits} first={c.name.split(' ')[0]} />,
@@ -452,10 +451,10 @@ export default function PlayerProfile() {
           <Tiles
             items={[
               ['Wickets', c.bowling.wickets, true],
-              ['Economy (runs/over)', fmt(economy(c), 2)],
+              ['Economy', fmt(economy(c), 2)],
               ['Best figures', bestFigures(c)],
               ['Overs', bowlingOvers(c)],
-              ['Average (runs/wicket)', fmt(bowlingAverage(c))],
+              ['Average', fmt(bowlingAverage(c))],
               ['Maidens', c.bowling.maidens],
               ['Fours conceded', c.bowling.fours],
               ['Sixes conceded', c.bowling.sixes],
@@ -472,9 +471,9 @@ export default function PlayerProfile() {
       <Breakdown
         title="Where the runs went"
         rows={[
-          { label: 'Sixes conceded', value: c.bowling.sixes * 6, color: colors.accent },
-          { label: 'Fours conceded', value: c.bowling.fours * 4, color: colors.cyan },
-          { label: 'Singles, twos and extras', value: concededOther, color: ink(0.3) },
+          { label: 'Sixes', value: c.bowling.sixes * 6, color: colors.accent },
+          { label: 'Fours', value: c.bowling.fours * 4, color: colors.cyan },
+          { label: 'Others', value: concededOther, color: ink(0.3) },
         ]}
         note={`${pct(concededBound, c.bowling.runs)}% of the runs scored off ${c.name.split(' ')[0]} came in boundaries.`}
       />
@@ -603,8 +602,8 @@ export default function PlayerProfile() {
                     </View>
                   )}
                   <View style={styles.heroTop}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-                      {team !== COMMON_TEAM && <TeamCrest name={team} size={34} />}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {team !== COMMON_TEAM && <TeamCrest name={team} size={24} />}
                       {team === COMMON_TEAM ? (
                         // The common player has no one side: a label, not a link to an empty page.
                         <View style={[styles.teamTag, { backgroundColor: side.accent }]}>
@@ -622,9 +621,9 @@ export default function PlayerProfile() {
                         </PressableScale>
                       )}
                     </View>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      <View style={styles.formPill}>
-                        <Text style={styles.formPillText}>{role}</Text>
+                    <View style={{ flexDirection: 'row', gap: 5 }}>
+                      <View style={styles.formPill} accessibilityLabel={role}>
+                        <Text style={styles.formPillText}>{roleShort}</Text>
                       </View>
                       {rated.form !== null && (
                         <View style={[styles.formPill, rated.form >= 8 && { backgroundColor: side.accent }]} accessibilityLabel={`Form ${rated.form.toFixed(1)} out of 10`}>
@@ -753,17 +752,17 @@ const styles = StyleSheet.create({
   name: { fontFamily: font.posterBlack, fontSize: 49, lineHeight: 55, color: hero.text, letterSpacing: -1.5, marginTop: space.lg, alignSelf: 'stretch' },
   // The team, and their form under it, the same size.
   heroTop: { alignSelf: 'flex-start', alignItems: 'flex-start', gap: 6 },
-  formPill: { flexDirection: 'row', alignItems: 'center', height: 24, paddingHorizontal: 10, borderRadius: radius.sm, backgroundColor: hero.ink(0.12) },
-  formPillText: { ...type.label, color: hero.text },
+  formPill: { flexDirection: 'row', alignItems: 'center', height: 20, paddingHorizontal: 7, borderRadius: 7, backgroundColor: hero.ink(0.12) },
+  formPillText: { ...type.label, fontSize: 10, letterSpacing: 0.6, color: hero.text },
   formPillValue: { fontFamily: font.heavy, letterSpacing: 0, ...type.num },
-  teamTag: { alignSelf: 'flex-start', backgroundColor: colors.accent, paddingHorizontal: 10, height: 24, borderRadius: radius.sm, justifyContent: 'center', transform: [{ skewX: '-8deg' }] },
-  teamTagText: { ...type.label, color: colors.onAccent },
+  teamTag: { alignSelf: 'flex-start', backgroundColor: colors.accent, paddingHorizontal: 7, height: 20, borderRadius: 7, justifyContent: 'center', transform: [{ skewX: '-8deg' }] },
+  teamTagText: { ...type.label, fontSize: 10, letterSpacing: 0.6, color: colors.onAccent },
   // On the dark panel in either theme: a darker strip and the night greys, so it reads in Day mode too.
   heroStats: {
     flexDirection: 'row',
     alignSelf: 'stretch',
     marginTop: space.xl,
-    backgroundColor: hero.inset,
+    ...glass,
     borderRadius: radius.md,
     paddingVertical: space.md,
   },

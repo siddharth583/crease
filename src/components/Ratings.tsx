@@ -1,8 +1,10 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { MatchRating } from '../engine/ratings.ts';
 import { colors, font, radius, space, type } from '../theme.ts';
 import { GrowBar, PopIn } from './motion.tsx';
-import { usePageTone } from './ui.tsx';
+import { PressableScale, usePageTone } from './ui.tsx';
 
 // A player's match ratings out of 10 and the form they make, the same on the squad list and the player's page.
 
@@ -46,7 +48,53 @@ export function RatingChips({ history, max = 8 }: { history: MatchRating[]; max?
   );
 }
 
+/** The colour a rating's number is written in, and the wash behind it. */
+const inkOf = (r: number) => (r >= 8 ? colors.accentInk : r >= 6.5 ? colors.cyan : r < 5 ? colors.danger : colors.text);
+const washOf = (r: number) => (r >= 8 ? colors.accentDim : r >= 6.5 ? colors.cyanDim : r < 5 ? colors.dangerDim : colors.surfaceHi);
+
+/**
+ * The player page's match ratings and nothing else: one tile per match, newest first, in one row that scrolls sideways. The
+ * number is coloured by how good the game was; the best one wears a brass edge and a star. A tile opens that match.
+ */
+export function MatchRatings({ history }: { history: MatchRating[] }) {
+  if (history.length === 0) return null;
+  const best = history.reduce((b, m) => (m.rating > b.rating ? m : b), history[0]);
+  const size = 54;
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+      {history.map((m) => {
+          const isBest = m.matchId === best.matchId;
+          return (
+            <PressableScale
+              key={m.matchId}
+              scaleTo={0.94}
+              onPress={() => router.push({ pathname: '/match/[id]', params: { id: m.matchId } })}
+              accessibilityLabel={`${isBest ? 'Best match. ' : ''}Rated ${m.rating.toFixed(1)} out of 10 on ${day(m.date)}. Open the match`}
+              style={[styles.tile, { width: size, height: size * 1.05, backgroundColor: washOf(m.rating) }, isBest && styles.bestTile]}
+            >
+              {isBest && (
+                <View style={styles.bestStar}>
+                  <Ionicons name="star" size={9} color={colors.onAccent} />
+                </View>
+              )}
+              <Text style={[styles.tileValue, { color: inkOf(m.rating), fontSize: 20 }]}>{m.rating.toFixed(1)}</Text>
+              <Text style={styles.tileDay} numberOfLines={1}>
+                {day(m.date)}
+              </Text>
+            </PressableScale>
+          );
+        })}
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
+  row: { gap: space.sm, paddingTop: 7, paddingRight: space.xs },
+  tile: { borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: 2, borderWidth: 1.5, borderColor: 'transparent' },
+  bestTile: { borderColor: colors.gold },
+  bestStar: { position: 'absolute', top: -7, alignSelf: 'center', width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold },
+  tileValue: { fontFamily: font.posterBlack, ...type.num },
+  tileDay: { color: colors.muted, fontSize: 10, fontFamily: font.medium },
   badge: { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: colors.surfaceHi },
   badgeText: { color: colors.text, fontSize: 10, fontFamily: font.heavy, letterSpacing: 0.3, ...type.num },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

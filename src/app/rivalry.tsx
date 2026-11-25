@@ -1,14 +1,17 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef } from 'react';
+import { Animated, Easing, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PlayerAvatar } from '../components/Avatar.tsx';
-import { FaceOff } from '../components/FaceOff.tsx';
-import { BallChip, Card, FadeIn, IconButton, PressableScale, Screen, SectionLabel, WideHead } from '../components/ui.tsx';
-import { CountUp, Rise, Sheen, Tug } from '../components/motion.tsx';
-import { OvalGround, SeamDivider } from '../components/cricket.tsx';
-import { GrowStack, Tile } from '../components/HonoursBoard.tsx';
+import { BallChip, Card, FadeIn, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, WideHead } from '../components/ui.tsx';
+import { Rise, useReducedMotion } from '../components/motion.tsx';
+import { Jersey, SeamDivider } from '../components/cricket.tsx';
+import { PlayerPhoto } from '../components/MomAward.tsx';
+import { crestOf } from '../components/TeamCrest.tsx';
+import { photoFor } from '../engine/photos.ts';
+import { careerStats, displayName } from '../engine/stats.ts';
+import { usePhotos } from '../store/sync.tsx';
+import { GrowStack } from '../components/HonoursBoard.tsx';
 import { VsCoin } from '../components/FaceOff.tsx';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Columns, Page, useLayout } from '../components/layout.tsx';
@@ -17,7 +20,7 @@ import type { WicketKind } from '../engine/types.ts';
 import { useMatches } from '../store/matches.tsx';
 import { useSquad } from '../store/squad.ts';
 import { plural } from '../engine/text.ts';
-import { colors, font, gradients, hero, radius, space, type } from '../theme.ts';
+import { colors, font, gradients, hero, radius, space, type, glass } from '../theme.ts';
 
 const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 const HOW: Record<WicketKind, string> = {
@@ -31,18 +34,6 @@ const HOW: Record<WicketKind, string> = {
   retiredout: 'Retired out',
 };
 
-function Stat({ label, value, sub, tone, wide }: { label: string; value: string; sub?: string; tone?: string; wide?: boolean }) {
-  return (
-    <View style={[styles.stat, wide && styles.statWide]}>
-      <View>
-        <Text style={styles.statLabel}>{label}</Text>
-        <Text style={[styles.statValue, tone ? { color: tone } : null]}>{value}</Text>
-      </View>
-      {sub ? <Text style={[styles.statSub, wide && { flex: 1, fontSize: 12 }]}>{sub}</Text> : null}
-    </View>
-  );
-}
-
 /** A meeting's balls grouped by over: "Over 4  [chips]  7 runs". */
 function overs(balls: { over: string; view: import('../engine/engine.ts').BallView; runs: number; out: boolean }[]) {
   const groups: { n: string; balls: typeof balls }[] = [];
@@ -55,6 +46,100 @@ function overs(balls: { over: string; view: import('../engine/engine.ts').BallVi
   return groups;
 }
 
+/** A player as an open cut-out standing on the grass (their kit with initials until a photo is added), a soft
+ * glow of their side's colour at their feet. */
+function Cutout({ name, team, glow }: { name: string; team?: string; glow: string }) {
+  const photo = photoFor(usePhotos(), name);
+  const initials = displayName(name)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((x) => x[0]!.toUpperCase())
+    .join('');
+  const kit = crestOf(team ?? '');
+  return (
+    <View style={styles.cutout}>
+      <View style={[styles.cutoutGlow, { boxShadow: `0px 0px 30px 14px ${glow}` } as object]} />
+      <View style={styles.cutoutShadow} />
+      {photo ? (
+        <PlayerPhoto uri={photo} />
+      ) : (
+        <View style={styles.cutoutKit}>
+          <Jersey size={118} from={kit.from} to={kit.to} initials={initials} id={`rv${initials}${name.length}`} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** One side's usual strike rate (against everyone else) and how far this duel is from it: green when the gap is good
+ * for the person the row is about, red when it isn't. */
+function Compare({ icon, who, note, here, usual, goodWhenUp }: { icon: 'cricket' | 'baseball'; who: string; note: string; here: number; usual: number; goodWhenUp: boolean }) {
+  const gap = Math.round(here - usual);
+  const good = gap === 0 ? null : (gap > 0) === goodWhenUp;
+  const tint = good === null ? colors.muted : good ? colors.accentInk : colors.danger;
+  return (
+    <View style={[styles.cmp, styles.divided]} accessibilityLabel={`${who}: strike rate ${Math.round(usual)}. ${note}. In this duel ${Math.round(here)}, ${Math.abs(gap)} ${gap >= 0 ? 'higher' : 'lower'}.`}>
+      <View style={styles.cmpIcon}>
+        <MaterialCommunityIcons name={icon} size={16} color={colors.muted} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.cmpWho} numberOfLines={1}>
+          {who}
+        </Text>
+        <Text style={styles.numSub} numberOfLines={1}>
+          {note}
+        </Text>
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 3 }}>
+        <Text style={styles.cmpUsual}>{Math.round(usual)}</Text>
+        <View style={[styles.cmpGap, { backgroundColor: good === null ? colors.surfaceHi : good ? colors.accentDim : colors.dangerDim }]}>
+          <Ionicons name={gap > 0 ? 'arrow-up' : gap < 0 ? 'arrow-down' : 'remove'} size={10} color={tint} />
+          <Text style={[styles.cmpGapText, { color: tint }]}>{Math.abs(gap)} here</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The VS coin that flips the duel. So people learn it's a button, it turns over to show the swap arrows twice when
+ * the page opens (held a moment each time), then settles back on VS. A tap spins it and flips the duel.
+ */
+function FlipCoin({ size, label, onPress }: { size: number; label: string; onPress: () => void }) {
+  const still = useReducedMotion();
+  const turn = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (still) return;
+    const over = (to: number) => Animated.timing(turn, { toValue: to, duration: 420, easing: Easing.inOut(Easing.cubic), useNativeDriver: Platform.OS !== 'web' });
+    const show = Animated.sequence([over(1), Animated.delay(1100), over(0)]);
+    const hint = Animated.sequence([Animated.delay(800), show, Animated.delay(1400), show]);
+    hint.start();
+    return () => hint.stop();
+  }, [still, turn]);
+  const press = () => {
+    if (!still) {
+      turn.stopAnimation();
+      turn.setValue(0);
+      Animated.timing(turn, { toValue: 2, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }).start(() => turn.setValue(0));
+    }
+    onPress();
+  };
+  const front = turn.interpolate({ inputRange: [0, 1, 2], outputRange: ['0deg', '180deg', '360deg'] });
+  const back = turn.interpolate({ inputRange: [0, 1, 2], outputRange: ['180deg', '360deg', '540deg'] });
+  const face = { position: 'absolute' as const, top: 0, left: 0, width: size, height: size, backfaceVisibility: 'hidden' as const };
+  return (
+    <PressableScale scaleTo={0.88} hitSlop={10} onPress={press} accessibilityLabel={label} style={{ width: size, height: size }}>
+      <Animated.View style={[face, { transform: [{ perspective: 400 }, { rotateY: front }] }]}>
+        <VsCoin size={size} />
+      </Animated.View>
+      <Animated.View style={[face, styles.flipFace, { borderRadius: size / 2, transform: [{ perspective: 400 }, { rotateY: back }] }]}>
+        <Ionicons name="swap-horizontal" size={size * 0.5} color={colors.onAccent} />
+      </Animated.View>
+    </PressableScale>
+  );
+}
+
 export default function RivalryScreen() {
   const insets = useSafeAreaInsets();
   const { bat, bowl } = useLocalSearchParams<{ bat: string; bowl: string }>();
@@ -62,6 +147,7 @@ export default function RivalryScreen() {
   const { squad } = useSquad();
   const r = useMemo(() => (bat && bowl ? rivalry(matches, bat, bowl) : null), [matches, bat, bowl, squad]);
   const ctx = useMemo(() => rivalryContext(matchups(matches)), [matches, squad]);
+  const teamOf = useMemo(() => new Map(careerStats(matches).map((c) => [c.key, c.team])), [matches, squad]);
   const back = () => (router.canGoBack() ? router.back() : router.replace('/records'));
   const layout = useLayout();
   const { wide } = layout;
@@ -116,80 +202,132 @@ export default function RivalryScreen() {
               <FadeIn>
                 <View style={styles.hero}>
                   <LinearGradient pointerEvents="none" colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                  <OvalGround opacity={0.07} />
-                  <Sheen />
+                  <PitchStripes tint="255,255,255" />
                   <View style={styles.faceRow}>
                     <PressableScale scaleTo={0.97} onPress={() => router.push({ pathname: '/player/[key]', params: { key: r.batterKey } })} wrapStyle={{ flex: 1, minWidth: 0 }} style={styles.who} accessibilityLabel={`${r.batter}, the batter`}>
-                      <PlayerAvatar name={r.batter} size={76} />
-                      <Text style={styles.heroRole}>Bats</Text>
-                      <Text style={[styles.heroName, { color: hero.accent }]} numberOfLines={3}>
+                      <Cutout name={r.batter} team={teamOf.get(r.batterKey)} glow="rgba(215,255,58,0.28)" />
+                      <Text style={[styles.heroRole, { color: hero.accent }]}>Bat</Text>
+                      <Text style={styles.heroName} numberOfLines={2}>
                         {r.batter}
                       </Text>
                     </PressableScale>
-                    <View style={{ paddingTop: 26 }}>
-                      <VsCoin size={40} />
+                    <View style={styles.vsCol}>
+                      {r.reverse ? (
+                        <FlipCoin key={`${r.batterKey}>${r.bowlerKey}`} size={40} label={`Flip it: ${first(r.bowler)} batting to ${first(r.batter)}`} onPress={() => router.setParams({ bat: r.bowlerKey, bowl: r.batterKey })} />
+                      ) : (
+                        <VsCoin size={40} />
+                      )}
                     </View>
                     <PressableScale scaleTo={0.97} onPress={() => router.push({ pathname: '/player/[key]', params: { key: r.bowlerKey } })} wrapStyle={{ flex: 1, minWidth: 0 }} style={styles.who} accessibilityLabel={`${r.bowler}, the bowler`}>
-                      <PlayerAvatar name={r.bowler} size={76} />
-                      <Text style={styles.heroRole}>Bowls</Text>
-                      <Text style={[styles.heroName, { color: hero.violet }]} numberOfLines={3}>
+                      <Cutout name={r.bowler} team={teamOf.get(r.bowlerKey)} glow="rgba(168,150,255,0.3)" />
+                      <Text style={[styles.heroRole, { color: hero.violet }]}>Ball</Text>
+                      <Text style={styles.heroName} numberOfLines={2}>
                         {r.bowler}
                       </Text>
                     </PressableScale>
                   </View>
-                  <View style={styles.tugWrap}>
-                    <Text style={[styles.tugEnd, { color: hero.accent }]}>BAT</Text>
-                    <View style={styles.tug}>
-                      <Tug edge={v.edge} style={StyleSheet.absoluteFill} leftStyle={styles.tugBat} rightStyle={styles.tugBowl} delay={300} />
-                    </View>
-                    <Text style={[styles.tugEnd, { color: hero.violet }]}>BALL</Text>
+                  <View style={[styles.verdict, { borderColor: tone }]}>
+                    <Ionicons name={v.side === 'batter' ? 'trending-up' : v.side === 'bowler' ? 'flash' : 'git-compare-outline'} size={14} color={tone} />
+                    <Text style={[styles.verdictTitle, { color: tone }]}>{v.title}</Text>
                   </View>
-                  <Text style={[styles.verdictTitle, { color: tone }]}>{v.title}</Text>
                   <Text style={styles.verdictLine}>{v.line}</Text>
-                  <SeamDivider color={hero.ink(0.18)} style={{ marginVertical: space.md }} />
-                  <View style={styles.tiles}>
-                    <Tile value={r.balls} label="Balls" color={hero.text} delay={200} />
-                    <Tile value={r.runs} label="Runs" color={hero.text} delay={260} />
-                    <Tile value={r.outs} label="Outs" color={r.outs ? colors.danger : hero.text} delay={320} />
-                    <Tile value={r.dots} label="Dots" color={hero.text} delay={380} />
+                  <View style={styles.board}>
+                    <View style={styles.boardMain} accessibilityLabel={`${r.runs} runs for ${r.outs} dismissals off ${r.balls} balls`}>
+                      <Text style={styles.boardScore}>
+                        {r.runs}
+                        <Text style={styles.boardSlash}>/</Text>
+                        <Text style={{ color: r.outs ? colors.danger : hero.text }}>{r.outs}</Text>
+                      </Text>
+                      <Text style={styles.boardKey}>
+                        Runs / outs · off {r.balls} balls
+                      </Text>
+                    </View>
+                    <View style={styles.boardSide}>
+                      <Text style={styles.boardRate}>{Math.round(sr)}</Text>
+                      <Text style={styles.boardKey}>Strike rate</Text>
+                    </View>
                   </View>
-                  <View style={[styles.tiles, { marginTop: space.md }]}>
-                    <Tile value={r.fours} label="Fours" color={hero.cyan} delay={440} />
-                    <Tile value={r.sixes} label="Sixes" color={hero.accent} delay={500} />
-                    <Tile value={Math.round(sr)} label="Strike rate" color={hero.gold} delay={560} />
-                    <View style={{ flex: 1 }} />
+                  <View style={styles.panels}>
+                    {[
+                      { k: 'Fours', n: r.fours, c: hero.cyan },
+                      { k: 'Sixes', n: r.sixes, c: hero.accent },
+                      { k: 'Dots', n: r.dots, c: hero.text },
+                    ].map((t) => (
+                      <View key={t.k} style={styles.panel}>
+                        <Text style={[styles.panelValue, { color: t.c }]}>{t.n}</Text>
+                        <Text style={styles.boardKey}>{t.k}</Text>
+                      </View>
+                    ))}
                   </View>
-                  <Text style={styles.met}>
-                    Met in {r.matches} match{r.matches === 1 ? '' : 'es'}
-                  </Text>
+                  <View style={styles.met}>
+                    <Ionicons name="calendar-outline" size={12} color={hero.muted} />
+                    <Text style={styles.metText}>
+                      Met in {r.matches} match{r.matches === 1 ? '' : 'es'}
+                    </Text>
+                  </View>
                 </View>
               </FadeIn>
 
-              <View style={styles.grid}>
-                <Stat label="Dismissals" value={String(r.outs)} sub={r.outs ? `one every ${perOut} balls` : 'never out'} tone={r.outs ? colors.danger : undefined} />
-                <Stat label="Average" value={avg} sub="runs a dismissal" />
-                <Stat label="Dot balls" value={`${Math.round((r.dots / Math.max(1, r.balls)) * 100)}%`} sub={`${r.dots} of ${r.balls}`} />
-                <Stat label="Boundaries" value={String(r.fours + r.sixes)} sub={`${plural(r.fours, 'four')} · ${plural(r.sixes, 'six', 'sixes')}`} />
-              </View>
+              <Card style={styles.numbers}>
+                {[
+                  [
+                    { k: 'Dismissals', v: String(r.outs), sub: r.outs ? `One every ${Number(perOut).toFixed(0)} balls` : 'Never out', c: r.outs ? colors.danger : colors.text, icon: 'close-circle' as const, bg: colors.dangerDim, ic: colors.danger },
+                    { k: 'Average', v: avg, sub: 'Runs a dismissal', c: colors.text, icon: 'calculator' as const, bg: colors.goldDim, ic: colors.gold },
+                  ],
+                  [
+                    { k: 'Dot balls', v: `${Math.round((r.dots / Math.max(1, r.balls)) * 100)}%`, sub: `${r.dots} of ${r.balls} balls`, c: colors.text, icon: 'ellipse' as const, bg: colors.surfaceHi, ic: colors.muted },
+                    { k: 'Boundaries', v: String(r.fours + r.sixes), sub: `${plural(r.fours, 'four')} · ${plural(r.sixes, 'six', 'sixes')}`, c: colors.text, icon: 'flash' as const, bg: colors.accentDim, ic: colors.accentInk },
+                  ],
+                ].map((row, ri) => (
+                  <View key={ri} style={[styles.numRow, ri > 0 && styles.numRowRule]}>
+                    {row.map((n, ci) => (
+                      <View key={n.k} style={[styles.num, ci > 0 && styles.numRule]}>
+                        <View style={styles.numHead}>
+                          <View style={[styles.numIcon, { backgroundColor: n.bg }]}>
+                            <Ionicons name={n.icon} size={13} color={n.ic} />
+                          </View>
+                          <Text style={styles.numKey}>{n.k}</Text>
+                        </View>
+                        <Text style={[styles.numValue, { color: n.c }]}>{n.v}</Text>
+                        <Text style={styles.numSub}>{n.sub}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </Card>
               {(v.batterUsual || v.bowlerUsual) && (
-                <View style={{ gap: space.sm, marginTop: space.sm }}>
-                  {v.batterUsual && (
-                    <Stat
-                      wide
-                      label={`${first(r.batter)} v others`}
-                      value={v.batterUsual.sr.toFixed(0)}
-                      sub={`strike rate off everyone else${v.batterUsual.perOut ? `, out every ${v.batterUsual.perOut.toFixed(0)} balls` : ''}. Here: ${sr.toFixed(0)}.`}
-                    />
-                  )}
-                  {v.bowlerUsual && (
-                    <Stat
-                      wide
-                      label={`${first(r.bowler)} v others`}
-                      value={v.bowlerUsual.sr.toFixed(0)}
-                      sub={`strike rate batters get off them${v.bowlerUsual.perOut ? `, a wicket every ${v.bowlerUsual.perOut.toFixed(0)} balls` : ''}. Here: ${sr.toFixed(0)}.`}
-                    />
-                  )}
-                </View>
+                <>
+                  <SectionLabel>Against everyone else</SectionLabel>
+                  <Card style={{ padding: 0 }}>
+                    <View style={styles.cmpHead}>
+                      <View>
+                        <Text style={styles.numKey}>Strike rate in this duel</Text>
+                        <Text style={styles.cmpHere}>{Math.round(sr)}</Text>
+                      </View>
+                      <Text style={styles.cmpHeadSub}>{r.outs ? `Out every ${Number(perOut).toFixed(0)} balls` : 'Never out'}</Text>
+                    </View>
+                    {v.batterUsual && (
+                      <Compare
+                        icon="cricket"
+                        who={`${first(r.batter)} against others`}
+                        note={v.batterUsual.perOut ? `Out every ${v.batterUsual.perOut.toFixed(0)} balls` : 'Never out'}
+                        usual={v.batterUsual.sr}
+                        here={sr}
+                        goodWhenUp
+                      />
+                    )}
+                    {v.bowlerUsual && (
+                      <Compare
+                        icon="baseball"
+                        who={`Batters against ${first(r.bowler)}`}
+                        note={v.bowlerUsual.perOut ? `A wicket every ${v.bowlerUsual.perOut.toFixed(0)} balls` : 'No wickets yet'}
+                        usual={v.bowlerUsual.sr}
+                        here={sr}
+                        goodWhenUp={false}
+                      />
+                    )}
+                  </Card>
+                </>
               )}
             </View>
 
@@ -272,12 +410,6 @@ export default function RivalryScreen() {
                 ))}
               </View>
 
-              {r.reverse && (
-                <>
-                  <SectionLabel>The other way round</SectionLabel>
-                  <FaceOff m={r.reverse} ctx={ctx} />
-                </>
-              )}
             </View>
           </Columns>
         </Page>
@@ -293,31 +425,48 @@ const styles = StyleSheet.create({
   hero: { borderRadius: radius.xl, padding: space.lg, overflow: 'hidden', gap: 2, borderWidth: 1, borderColor: hero.line },
   faceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
   who: { alignItems: 'center', gap: 2 },
-  heroRole: { ...type.label, fontSize: 9, color: hero.muted, marginTop: 6 },
-  heroName: { fontFamily: font.posterBlack, fontSize: 22, lineHeight: 25, textAlign: 'center' },
-  tugWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.lg },
-  tugEnd: { fontSize: 10, fontFamily: font.heavy, letterSpacing: 1 },
-  tug: { flex: 1, flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: hero.ink(0.1) },
-  tugBat: { backgroundColor: colors.accent, borderRadius: 5 },
-  tugBowl: { backgroundColor: hero.violet, borderRadius: 5 },
-  verdictTitle: { fontFamily: font.posterBlack, fontSize: 26, lineHeight: 29, marginTop: space.lg, textAlign: 'center' },
-  verdictLine: { color: hero.text, fontSize: 14, fontFamily: font.medium, lineHeight: 20, textAlign: 'center' },
-  tiles: { flexDirection: 'row', gap: space.sm },
-  met: { color: hero.muted, fontSize: 12, fontFamily: font.medium, marginTop: space.md, textAlign: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
-  stat: {
-    width: '47%',
-    flexGrow: 1,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: space.md,
-  },
-  statWide: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: space.md },
-  statLabel: { ...type.label, fontSize: 9, color: colors.muted },
-  statValue: { fontFamily: font.posterBlack, fontSize: 25, lineHeight: 28, color: colors.text, ...type.num },
-  statSub: { color: colors.faint, fontSize: 11, fontFamily: font.medium },
+  flipFace: { alignItems: 'center', justifyContent: 'center', backgroundColor: hero.gold },
+  vsCol: { alignItems: 'center', paddingTop: 64 },
+  cutout: { width: '100%', maxWidth: 150, height: 150, alignItems: 'center', justifyContent: 'flex-end' },
+  cutoutGlow: { position: 'absolute', bottom: 8, width: '40%', height: 2, borderRadius: 99 },
+  cutoutShadow: { position: 'absolute', bottom: 2, width: '50%', height: 6, borderRadius: 99, backgroundColor: 'rgba(0,0,0,0.35)', boxShadow: '0px 0px 14px 6px rgba(0,0,0,0.35)' } as object,
+  cutoutKit: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 4, alignItems: 'center', justifyContent: 'flex-end' },
+  heroRole: { ...type.label, fontSize: 10, letterSpacing: 1.4, marginTop: 10 },
+  heroName: { fontFamily: font.posterBlack, fontSize: 19, lineHeight: 22, textAlign: 'center', color: hero.text },
+  verdict: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.lg, paddingHorizontal: 14, height: 34, borderRadius: radius.pill, borderWidth: 1, backgroundColor: hero.ink(0.06) },
+  verdictTitle: { fontFamily: font.posterBlack, fontSize: 17, lineHeight: 21 },
+  verdictLine: { color: hero.muted, fontSize: 13, fontFamily: font.medium, lineHeight: 19, textAlign: 'center', marginTop: space.sm, paddingHorizontal: space.sm },
+  board: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md, marginTop: space.lg, padding: space.md, borderRadius: radius.lg, ...glass },
+  boardMain: { flexShrink: 1 },
+  boardScore: { fontFamily: font.posterBlack, fontSize: 52, lineHeight: 56, color: hero.text, letterSpacing: -1, ...type.num },
+  boardSlash: { color: hero.faint },
+  boardKey: { ...type.label, fontSize: 9, color: hero.muted },
+  boardSide: { alignItems: 'flex-end', paddingBottom: 2 },
+  boardRate: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 34, color: hero.gold, ...type.num },
+  panels: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
+  panel: { flex: 1, paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md, ...glass },
+  panelValue: { fontFamily: font.posterBlack, fontSize: 26, lineHeight: 30, ...type.num },
+  met: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: space.md },
+  metText: { color: hero.muted, fontSize: 12, fontFamily: font.medium },
+  numbers: { padding: 0, marginTop: space.md },
+  numRow: { flexDirection: 'row' },
+  numRowRule: { borderTopWidth: 1, borderTopColor: colors.border },
+  num: { flex: 1, padding: space.md, gap: 4 },
+  numRule: { borderLeftWidth: 1, borderLeftColor: colors.border },
+  numHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  numIcon: { width: 22, height: 22, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  numKey: { ...type.label, fontSize: 9, color: colors.muted },
+  numValue: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 34, marginTop: 2, ...type.num },
+  numSub: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
+  cmpHead: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md, padding: space.md },
+  cmpHere: { fontFamily: font.posterBlack, fontSize: 36, lineHeight: 40, color: colors.text, ...type.num },
+  cmpHeadSub: { color: colors.muted, fontSize: 12, fontFamily: font.medium, paddingBottom: 6 },
+  cmp: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: 12 },
+  cmpIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceHi },
+  cmpWho: { color: colors.text, fontSize: 14, fontFamily: font.bold },
+  cmpUsual: { fontFamily: font.posterBlack, fontSize: 22, lineHeight: 24, color: colors.text, ...type.num },
+  cmpGap: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 20, paddingHorizontal: 7, borderRadius: radius.pill },
+  cmpGapText: { fontSize: 11, fontFamily: font.heavy, ...type.num },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   swatch: { width: 10, height: 10, borderRadius: 3 },

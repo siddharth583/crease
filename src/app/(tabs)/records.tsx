@@ -5,7 +5,7 @@ import { useMemo, useState, type ComponentProps, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PlayerAvatar } from '../../components/Avatar.tsx';
-import { BallChip, Card, Chip, FadeIn, IconButton, inYear, matchYears, PressableScale, Screen, Sheet, useToast, YearChips } from '../../components/ui.tsx';
+import { BallChip, Card, Chip, FadeIn, IconButton, inYear, matchYears, PitchStripes, PressableScale, Screen, Sheet, useToast, YearChips } from '../../components/ui.tsx';
 import { CountUp, Rise, Sheen, Tug } from '../../components/motion.tsx';
 import { OvalGround, SeamDivider } from '../../components/cricket.tsx';
 import { FaceOff } from '../../components/FaceOff.tsx';
@@ -18,7 +18,7 @@ import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
 import { useSquad } from '../../store/squad.ts';
 import { plural } from '../../engine/text.ts';
-import { colors, edge, font, gradients, hero, isDay, ownTeamTheme, radius, space, type } from '../../theme.ts';
+import { colors, edge, font, gradients, hero, isDay, ownTeamTheme, radius, space, type, glass } from '../../theme.ts';
 
 const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 const openPlayer = (key: string) => () => router.push({ pathname: '/player/[key]', params: { key } });
@@ -115,49 +115,72 @@ function Boards({ children }: { children: ReactNode[] }) {
   );
 }
 
-/** The season as a scoreboard on the outfield. */
+/**
+ * The season as a ground scoreboard: the total runs as the one big number with the scoring rate beside it, then
+ * wickets, sixes and fours in recessed panels, then fifties and ducks as small honours along the bottom.
+ */
 function Season({ s, year, wide }: { s: ReturnType<typeof records>['summary']; year: number | null; wide?: boolean }) {
-  const big = [
-    { k: 'Matches', v: s.matches },
-    { k: 'Runs', v: s.runs },
-    { k: 'Wickets', v: s.wickets },
-    { k: 'Sixes', v: s.sixes },
+  const overs = s.balls / 6;
+  const rate = overs > 0 ? s.runs / overs : 0;
+  const perMatch = s.matches > 0 ? Math.round(s.runs / s.matches) : 0;
+  const panels = [
+    { k: 'Wickets', v: s.wickets, color: hero.text },
+    { k: 'Sixes', v: s.sixes, color: hero.accent },
+    { k: 'Fours', v: s.fours, color: hero.cyan },
   ];
-  const small = [
-    { k: 'Fours', v: s.fours, icon: 'arrow-forward-circle' as IconName },
-    { k: 'Fifties', v: s.fifties, icon: 'ribbon' as IconName },
-    { k: 'Ducks', v: s.ducks, icon: 'egg-outline' as IconName },
-  ];
+  const oversText = `${Math.floor(s.balls / 6)}${s.balls % 6 ? `.${s.balls % 6}` : ''}`;
   return (
-    <View style={[styles.season, wide && styles.seasonWide]} accessibilityLabel={`Season totals: ${s.matches} matches, ${s.runs} runs, ${s.wickets} wickets, ${s.sixes} sixes`}>
+    <View
+      style={[styles.season, wide && styles.seasonWide]}
+      accessibilityLabel={`Season totals: ${s.runs} runs in ${s.matches} matches and ${oversText} overs, ${rate.toFixed(2)} an over. ${s.wickets} wickets, ${s.sixes} sixes, ${s.fours} fours, ${s.fifties} fifties, ${s.ducks} ducks`}
+    >
       <LinearGradient pointerEvents="none" colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      <OvalGround opacity={0.07} />
-      <Sheen />
+      <PitchStripes tint="255,255,255" />
       <View style={styles.seasonTop}>
-        <Ionicons name="trophy" size={14} color={hero.gold} />
-        <Text style={styles.seasonLabel}>{year === null ? 'The season so far' : `${year} season`}</Text>
+        <View style={styles.seasonTitle}>
+          <Ionicons name="trophy" size={14} color={hero.gold} />
+          <Text style={styles.seasonLabel}>{year === null ? 'The season so far' : `${year} season`}</Text>
+        </View>
+        <Text style={styles.seasonMeta}>
+          {s.matches} {s.matches === 1 ? 'match' : 'matches'} · {oversText} ov
+        </Text>
       </View>
-      <View style={styles.seasonRow}>
-        {big.map((c, i) => (
-          <View key={c.k} style={{ flex: c.k === 'Runs' ? 1.5 : 1 }}>
-            <CountUp value={c.v} delay={i * 90} style={[styles.seasonValue, wide && { fontSize: 46, lineHeight: 50 }]} />
+      <View style={styles.seasonHero}>
+        <View style={{ flexShrink: 1 }}>
+          <CountUp value={s.runs} style={[styles.seasonRuns, wide && { fontSize: 72, lineHeight: 74 }]} />
+          <Text style={styles.seasonKey}>Runs scored</Text>
+        </View>
+        <View style={styles.seasonRates}>
+          <View style={styles.seasonRate}>
+            <Text style={styles.seasonRateValue}>{rate.toFixed(2)}</Text>
+            <Text style={styles.seasonRateKey}>Run rate</Text>
+          </View>
+          <View style={styles.seasonRate}>
+            <Text style={styles.seasonRateValue}>{perMatch}</Text>
+            <Text style={styles.seasonRateKey}>Per match</Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.seasonPanels}>
+        {panels.map((c) => (
+          <View key={c.k} style={styles.seasonPanel}>
+            <CountUp value={c.v} style={[styles.seasonPanelValue, { color: c.color }]} />
             <Text style={styles.seasonKey}>{c.k}</Text>
           </View>
         ))}
       </View>
-      <SeamDivider color={hero.ink(0.18)} style={{ marginVertical: space.md }} />
-      <View style={styles.seasonRow}>
-        {small.map((c, i) => (
-          <View key={c.k} style={styles.seasonSmall}>
-            <Ionicons name={c.icon} size={16} color={hero.muted} />
-            <CountUp value={c.v} delay={400 + i * 90} style={styles.seasonSmallValue} />
-            <Text style={styles.seasonSmallKey}>{c.k}</Text>
-          </View>
-        ))}
-        <View style={styles.seasonSmall}>
-          <Ionicons name="timer-outline" size={16} color={hero.muted} />
-          <CountUp value={Math.round(s.balls / 6)} delay={700} style={styles.seasonSmallValue} />
-          <Text style={styles.seasonSmallKey}>Overs</Text>
+      <View style={styles.seasonHonours}>
+        <View style={styles.seasonHonour}>
+          <Ionicons name="ribbon" size={13} color={hero.gold} />
+          <Text style={styles.seasonHonourText}>
+            <Text style={styles.seasonHonourValue}>{s.fifties}</Text> {s.fifties === 1 ? 'fifty' : 'fifties'}
+          </Text>
+        </View>
+        <View style={styles.seasonHonour}>
+          <Ionicons name="egg-outline" size={13} color={hero.muted} />
+          <Text style={styles.seasonHonourText}>
+            <Text style={styles.seasonHonourValue}>{s.ducks}</Text> {s.ducks === 1 ? 'duck' : 'ducks'}
+          </Text>
         </View>
       </View>
     </View>
@@ -609,16 +632,26 @@ const styles = StyleSheet.create({
   pageSub: { color: colors.muted, fontSize: 13, fontFamily: font.medium, marginTop: 2 },
   seasonWide: { padding: space.xl },
   season: { borderRadius: radius.xl, padding: space.lg, marginTop: space.md, overflow: 'hidden', borderWidth: 1, borderColor: hero.line },
-  seasonTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  seasonTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  seasonTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   seasonLabel: { ...type.label, color: hero.gold },
-  seasonRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
-  seasonValue: { fontFamily: font.posterBlack, fontSize: 28, lineHeight: 32, color: hero.text, ...type.num },
-  seasonKey: { ...type.label, fontSize: 9, color: hero.muted },
-  seasonSmall: { flex: 1, gap: 1 },
-  seasonSmallValue: { fontFamily: font.posterBlack, fontSize: 22, lineHeight: 26, color: hero.text, ...type.num },
-  seasonSmallKey: { ...type.label, fontSize: 9, color: hero.muted },
+  seasonMeta: { color: hero.muted, fontSize: 12, fontFamily: font.medium, ...type.num },
+  seasonHero: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md, marginTop: space.md },
+  seasonRuns: { fontFamily: font.posterBlack, fontSize: 60, lineHeight: 62, color: hero.text, letterSpacing: -1, ...type.num },
+  seasonKey: { ...type.label, fontSize: 10, color: hero.muted },
+  seasonRates: { flexDirection: 'row', gap: space.lg, paddingBottom: 2 },
+  seasonRate: { alignItems: 'flex-end' },
+  seasonRateValue: { fontFamily: font.heavy, fontSize: 20, lineHeight: 24, color: hero.text, ...type.num },
+  seasonRateKey: { ...type.label, fontSize: 9, color: hero.muted },
+  seasonPanels: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
+  seasonPanel: { flex: 1, paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md, ...glass },
+  seasonPanelValue: { fontFamily: font.posterBlack, fontSize: 30, lineHeight: 34, ...type.num },
+  seasonHonours: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
+  seasonHonour: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: hero.ink(0.07) },
+  seasonHonourText: { color: hero.muted, fontSize: 12, fontFamily: font.medium },
+  seasonHonourValue: { color: hero.text, fontFamily: font.heavy, ...type.num },
   // Room above as padding, not margin: stuck to the top, a margin would leave a strip the boards scroll through.
-  tabs: { backgroundColor: colors.bg, paddingTop: space.md, paddingBottom: space.md },
+  tabs: { paddingTop: space.md, paddingBottom: space.md },
   empty: { color: colors.muted, fontSize: 13, fontFamily: font.medium, lineHeight: 19, padding: space.lg, paddingTop: space.sm },
   plaqueHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.sm },
   plaqueTitle: { flex: 1, color: colors.text, fontSize: 17, lineHeight: 21, fontFamily: font.posterBlack, letterSpacing: -0.3 },

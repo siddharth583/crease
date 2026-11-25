@@ -7,8 +7,8 @@ import { photoFor } from '../engine/photos.ts';
 import { displayName } from '../engine/stats.ts';
 import { usePhotos } from '../store/sync.tsx';
 import { font, hero, radius, space, teamTheme, type } from '../theme.ts';
-import { Jersey, OvalGround } from './cricket.tsx';
-import { css, PopIn, Sheen, useReducedMotion } from './motion.tsx';
+import { Jersey } from './cricket.tsx';
+import { css, PopIn, useReducedMotion } from './motion.tsx';
 import { PressableScale } from './ui.tsx';
 import { useLayout } from './layout.tsx';
 import { crestOf, TeamCrest } from './TeamCrest.tsx';
@@ -203,12 +203,10 @@ export function MomAward({
     .join('');
   return (
     <PopIn delay={350} turn={-3}>
-      {/* A brass frame: a gradient one pixel and a half wide around the whole award. */}
-      <LinearGradient colors={[BRASS_HI, '#9A7A3A', BRASS]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.frame}>
+      {/* Frosted glass over whatever sits behind it (the match hero's ground), edged in brass: no backdrop of its own. */}
+      <View style={s.frame}>
         <PressableScale scaleTo={0.98} disabled={disabled} dimWhenDisabled={false} onPress={onPress} accessibilityLabel={`Man of the Match: ${name}, ${summary}`} style={s.card}>
-          <LinearGradient colors={['#14301F', '#0B1D13', '#07130C']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-          <OvalGround color={BRASS} opacity={0.08} />
-          <Sheen every={6000} strength={0.08} />
+          <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.03)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
           <View style={[s.eyebrow, { marginBottom: space.sm, minHeight: 28 }, action ? { paddingRight: 80 } : null]}>
             <MaterialCommunityIcons name="star-four-points" size={11} color={BRASS} />
             <Text style={s.eyebrowText}>Man of the Match</Text>
@@ -256,13 +254,13 @@ export function MomAward({
         </PressableScale>
         {/* Outside the award's own button: a button can't hold another one. */}
         {action && <View style={s.action}>{action}</View>}
-      </LinearGradient>
+      </View>
     </PopIn>
   );
 }
 
 const s = StyleSheet.create({
-  frame: { borderRadius: radius.xl + 2, padding: 1.5, boxShadow: '0px 10px 40px rgba(227,190,114,0.18)' } as object,
+  frame: { borderRadius: radius.xl, borderWidth: 1, borderColor: 'rgba(227,190,114,0.45)', backgroundColor: 'rgba(10,22,15,0.28)', backdropFilter: 'blur(16px) saturate(140%)', WebkitBackdropFilter: 'blur(16px) saturate(140%)', boxShadow: 'inset 0px 1px 0px rgba(255,255,255,0.18), 0px 12px 32px rgba(0,0,0,0.25)', overflow: 'hidden' } as object,
   card: { borderRadius: radius.xl, overflow: 'hidden', padding: space.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   stage: { alignItems: 'center', justifyContent: 'center' },

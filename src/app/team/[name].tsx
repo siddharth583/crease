@@ -20,7 +20,7 @@ import { overall } from '../../engine/squad.ts';
 import { nameKey, recentResults, sideStrength, strengthOf, strengths } from '../../engine/teams.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
-import { colors, font, hero, ink, ownTeamTheme, radius, space, teamTheme, type TeamTheme, type } from '../../theme.ts';
+import { colors, font, hero, ink, ownTeamTheme, radius, space, teamTheme, type TeamTheme, type, glass } from '../../theme.ts';
 
 // One side: its record and form, its squad with their form, who scores its runs and takes its wickets, its best and
 // worst totals, how it does against the other side, and every result. In the side's own colours.
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
   name: { fontFamily: font.posterBlack, fontSize: 34, lineHeight: 38, color: hero.text, letterSpacing: -1.2 },
   form: { gap: 6 },
   streak: { color: hero.muted, fontSize: 12, fontFamily: font.semibold },
-  record: { backgroundColor: hero.inset, borderRadius: radius.md, padding: space.md, gap: space.md },
+  record: { ...glass, borderRadius: radius.md, padding: space.md, gap: space.md },
   winRow: { flexDirection: 'row', alignItems: 'center' },
   winValue: { color: hero.text, fontSize: 46, lineHeight: 50, fontFamily: font.posterBlack, ...type.num },
   winPct: { color: hero.muted, fontSize: 20, fontFamily: font.posterBlack, marginBottom: 7, marginLeft: 2 },

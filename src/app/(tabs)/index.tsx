@@ -585,7 +585,7 @@ export default function Home() {
               {access.score && matches.length > 0 && (
                 <QuickTile icon="refresh" label="Rematch" accessibilityLabel="Rematch the last match" onPress={() => router.push({ pathname: '/new', params: { rematch: matches[0].id } })} />
               )}
-              {access.admin && <QuickTile icon="download-outline" label="Import match file" accessibilityLabel="Import a match file" onPress={() => void importFile()} />}
+              {access.admin && <QuickTile icon="download-outline" label="Import" accessibilityLabel="Import a match file" onPress={() => void importFile()} />}
               {matches.length > 0 && <QuickTile icon="cloud-upload-outline" label="Back up" accessibilityLabel="Back up all matches" onPress={() => void backUp()} />}
             </View>
           </FadeIn>

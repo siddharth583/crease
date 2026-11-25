@@ -272,7 +272,8 @@ export function ChaseInsights({ match, state }: { match: Match; state: MatchStat
 
 const ordinal = (n: number) => `${n}${['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : Math.min(n % 10, 4) % 4] ?? 'th'}`;
 
-/** Each partnership as a bar, as long as it is next to the best stand; the best one wears a brass tag. */
+/** Each partnership as a broadcast-style bar: each batter's runs inside their own colour, the stand's total above it,
+ * the bar as long as it is next to the best stand. The best one wears a brass tag. */
 export function Partnerships({ match, s }: { match: Match; s: InningsState }) {
   const list = s.partnerships.filter((p) => p.runs || p.balls);
   if (!list.length) return null;
@@ -298,47 +299,52 @@ export function Partnerships({ match, s }: { match: Match; s: InningsState }) {
       <SectionLabel right={<Text style={styles.count}>runs added together</Text>}>Partnerships</SectionLabel>
       <Card style={{ gap: space.md }}>
         {list.map((p, i) => {
-          // Each batter's share of the stand in their colour, extras in grey.
+          // A broadcast-style bar: each batter's runs printed inside their own colour, extras in grey, the bar as long as
+          // it is next to the best stand (never so short the numbers can't be read).
           const pair = pairs[i];
           const extras = Math.max(0, p.runs - pair.reduce((n, x) => n + x.runs, 0));
           const unbroken = i >= s.wickets;
+          const isBest = i === best && p.runs > 0 && list.length > 1;
+          const segs = [...pair.map((x) => ({ key: x.id, runs: x.runs, bg: x.color, fg: x.side === 0 ? colors.onAccent : '#FFFFFF', label: String(x.runs) })), { key: 'extras', runs: extras, bg: ink(0.16), fg: colors.muted, label: `+${extras}` }].filter((x) => x.runs > 0);
           return (
-            <View key={i}>
+            <View key={i} accessibilityLabel={`${ordinal(i + 1)} wicket: ${p.runs} off ${p.balls} balls. ${pair.map((x) => `${playerName(match, x.id)} ${x.runs}`).join(', ')}${extras ? `, ${extras} extras` : ''}${unbroken ? ', unbroken' : ''}`}>
               <View style={styles.pRow}>
-                <Text style={styles.pWicket}>{ordinal(i + 1)} wkt{unbroken ? ' · unbroken' : ''}</Text>
-                {i === best && p.runs > 0 && list.length > 1 && (
-                  <View style={styles.bestTag}>
-                    <Ionicons name="star" size={9} color={colors.gold} />
-                    <Text style={styles.bestTagText}>BEST</Text>
-                  </View>
-                )}
+                <View style={[styles.pBadge, isBest && styles.pBadgeBest]}>
+                  {isBest && <Ionicons name="star" size={9} color={colors.gold} />}
+                  <Text style={[styles.pWicket, isBest && { color: colors.gold }]}>{ordinal(i + 1)} wkt</Text>
+                </View>
+                {unbroken && <Text style={styles.pUnbroken}>Unbroken</Text>}
                 <View style={{ flex: 1 }} />
-                <Text style={styles.pRuns}>
-                  {p.runs}
-                  <Text style={styles.pBalls}> ({p.balls})</Text>
-                </Text>
+                <Text style={[styles.pRuns, isBest && { color: colors.gold }]}>{p.runs}</Text>
+                <Text style={styles.pBalls}>off {p.balls}</Text>
               </View>
               <View style={styles.pTrack}>
-                <Grow share={p.runs / most} delay={150 + i * 90} style={styles.pSplit}>
-                  {p.runs > 0 ? (
-                    [...pair, { id: 'extras', runs: extras, color: ink(0.2) }]
-                      .filter((x) => x.runs > 0)
-                      .map((x) => <View key={x.id} style={{ flex: x.runs, backgroundColor: x.color }} />)
+                <Grow share={p.runs > 0 ? Math.max(0.34, p.runs / most) : 1} delay={150 + i * 90} style={styles.pSplit}>
+                  {segs.length ? (
+                    segs.map((x) => (
+                      <View key={x.key} style={[styles.pSeg, { flex: x.runs, backgroundColor: x.bg }]}>
+                        <Text style={[styles.pSegText, { color: x.fg }]} numberOfLines={1}>
+                          {x.label}
+                        </Text>
+                      </View>
+                    ))
                   ) : (
-                    <View style={{ flex: 1, backgroundColor: ink(0.08) }} />
+                    <View style={[styles.pSeg, { flex: 1, backgroundColor: ink(0.06) }]}>
+                      <Text style={[styles.pSegText, { color: colors.faint }]}>no runs</Text>
+                    </View>
                   )}
                 </Grow>
               </View>
               <View style={styles.pPair}>
                 {pair.map((x, k) => (
-                  <View key={x.id} style={[styles.pBatter, (k === 1 || x.side === 1) && { justifyContent: 'flex-end' }]}>
-                    <View style={[styles.pDot, { backgroundColor: x.color }]} />
-                    <Text style={styles.pNames} numberOfLines={1}>
-                      {playerName(match, x.id)} <Text style={styles.pOwn}>{x.runs}</Text>
+                  <View key={x.id} style={[styles.pBatter, k === 1 && { justifyContent: 'flex-end' }]}>
+                    {k === 0 && <View style={[styles.pDot, { backgroundColor: x.color }]} />}
+                    <Text style={[styles.pNames, k === 1 && { textAlign: 'right' }]} numberOfLines={1}>
+                      {playerName(match, x.id)}
                     </Text>
+                    {k === 1 && <View style={[styles.pDot, { backgroundColor: x.color }]} />}
                   </View>
                 ))}
-                {extras > 0 && <Text style={styles.pExtras}>+{extras} extra{extras === 1 ? '' : 's'}</Text>}
               </View>
             </View>
           );
@@ -438,20 +444,21 @@ const styles = StyleSheet.create({
   oddsTeam: { color: colors.muted, fontSize: 12, fontFamily: font.semibold },
   split: { height: 8, borderRadius: 4, overflow: 'hidden', marginVertical: space.sm },
   axisCaption: { color: colors.faint, fontSize: 10, fontFamily: font.medium, textAlign: 'center', marginTop: 4, letterSpacing: 0.4 },
-  pRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: 6 },
-  pWicket: { color: colors.faint, fontFamily: font.semibold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase' },
-  bestTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.goldDim, borderRadius: radius.pill, paddingHorizontal: 7, paddingVertical: 2 },
-  bestTagText: { color: colors.gold, fontSize: 9, fontFamily: font.heavy, letterSpacing: 1 },
-  pTrack: { height: 10, borderRadius: 5, backgroundColor: ink(0.05), overflow: 'hidden' },
-  pSplit: { flexDirection: 'row', gap: 2, height: 10, borderRadius: 5, overflow: 'hidden' },
-  pPair: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, marginTop: 6 },
+  pRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 5 },
+  pBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'center' },
+  pBadgeBest: { backgroundColor: colors.goldDim, borderRadius: radius.pill, paddingHorizontal: 7, paddingVertical: 2 },
+  pWicket: { color: colors.muted, fontFamily: font.semibold, fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase' },
+  pUnbroken: { alignSelf: 'center', color: colors.accentInk, fontFamily: font.heavy, fontSize: 9, letterSpacing: 0.8, textTransform: 'uppercase', backgroundColor: colors.accentDim, borderRadius: radius.pill, paddingHorizontal: 7, paddingVertical: 3, overflow: 'hidden' },
+  pTrack: { height: 18, borderRadius: 9, backgroundColor: ink(0.04), overflow: 'hidden' },
+  pSplit: { flexDirection: 'row', gap: 2, height: 18, borderRadius: 9, overflow: 'hidden' },
+  pSeg: { minWidth: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  pSegText: { fontFamily: font.heavy, fontSize: 10.5, ...type.num },
+  pPair: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, marginTop: 5 },
   pBatter: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  pDot: { width: 8, height: 8, borderRadius: 4 },
-  pNames: { flexShrink: 1, color: colors.text, fontSize: 13, fontFamily: font.semibold },
-  pOwn: { fontFamily: font.posterBlack, ...type.num },
-  pExtras: { color: colors.faint, fontSize: 11, fontFamily: font.medium },
-  pRuns: { fontFamily: font.posterBlack, fontSize: 18, color: colors.text, ...type.num },
-  pBalls: { fontFamily: font.poster, fontSize: 13, color: colors.faint },
+  pDot: { width: 7, height: 7, borderRadius: 4 },
+  pNames: { flexShrink: 1, color: colors.muted, fontSize: 12, fontFamily: font.semibold },
+  pRuns: { fontFamily: font.posterBlack, fontSize: 17, lineHeight: 20, color: colors.text, ...type.num },
+  pBalls: { color: colors.faint, fontSize: 11, fontFamily: font.medium, ...type.num },
   count: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
   over: { paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: 1, borderTopColor: colors.border, gap: 4 },
   overHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: 4 },

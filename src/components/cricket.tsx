@@ -1,3 +1,4 @@
+import { LinearGradient as Fade } from 'expo-linear-gradient';
 import { memo, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Circle, ClipPath, Defs, Ellipse, G, Line, LinearGradient, Path, RadialGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
@@ -135,24 +136,14 @@ export const OvalGround = memo(function OvalGround({ color = '#FFFFFF', opacity 
 });
 
 /**
- * A divider drawn like the seam of a cricket ball: two rails with slanted stitches between. Use it in place of a
- * hairline between the parts of a card, or under a section's heading.
+ * A quiet divider between the parts of a card: one hairline that fades out at both ends. (It keeps its old name and
+ * height so every card spaces the same.) `stitch` is no longer used.
  */
-export function SeamDivider({ color, style, stitch = 9 }: { color?: string; style?: StyleProp<ViewStyle>; stitch?: number }) {
-  const [w, setW] = useState(0);
-  const c = color ?? ink(0.16);
-  const n = Math.max(0, Math.floor(w / stitch));
+export function SeamDivider({ color, style }: { color?: string; style?: StyleProp<ViewStyle>; stitch?: number }) {
+  const c = color ?? ink(0.14);
   return (
-    <View onLayout={(e) => setW(e.nativeEvent.layout.width)} style={[{ height: 9 }, style]}>
-      {w > 0 && (
-        <Svg width={w} height={9}>
-          <Line x1="0" y1="1" x2={w} y2="1" stroke={c} strokeWidth="1" />
-          <Line x1="0" y1="8" x2={w} y2="8" stroke={c} strokeWidth="1" />
-          {Array.from({ length: n }, (_, i) => (
-            <Line key={i} x1={i * stitch + 2} y1="2.5" x2={i * stitch + 5.5} y2="6.5" stroke={c} strokeWidth="1.2" strokeLinecap="round" />
-          ))}
-        </Svg>
-      )}
+    <View style={[{ height: 9, justifyContent: 'center' }, style]} accessible={false}>
+      <Fade colors={['transparent', c, c, 'transparent']} locations={[0, 0.15, 0.85, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ height: 1 }} />
     </View>
   );
 }

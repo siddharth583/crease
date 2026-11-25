@@ -89,6 +89,19 @@ export const hero = {
   inset: 'rgba(0,0,0,0.32)',
 };
 
+/**
+ * Frosted glass for a card that sits on a dark ground panel (scores, stats, the Man of the Match): the ground shows
+ * through, blurred, with a light edge and a soft top highlight. Web blurs; native falls back to the tinted pane.
+ */
+export const glass = {
+  backgroundColor: 'rgba(10,22,15,0.28)',
+  borderWidth: 1,
+  borderColor: 'rgba(255,255,255,0.14)',
+  backdropFilter: 'blur(16px) saturate(140%)',
+  WebkitBackdropFilter: 'blur(16px) saturate(140%)',
+  boxShadow: 'inset 0px 1px 0px rgba(255,255,255,0.16), 0px 10px 28px rgba(0,0,0,0.22)',
+} as object;
+
 /** How day cards sit on the page: no outline, a soft lift. Nothing at night. */
 export const edge = isDay
   ? { borderColor: 'rgba(14,19,13,0.04)', boxShadow: '0px 1px 2px rgba(14,19,13,0.04), 0px 10px 30px rgba(14,19,13,0.06)' }

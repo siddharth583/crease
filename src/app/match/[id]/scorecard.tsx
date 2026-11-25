@@ -1,5 +1,8 @@
 import { MomAward } from '../../../components/MomAward.tsx';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { PlayerPhoto } from '../../../components/MomAward.tsx';
+import { crestOf } from '../../../components/TeamCrest.tsx';
+import { photoFor } from '../../../engine/photos.ts';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, type ComponentProps, type ReactNode } from 'react';
@@ -13,17 +16,17 @@ import { canChangeResult, ResultSheet } from '../../../components/ResultSheet.ts
 import { BallByBall, Partnerships, ChaseInsights, RunRace } from '../../../components/MatchCharts.tsx';
 import { FallOfWickets, Grow, Manhattan, RunMix } from '../../../components/ScoreCharts.tsx';
 import { TeamCrest } from '../../../components/TeamCrest.tsx';
-import { OvalGround, SeamDivider } from '../../../components/cricket.tsx';
+import { Jersey, OvalGround, SeamDivider } from '../../../components/cricket.tsx';
 import { CountUp, Pulse, PopIn, Rise, Sheen } from '../../../components/motion.tsx';
-import { BallChip, Button, Card, IconButton, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast, WideHead } from '../../../components/ui.tsx';
+import { BallChip, Button, Card, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, Sheet, useToast, WideHead } from '../../../components/ui.tsx';
 import { Columns, Page, useLayout } from '../../../components/layout.tsx';
 import { BOWLER_WICKETS, dismissal, fairBalls, matchState, oversText, playerName, renamePlayer, replaceOver, retirements, setRetirement, type BatterLine, type BowlerLine, type InningsState, type MatchState } from '../../../engine/engine.ts';
-import { isPlaceholder, keyFor, momChoices, playerOfTheMatch, type PlayerOfMatch } from '../../../engine/stats.ts';
+import { displayName, isPlaceholder, keyFor, momChoices, playerOfTheMatch, type PlayerOfMatch } from '../../../engine/stats.ts';
 import type { BallEvent, Match, Team } from '../../../engine/types.ts';
 import { useMatch, useMatches } from '../../../store/matches.tsx';
 import { useMatchFiles } from '../../../store/useMatchFiles.ts';
-import { useAccess, useClubSync } from '../../../store/sync.tsx';
-import { colors, radius, space, type, font, edge, gradients, hero, ink } from '../../../theme.ts';
+import { useAccess, useClubSync, usePhotos } from '../../../store/sync.tsx';
+import { colors, radius, space, type, font, edge, gradients, hero, ink, glass } from '../../../theme.ts';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -460,49 +463,99 @@ function MenuRow({ icon, title, sub, onPress, danger, label }: { icon: IconName;
   );
 }
 
+/** A star of the match as an open cut-out on the grass (their kit with initials until a photo is added). */
+function StarFigure({ name, team }: { name: string; team: string }) {
+  const photo = photoFor(usePhotos(), name);
+  const initials = displayName(name)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((x) => x[0]!.toUpperCase())
+    .join('');
+  const kit = crestOf(team);
+  return (
+    <View style={styles.figure}>
+      <View style={styles.figureShadow} />
+      {photo ? (
+        <PlayerPhoto uri={photo} />
+      ) : (
+        <View style={styles.figureKit}>
+          <Jersey size={60} from={kit.from} to={kit.to} initials={initials} id={`ws${initials}${name.length}`} />
+        </View>
+      )}
+    </View>
+  );
+}
+
 /** The Summary tab: the match story, who starred, and the run race. */
 function SummaryTab({ match, state, wide }: { match: Match; state: MatchState; wide: boolean }) {
   const story = matchStory(match, state);
+  // Each innings as a small stage: its top scorer and the best bowler against it, standing as cut-outs.
+  const open = (team: Team, id: string) => {
+    const p = team.players.find((x) => x.id === id);
+    router.push({ pathname: '/player/[key]', params: { key: keyFor(team, p ?? { name: playerName(match, id) }) } });
+  };
   const leaders = state.innings.slice(0, 2).flatMap((s, i) => {
     if (!match.innings[i].events.length) return [];
     const bat = topBatter(s);
     const bowl = bestBowler(s);
-    const cards: ReactNode[] = [];
-    if (bat)
-      cards.push(
-        <View key={`b${i}`} style={styles.leader}>
-          <Text style={styles.leaderLabel}>TOP SCORER · {shortSide(s.battingTeam.name, match).toUpperCase()}</Text>
-          <Text style={styles.leaderName} numberOfLines={1}>
-            {playerName(match, bat.id)}
+    if (!bat && !bowl) return [];
+    return [
+      <Card key={i} style={styles.stage}>
+        <View style={styles.stageHead}>
+          <TeamCrest name={s.battingTeam.name} size={20} />
+          <Text style={styles.stageTitle} numberOfLines={1}>
+            {shortSide(s.battingTeam.name, match)} innings
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
-            <CountUp value={bat.runs} style={styles.leaderBig} delay={300} />
-            <Text style={styles.leaderUnit}>runs · {bat.balls} balls</Text>
-          </View>
-          <Text style={styles.leaderSub}>
-            {bat.fours} fours · {bat.sixes} sixes · SR {sr(bat.runs, bat.balls)}
+          <Text style={styles.stageScore}>
+            {s.runs}/{s.wickets}
           </Text>
-        </View>,
-      );
-    if (bowl)
-      cards.push(
-        <View key={`w${i}`} style={styles.leader}>
-          <Text style={styles.leaderLabel}>BEST BOWLER · {shortSide(s.bowlingTeam.name, match).toUpperCase()}</Text>
-          <Text style={styles.leaderName} numberOfLines={1}>
-            {playerName(match, bowl.id)}
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
-            <Text style={[styles.leaderBig, { color: colors.gold }]}>
-              {bowl.wickets}/{bowl.runs}
-            </Text>
-            <Text style={styles.leaderUnit}>in {oversText(bowl.balls)} ov</Text>
-          </View>
-          <Text style={styles.leaderSub}>
-            economy {econ(bowl.runs, bowl.balls)} · {bowl.maidens} maiden{bowl.maidens === 1 ? '' : 's'}
-          </Text>
-        </View>,
-      );
-    return cards;
+        </View>
+        <View style={styles.stageRow}>
+          {bat && (
+            <PressableScale scaleTo={0.97} wrapStyle={{ flex: 1 }} onPress={() => open(s.battingTeam, bat.id)} accessibilityLabel={`Top scorer: ${playerName(match, bat.id)}, ${bat.runs} off ${bat.balls}`} style={styles.starCol}>
+              <StarFigure name={playerName(match, bat.id)} team={s.battingTeam.name} />
+              <View style={[styles.starTag, { backgroundColor: colors.accentDim }]}>
+                <MaterialCommunityIcons name="cricket" size={10} color={colors.accentInk} />
+                <Text style={[styles.starTagText, { color: colors.accentInk }]}>Top scorer</Text>
+              </View>
+              <Text style={styles.starName} numberOfLines={1}>
+                {playerName(match, bat.id)}
+              </Text>
+              <Text style={styles.starBig}>
+                {bat.runs}
+                {bat.out ? '' : '*'}
+                <Text style={styles.starBalls}> ({bat.balls})</Text>
+              </Text>
+              <Text style={styles.starSub} numberOfLines={1}>
+                {bat.fours}×4 · {bat.sixes}×6 · SR {sr(bat.runs, bat.balls)}
+              </Text>
+            </PressableScale>
+          )}
+          {bat && bowl && <View style={styles.stageRule} />}
+          {bowl && (
+            <PressableScale scaleTo={0.97} wrapStyle={{ flex: 1 }} onPress={() => open(s.bowlingTeam, bowl.id)} accessibilityLabel={`Best bowler: ${playerName(match, bowl.id)}, ${bowl.wickets} for ${bowl.runs}`} style={styles.starCol}>
+              <StarFigure name={playerName(match, bowl.id)} team={s.bowlingTeam.name} />
+              <View style={[styles.starTag, { backgroundColor: colors.goldDim }]}>
+                <MaterialCommunityIcons name="baseball" size={10} color={colors.gold} />
+                <Text style={[styles.starTagText, { color: colors.gold }]}>Best bowler</Text>
+              </View>
+              <Text style={styles.starName} numberOfLines={1}>
+                {playerName(match, bowl.id)}
+              </Text>
+              <Text style={[styles.starBig, { color: colors.gold }]}>
+                {bowl.wickets}/{bowl.runs}
+                <Text style={styles.starBalls}> ({oversText(bowl.balls)})</Text>
+              </Text>
+              <Text style={styles.starSub} numberOfLines={1}>
+                Economy {econ(bowl.runs, bowl.balls)}
+                {bowl.maidens ? ` · ${bowl.maidens}M` : ''}
+              </Text>
+            </PressableScale>
+          )}
+        </View>
+      </Card>,
+    ];
   });
   if (!match.innings[0].events.length) return <Text style={styles.empty}>The match hasn’t started yet.</Text>;
   const left = (
@@ -523,13 +576,7 @@ function SummaryTab({ match, state, wide }: { match: Match; state: MatchState; w
         </>
       )}
       <SectionLabel>Who starred</SectionLabel>
-      <View style={styles.leaders}>
-        {leaders.map((c, i) => (
-          <Rise key={i} index={i} style={{ flexGrow: 1, flexBasis: wide ? '45%' : '47%', minWidth: 140 }}>
-            <Card style={{ flex: 1, gap: 2 }}>{c}</Card>
-          </Rise>
-        ))}
-      </View>
+      <View style={{ gap: space.md }}>{leaders}</View>
     </View>
   );
   return (
@@ -778,8 +825,8 @@ export default function Scorecard() {
 
   const tabs = [
     { value: 'summary', label: 'Summary' },
-    ...state.innings.slice(0, 2).map((inn, i) => ({ value: String(i), label: shortSide(inn.battingTeam.name, match), sub: match.innings[i].events.length ? `${inn.runs}/${inn.wickets}` : 'yet to bat' })),
-    ...state.innings.slice(2).map((inn, i) => ({ value: String(i + 2), label: `Super over`, sub: `${shortSide(inn.battingTeam.name, match)} ${inn.runs}/${inn.wickets}` })),
+    ...state.innings.slice(0, 2).map((inn, i) => ({ value: String(i), label: shortSide(inn.battingTeam.name, match) })),
+    ...state.innings.slice(2).map((inn, i) => ({ value: String(i + 2), label: `Super over · ${shortSide(inn.battingTeam.name, match)}` })),
     { value: 'insights', label: 'Insights' },
     { value: 'commentary', label: 'Commentary' },
   ];
@@ -1051,7 +1098,7 @@ const styles = StyleSheet.create({
   resultText: { flex: 1, color: hero.text, fontSize: 22, lineHeight: 26, fontFamily: font.posterBlack, letterSpacing: -0.5 },
   heroPill: { paddingHorizontal: space.md, height: 32, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: hero.inset, borderWidth: 1, borderColor: hero.line },
   heroPillText: { color: hero.text, fontSize: 12, fontFamily: font.bold },
-  board: { flexDirection: 'row', alignItems: 'stretch', backgroundColor: hero.inset, borderRadius: radius.lg, paddingVertical: space.md, paddingHorizontal: space.sm },
+  board: { flexDirection: 'row', alignItems: 'stretch', ...glass, borderRadius: radius.lg, paddingVertical: space.md, paddingHorizontal: space.sm },
   side: { flex: 1, alignItems: 'center', gap: 4, minWidth: 0, paddingHorizontal: 4 },
   vs: { position: 'absolute', left: -9, top: '38%', color: hero.faint, fontSize: 12, fontFamily: font.bold, width: 18, textAlign: 'center' },
   crestWrap: { paddingBottom: 2 },
@@ -1090,13 +1137,22 @@ const styles = StyleSheet.create({
   storyRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   storyChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.goldDim, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.border },
   storyText: { color: colors.text, fontSize: 13, fontFamily: font.semibold },
-  leaders: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
-  leader: { gap: 2 },
-  leaderLabel: { ...type.label, fontSize: 9.5, color: colors.faint },
-  leaderName: { color: colors.text, fontSize: 15, fontFamily: font.bold, marginTop: 2 },
-  leaderBig: { color: colors.accentInk, fontSize: 32, lineHeight: 36, fontFamily: font.posterBlack, ...type.num },
-  leaderUnit: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
-  leaderSub: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
+  stage: { padding: space.md },
+  stageHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  stageTitle: { flex: 1, ...type.label, fontSize: 10, color: colors.muted },
+  stageScore: { fontFamily: font.heavy, fontSize: 13, color: colors.muted, ...type.num },
+  stageRow: { flexDirection: 'row', alignItems: 'stretch', marginTop: space.sm },
+  stageRule: { width: 1, backgroundColor: colors.border, marginVertical: space.sm },
+  starCol: { alignItems: 'center', gap: 3, paddingHorizontal: 4 },
+  figure: { width: '100%', height: 72, alignItems: 'center', justifyContent: 'flex-end' },
+  figureShadow: { position: 'absolute', bottom: 2, width: '30%', height: 4, borderRadius: 99, backgroundColor: 'rgba(0,0,0,0.12)', boxShadow: '0px 0px 8px 3px rgba(0,0,0,0.1)' } as object,
+  figureKit: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 4, alignItems: 'center', justifyContent: 'flex-end' },
+  starTag: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 18, paddingHorizontal: 7, borderRadius: radius.pill, marginTop: 4 },
+  starTagText: { fontSize: 9, fontFamily: font.heavy, letterSpacing: 0.8, textTransform: 'uppercase' },
+  starName: { color: colors.text, fontSize: 13, fontFamily: font.bold, marginTop: 2, maxWidth: '100%' },
+  starBig: { fontFamily: font.posterBlack, fontSize: 20, lineHeight: 24, color: colors.text, ...type.num },
+  starBalls: { fontFamily: font.semibold, fontSize: 12, color: colors.muted },
+  starSub: { color: colors.faint, fontSize: 11, fontFamily: font.medium, ...type.num },
 
   // Innings.
   totalRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.lg, paddingHorizontal: space.xs },

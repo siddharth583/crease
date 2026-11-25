@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PlayerAvatar } from '../../components/Avatar.tsx';
 import { OvalGround, SeamDivider } from '../../components/cricket.tsx';
-import { CountUp, GrowBar, Rise, Sheen, Tug } from '../../components/motion.tsx';
+import { CountUp, Rise, Sheen, Tug } from '../../components/motion.tsx';
 import { FormChips, RoleIcon, ROLE_NAME, useSquadByName } from '../../components/TeamsX.tsx';
 import { Stars } from '../../components/Stars.tsx';
 import { NameSuggestions } from '../../components/NameSuggestions.tsx';
@@ -88,7 +88,6 @@ function SideCard({
   const tint = tintOf(name, side);
   const th = ownTeamTheme(name);
   const roster = useSquadByName();
-  const best = Math.max(...s.players.map((p) => p.power), 0.1);
   return (
     <Card style={[{ padding: 0, overflow: 'hidden' }, fill && { flex: 1 }]}>
       <View style={styles.sideHead}>
@@ -145,20 +144,19 @@ function SideCard({
           )}
         </View>
       </View>
-      {!byTotal && <GrowBar share={s.power / 10} trackStyle={styles.bigTrack} style={[styles.bigFill, { backgroundColor: tint }]} delay={250} />}
+      {!byTotal && <View style={styles.factsRule} />}
       <View style={styles.facts}>
         {(
           [
-            ['Form', s.form === null ? '–' : s.form.toFixed(1), s.form === null ? 0 : s.form / 10],
-            ['Batting', `${s.bat.toFixed(1)}★`, s.bat / 5],
-            ['Bowling', `${s.bowl.toFixed(1)}★`, s.bowl / 5],
-            ['Bowlers', String(s.bowlers), -1],
-            ['Keepers', String(s.keepers), -1],
-          ] as [string, string, number][]
-        ).map(([k, v, share]) => (
+            ['Form', s.form === null ? '–' : s.form.toFixed(1)],
+            ['Batting', `${s.bat.toFixed(1)}★`],
+            ['Bowling', `${s.bowl.toFixed(1)}★`],
+            ['Bowlers', String(s.bowlers)],
+            ['Keepers', String(s.keepers)],
+          ] as [string, string][]
+        ).map(([k, v]) => (
           <View key={k} style={styles.fact}>
             <Text style={styles.factValue}>{v}</Text>
-            {share >= 0 ? <GrowBar share={share} trackStyle={styles.miniTrack} style={[styles.miniFill, { backgroundColor: tint }]} delay={400} /> : <View style={{ height: 4 }} />}
             <Text style={styles.factKey}>{k}</Text>
           </View>
         ))}
@@ -198,7 +196,6 @@ function SideCard({
           {p.form !== null && <FormBadge form={p.form} />}
           <View style={styles.rateCol}>
             <Text style={styles.playerPower}>{p.power.toFixed(1)}</Text>
-            <GrowBar share={p.power / best} trackStyle={styles.rateTrack} style={[styles.miniFill, { backgroundColor: tint }]} delay={300 + i * 40} />
           </View>
           </>
         );
@@ -1041,11 +1038,7 @@ const styles = StyleSheet.create({
   suggest: { gap: space.sm, marginTop: space.md, paddingTop: space.md, borderTopWidth: 1, borderTopColor: colors.border },
   suggestText: { color: colors.text, fontSize: 13, fontFamily: font.semibold, lineHeight: 19 },
   results: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 3, marginTop: 6 },
-  bigTrack: { height: 5, backgroundColor: ink(0.08) },
-  bigFill: { height: 5, borderRadius: 3 },
-  miniTrack: { height: 4, borderRadius: 2, backgroundColor: ink(0.1), alignSelf: 'stretch', marginHorizontal: 10, marginTop: 3 },
-  miniFill: { height: 4, borderRadius: 2 },
-  rateTrack: { height: 3, borderRadius: 2, backgroundColor: ink(0.1), width: 34, marginTop: 3 },
+  factsRule: { height: 1, backgroundColor: ink(0.08) },
   rateCol: { alignItems: 'flex-end' },
   subRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 5, marginTop: 2 },
   tools: { flexDirection: 'row', gap: space.sm },

@@ -135,7 +135,7 @@ export default function ProfileScreen() {
   const myCricketLabel = (
     <SectionLabel
       flush={wide}
-      right={byEmail && !prefs.me?.[account] ? <Text style={styles.note}>Linked by your email</Text> : <Chip icon="swap-horizontal" label="Not me" onPress={() => choose(null)} />}
+      right={byEmail && !prefs.me?.[account] ? <Text style={styles.note}>Linked by your email</Text> : undefined}
     >
       My cricket
     </SectionLabel>
