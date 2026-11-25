@@ -20,7 +20,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BallView } from '../engine/engine.ts';
 import { useLayout } from './layout.tsx';
-import { EASE_OUT, useReducedMotion } from './motion.tsx';
+import { EASE_OUT, useReducedMotion, webFadeUp } from './motion.tsx';
 import { ballColors, colors, font, gradients, radius, space, type, edge, isDay, type TeamTheme } from '../theme.ts';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -158,17 +158,9 @@ export function PressableScale({
   );
 }
 
-/** Fades and rises into place on mount, settling slowly; pass increasing delays to stagger a list. */
-export function FadeIn({ children, delay = 0, style }: { children: ReactNode; delay?: number; style?: StyleProp<ViewStyle> }) {
-  const still = useReducedMotion();
-  const v = useRef(new Animated.Value(still ? 1 : 0)).current;
-  useEffect(() => {
-    if (still) return;
-    Animated.timing(v, { toValue: 1, duration: 640, delay, easing: EASE_OUT, useNativeDriver: native }).start();
-  }, [v, delay, still]);
-  const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [20, 0] });
-  const scale = v.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] });
-  return <Animated.View style={[style, { opacity: v, transform: [{ translateY }, { scale }] }]}>{children}</Animated.View>;
+/** A block of a page. Blocks used to fade and rise in on opening; now the page simply appears, complete. */
+export function FadeIn({ children, style }: { children: ReactNode; delay?: number; style?: StyleProp<ViewStyle> }) {
+  return <View style={style}>{children}</View>;
 }
 
 /** Text that punches up whenever its value changes: the score after every run. */

@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Platform, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { colors, font, hero, isDay, radius, type } from '../theme.ts';
-import { PopIn, CountUp, EASE_OUT, useReducedMotion } from './motion.tsx';
+import { CountUp, EASE_OUT, PopIn, useArrived, useReducedMotion, webTransition } from './motion.tsx';
 import { PressableScale, type IconName } from './ui.tsx';
 
 // The pieces shared by the Record book, the Awards and the rivalry pages: the honours board's brass plaques, medals,
@@ -91,18 +91,11 @@ export function Figure({ display, style, delay = 0, unit, unitStyle }: { display
   );
 }
 
-/** A bar that grows to its share of the track. */
-export function ShareBar({ share, color, delay = 0, height = 4 }: { share: number; color: string; delay?: number; height?: number }) {
-  const still = useReducedMotion();
-  const v = useRef(new Animated.Value(still ? share : 0)).current;
-  useEffect(() => {
-    const t = Math.max(0.03, Math.min(1, share));
-    if (still) return v.setValue(t);
-    Animated.timing(v, { toValue: t, duration: 900, delay, easing: EASE_OUT, useNativeDriver: false }).start();
-  }, [share, still, v, delay]);
+/** A bar at its share of the track. */
+export function ShareBar({ share, color, height = 4 }: { share: number; color: string; delay?: number; height?: number }) {
   return (
     <View style={{ height, borderRadius: height / 2, backgroundColor: `rgba(${colors.ink},0.08)`, overflow: 'hidden' }}>
-      <Animated.View style={{ height, borderRadius: height / 2, backgroundColor: color, width: v.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }} />
+      <View style={{ height, borderRadius: height / 2, backgroundColor: color, width: `${Math.max(3, Math.min(100, share * 100))}%` }} />
     </View>
   );
 }
@@ -112,14 +105,16 @@ export function GrowStack({ parts, height = 14, style }: { parts: { n: number; c
   const still = useReducedMotion();
   const [w, setW] = useState(0);
   const v = useRef(new Animated.Value(still ? 1 : 0)).current;
+  const arrived = useArrived(still);
   useEffect(() => {
     if (still) return v.setValue(1);
+    if (Platform.OS === 'web') return;
     Animated.timing(v, { toValue: 1, duration: 1000, delay: 250, easing: EASE_OUT, useNativeDriver: false }).start();
   }, [still, v]);
   const total = parts.reduce((n, p) => n + p.n, 0) || 1;
   return (
     <View onLayout={(e) => setW(e.nativeEvent.layout.width)} style={[{ height, borderRadius: height / 2, overflow: 'hidden' }, style]}>
-      <Animated.View style={{ width: v.interpolate({ inputRange: [0, 1], outputRange: [0, w] }), height, overflow: 'hidden' }}>
+      <Animated.View style={{ width: w, height, overflow: 'hidden' }}>
         <View style={{ width: w, height, flexDirection: 'row', gap: 2 }}>
           {parts.map((p, i) => (
             <View key={i} style={{ flex: p.n / total, backgroundColor: p.c }} />

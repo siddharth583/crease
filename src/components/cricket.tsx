@@ -1,8 +1,8 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Circle, ClipPath, Defs, Ellipse, G, Line, LinearGradient, Path, RadialGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { colors, ink } from '../theme.ts';
-import { EASE_OUT, useReducedMotion } from './motion.tsx';
+import { css, EASE_OUT, useReducedMotion, webRise } from './motion.tsx';
 
 // Cricket furniture: the shapes that make a screen feel like it belongs to a cricket ground and not to a generic
 // dashboard. Use these (with the motion helpers) instead of plain lines and boxes wherever they fit.
@@ -16,6 +16,25 @@ function crowd(n: number, seed = 7) {
   return Array.from({ length: n }, () => ({ a: rnd() * Math.PI * 2, r: rnd(), c: rnd() }));
 }
 const CROWD = crowd(260);
+/** The crowd drawn as three shapes (one per shirt colour) rather than hundreds: far less for a phone to lay out. */
+const CROWD_PATHS = (() => {
+  const groups: Record<string, string[]> = { brass: [], volt: [], ivory: [] };
+  for (const p of CROWD) {
+    const rr = 0.72 + p.r * 0.28;
+    const x = 200 + Math.cos(p.a) * 290 * rr;
+    const y = 168 + Math.sin(p.a) * 152 * rr;
+    const r = 0.9 + p.c * 0.8;
+    const g = p.c > 0.8 ? 'brass' : p.c > 0.55 ? 'volt' : 'ivory';
+    groups[g].push(`M${(x - r).toFixed(1)} ${y.toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(2 * r).toFixed(1)} 0a${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(-2 * r).toFixed(1)} 0`);
+  }
+  return [
+    { d: groups.brass.join(''), fill: '#E3BE72', opacity: 0.38 },
+    { d: groups.volt.join(''), fill: '#D7FF3A', opacity: 0.3 },
+    { d: groups.ivory.join(''), fill: '#F4F1E6', opacity: 0.24 },
+  ];
+})();
+/** The mown stripes as one shape. */
+const STRIPES = Array.from({ length: 22 }, (_, i) => `M${i * 20 - 20} 40h10v240h-10z`).join('');
 
 /**
  * The ground at night, seen from high in the stands: floodlight towers throwing their beams down, the crowd in the
@@ -23,12 +42,14 @@ const CROWD = crowd(260);
  * the middle. Fills its parent, behind a panel's content. `opacity` is how strongly it shows (0.1 is the usual: the
  * numbers stay the hero); `drift` pans it very slowly, like a broadcast camera.
  */
-export function OvalGround({ color = '#FFFFFF', opacity = 0.09, drift = true, style }: { color?: string; opacity?: number; drift?: boolean; style?: StyleProp<ViewStyle> }) {
+export const OvalGround = memo(function OvalGround({ color = '#FFFFFF', opacity = 0.09, drift = true, style }: { color?: string; opacity?: number; drift?: boolean; style?: StyleProp<ViewStyle> }) {
   const still = useReducedMotion();
   const id = `g${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const pan = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (still || !drift) return;
+    // On the web the pan would run through JavaScript every frame for as long as the page is open: there it holds still.
+    // The ground holds still: the slow pan was decoration.
+    if (still || !drift || !native || true) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pan, { toValue: 1, duration: 16000, easing: Easing.inOut(Easing.sin), useNativeDriver: native }),
@@ -46,7 +67,7 @@ export function OvalGround({ color = '#FFFFFF', opacity = 0.09, drift = true, st
   const cx = 200;
   const cy = 168;
   return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: strength, transform: [{ translateX }, { scale }] }, style]}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: strength, transform: native ? [{ translateX }, { scale }] : [{ scale: 1.06 }] }, style]}>
       <Svg width="100%" height="100%" viewBox={`0 0 ${W} 240`} preserveAspectRatio="xMidYMid slice">
         <Defs>
           <RadialGradient id={`${id}grass`} cx={cx} cy={cy} rx="210" ry="104" gradientUnits="userSpaceOnUse">
@@ -77,19 +98,16 @@ export function OvalGround({ color = '#FFFFFF', opacity = 0.09, drift = true, st
         </Defs>
         {/* The stands, packed. */}
         <Ellipse cx={cx} cy={cy} rx="300" ry="160" fill={`url(#${id}stand)`} />
-        {CROWD.map((p, i) => {
-          const rr = 0.72 + p.r * 0.28;
-          return <Circle key={i} cx={cx + Math.cos(p.a) * 290 * rr} cy={cy + Math.sin(p.a) * 152 * rr} r={0.9 + p.c * 0.8} fill={p.c > 0.8 ? '#E3BE72' : p.c > 0.55 ? '#D7FF3A' : '#F4F1E6'} opacity={0.18 + p.c * 0.25} />;
-        })}
+        {CROWD_PATHS.map((g) => (
+          <Path key={g.fill} d={g.d} fill={g.fill} opacity={g.opacity} />
+        ))}
         {/* Advertising boards, then the rope. */}
         <Ellipse cx={cx} cy={cy} rx="214" ry="108" fill="none" stroke="#0A0F0C" strokeWidth="7" />
         <Ellipse cx={cx} cy={cy} rx="214" ry="108" fill="none" stroke="#D7FF3A" strokeWidth="5" strokeDasharray="18 10" opacity={0.35} />
         <Ellipse cx={cx} cy={cy} rx="206" ry="102" fill={`url(#${id}grass)`} />
         {/* Mown stripes across the outfield. */}
         <G clipPath={`url(#${id}field)`}>
-          {Array.from({ length: 22 }, (_, i) => (
-            <Rect key={i} x={i * 20 - 20} y="40" width="10" height="240" fill="#FFFFFF" opacity={0.045} />
-          ))}
+          <Path d={STRIPES} fill="#FFFFFF" opacity={0.045} />
         </G>
         <Ellipse cx={cx} cy={cy} rx="206" ry="102" fill="none" stroke={color} strokeWidth="1.6" opacity={0.75} />
         <Ellipse cx={cx} cy={cy} rx="104" ry="52" fill="none" stroke={color} strokeWidth="1.2" strokeDasharray="3 5" opacity={0.55} />
@@ -114,7 +132,7 @@ export function OvalGround({ color = '#FFFFFF', opacity = 0.09, drift = true, st
       </Svg>
     </Animated.View>
   );
-}
+});
 
 /**
  * A divider drawn like the seam of a cricket ball: two rails with slanted stitches between. Use it in place of a
@@ -139,19 +157,21 @@ export function SeamDivider({ color, style, stitch = 9 }: { color?: string; styl
   );
 }
 
+const SPIN = css({ '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } }, 1400, 'linear');
+
 /** A cricket ball with its seam: for icons, bullets and loaders. `spin` rolls it. */
 export function SeamBall({ size = 28, color = colors.danger, seam = '#FFF1E2', spin = false }: { size?: number; color?: string; seam?: string; spin?: boolean }) {
   const still = useReducedMotion();
   const turn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (!spin || still) return;
+    if (!spin || still || !native) return;
     const loop = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 1400, easing: Easing.linear, useNativeDriver: native }));
     loop.start();
     return () => loop.stop();
   }, [spin, still, turn]);
   const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   return (
-    <Animated.View style={{ width: size, height: size, transform: [{ rotate }] }}>
+    <Animated.View style={[{ width: size, height: size }, native ? { transform: [{ rotate }] } : spin && !still ? SPIN : null]}>
       <Svg width={size} height={size} viewBox="0 0 100 100">
         <Circle cx="50" cy="50" r="48" fill={color} />
         <Path d="M30 8 C 52 30, 52 70, 30 92" fill="none" stroke={seam} strokeWidth="3.2" opacity={0.9} />
@@ -250,32 +270,9 @@ function Digit({ ch, style, lineHeight }: { ch: string; style?: StyleProp<TextSt
   );
 }
 
-/**
- * Each of its children rises into place one after another when the screen opens: pass the cards of a page. Respects
- * reduced motion. `step` is the gap in milliseconds.
- */
-export function Stagger({ children, step = 70, style }: { children: ReactNode[]; step?: number; style?: StyleProp<ViewStyle> }) {
-  return (
-    <View style={style}>
-      {children.map((child, i) => (
-        <StaggerItem key={i} delay={i * step}>
-          {child}
-        </StaggerItem>
-      ))}
-    </View>
-  );
-}
-
-function StaggerItem({ children, delay }: { children: ReactNode; delay: number }) {
-  const still = useReducedMotion();
-  const v = useRef(new Animated.Value(still ? 1 : 0)).current;
-  useEffect(() => {
-    if (still) return;
-    Animated.timing(v, { toValue: 1, duration: 560, delay, easing: EASE_OUT, useNativeDriver: native }).start();
-  }, [delay, still, v]);
-  return (
-    <Animated.View style={{ opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [26, 0] }) }] }}>{children}</Animated.View>
-  );
+/** A group of cards, one under another. They used to rise in one by one; now they're simply there. */
+export function Stagger({ children, style }: { children: ReactNode[]; step?: number; style?: StyleProp<ViewStyle> }) {
+  return <View style={style}>{children}</View>;
 }
 
 /**

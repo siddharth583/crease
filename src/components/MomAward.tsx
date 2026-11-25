@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { photoFor } from '../engine/photos.ts';
@@ -8,7 +8,7 @@ import { displayName } from '../engine/stats.ts';
 import { usePhotos } from '../store/sync.tsx';
 import { font, hero, radius, space, teamTheme, type } from '../theme.ts';
 import { Jersey, OvalGround } from './cricket.tsx';
-import { PopIn, Sheen, useReducedMotion } from './motion.tsx';
+import { css, PopIn, Sheen, useReducedMotion } from './motion.tsx';
 import { PressableScale } from './ui.tsx';
 import { useLayout } from './layout.tsx';
 import { crestOf, TeamCrest } from './TeamCrest.tsx';
@@ -21,35 +21,100 @@ const BRASS = '#E3BE72';
 const BRASS_HI = '#F6DFA6';
 const native = Platform.OS !== 'web';
 
-const MASK = 'radial-gradient(ellipse 50% 54% at 50% 44%, #000 60%, transparent 100%)';
+/** A photo with its background: the edges and the shoulders melt away, leaving the face and the player. */
+const PHOTO_MASK = 'radial-gradient(ellipse 50% 52% at 50% 40%, #000 58%, rgba(0,0,0,0.6) 74%, transparent 100%)';
+/** A true cut-out keeps its own outline; only the bottom fades, so the player stands on the grass, not cut off. */
+const CUTOUT_MASK = 'linear-gradient(to bottom, #000 78%, transparent 100%)';
+
+type Kind = 'cutout' | 'photo';
+/** What each picture turned out to be, worked out once per picture and kept. */
+const kinds = new Map<string, Kind>();
 
 /**
- * A player's photo standing free in a scene. A cut-out (see-through background) shows as it is; a photo that still has
- * its background fades out at the edges on the web, so it reads as the player and not as a box. Fills its parent.
+ * Whether a picture is a real cut-out: most of the pixels around its edge are see-through. Anything else, a JPEG, a
+ * PNG with its background, a screenshot with a few clear corners, is a photo with a background.
+ */
+function classify(uri: string): Promise<Kind> {
+  const known = kinds.get(uri);
+  if (known) return Promise.resolve(known);
+  if (uri.startsWith('data:image/jpeg')) {
+    kinds.set(uri, 'photo');
+    return Promise.resolve('photo');
+  }
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const n = 48;
+      const canvas = document.createElement('canvas');
+      canvas.width = n;
+      canvas.height = n;
+      const ctx = canvas.getContext('2d');
+      let kind: Kind = 'photo';
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, n, n);
+        const { data } = ctx.getImageData(0, 0, n, n);
+        let clear = 0;
+        let edge = 0;
+        for (let i = 0; i < n; i++)
+          for (const [x, y] of [
+            [i, 0],
+            [i, n - 1],
+            [0, i],
+            [n - 1, i],
+          ]) {
+            edge++;
+            if (data[(y * n + x) * 4 + 3] < 40) clear++;
+          }
+        kind = clear / edge > 0.5 ? 'cutout' : 'photo';
+      }
+      kinds.set(uri, kind);
+      resolve(kind);
+    };
+    img.onerror = () => resolve('photo');
+    img.src = uri;
+  });
+}
+
+/**
+ * A player's photo standing free in a scene, filling its parent, feet at the bottom. A real cut-out keeps its outline
+ * with only its foot fading into the grass; a photo that still has its background melts away at the edges, so it reads
+ * as the player and not as a box. On the web it stays hidden for the moment it takes to tell which, then fades in.
  */
 export function PlayerPhoto({ uri }: { uri: string }) {
-  if (Platform.OS === 'web')
-    // A plain <img>: the browser's mask needs the real element, which React Native's Image doesn't pass it to.
+  const [kind, setKind] = useState<Kind | undefined>(() => kinds.get(uri));
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    let live = true;
+    setKind(kinds.get(uri));
+    void classify(uri).then((k) => live && setKind(k));
+    return () => {
+      live = false;
+    };
+  }, [uri]);
+  if (Platform.OS === 'web') {
+    const mask = kind === 'cutout' ? CUTOUT_MASK : PHOTO_MASK;
+    // A plain <img> in a box that sits it at the foot: sized to the picture itself (no letterbox), so the fade follows
+    // the picture's own edges. The browser's mask needs the real element, which React Native's Image doesn't pass on.
     return (
-      <img
-        src={uri}
-        alt=""
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          height: '100%',
-          width: 'auto',
-          maxWidth: '100%',
-          objectFit: 'contain',
-          objectPosition: 'bottom',
-          pointerEvents: 'none',
-          // Only a photo with its background (saved as a JPEG) fades; a cut-out (WebP or PNG) keeps its own edges.
-          ...(uri.startsWith('data:image/jpeg') ? { maskImage: MASK, WebkitMaskImage: MASK } : {}),
-        }}
-      />
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', pointerEvents: 'none' }}>
+        <img
+          src={uri}
+          alt=""
+          style={{
+            display: 'block',
+            maxWidth: '100%',
+            maxHeight: '100%',
+            width: 'auto',
+            height: 'auto',
+            opacity: kind ? 1 : 0,
+            transition: 'opacity 300ms ease-out',
+            maskImage: mask,
+            WebkitMaskImage: mask,
+          }}
+        />
+      </div>
     );
+  }
   return <Image source={{ uri }} resizeMode="contain" accessibilityIgnoresInvertColors style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />;
 }
 
@@ -68,12 +133,15 @@ function parts(summary: string): { icon: 'cricket' | 'baseball' | 'hand-back-rig
     );
 }
 
+const TURN = css({ '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } }, 40000, 'linear');
+
 /** Slowly turning rays of brass light behind the player. */
 function Rays({ size }: { size: number }) {
   const still = useReducedMotion();
   const turn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (still) return;
+    // The rays hold still: the slow turn was decoration.
+    if (still || !native || true) return;
     const loop = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 40000, easing: Easing.linear, useNativeDriver: native }));
     loop.start();
     return () => loop.stop();
@@ -85,7 +153,7 @@ function Rays({ size }: { size: number }) {
     return `M50 50 L${50 + 60 * Math.cos(a)} ${50 + 60 * Math.sin(a)} L${50 + 60 * Math.cos(b)} ${50 + 60 * Math.sin(b)} Z`;
   });
   return (
-    <Animated.View pointerEvents="none" style={{ position: 'absolute', width: size, height: size, transform: [{ rotate }] }}>
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: size, height: size }, null]}>
       <Svg width={size} height={size} viewBox="0 0 100 100">
         <Defs>
           <RadialGradient id="mr" cx="50" cy="50" r="50" gradientUnits="userSpaceOnUse">

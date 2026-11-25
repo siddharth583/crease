@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { AppMark } from '../../components/AppMark.tsx';
 import { useLayout } from '../../components/layout.tsx';
-import { useReducedMotion } from '../../components/motion.tsx';
+import { css, useReducedMotion } from '../../components/motion.tsx';
 import { useAccess } from '../../store/sync.tsx';
 import { PressableScale, type IconName } from '../../components/ui.tsx';
 import { colors, font, radius, space, edge } from '../../theme.ts';
@@ -26,6 +26,7 @@ const TABS: Record<string, Tab> = {
   profile: { label: 'Me', icon: 'person-circle-outline', iconOn: 'person-circle', owns: ['profile'] },
 };
 const ORDER = ['index', 'players', 'teams', 'profile'];
+const BREATHE = css({ '0%': { opacity: 0.35, transform: 'scale(1)' }, '50%': { opacity: 0, transform: 'scale(1.22)' }, '100%': { opacity: 0, transform: 'scale(1.22)' } }, 3600, 'ease-out');
 /** Which tab the current route belongs to. */
 const activeTab = (state: BottomTabBarProps['state']) => {
   const name = state.routes[state.index]?.name;
@@ -55,8 +56,10 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   }, [at, slot, still, x, fab]);
   const breathe = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (still || !fab) return;
-    const loop = Animated.loop(Animated.sequence([Animated.timing(breathe, { toValue: 1, duration: 1800, useNativeDriver: Platform.OS !== 'web' }), Animated.timing(breathe, { toValue: 0, duration: 1800, useNativeDriver: Platform.OS !== 'web' })]));
+    // The web breathes in CSS: a JavaScript loop here would keep every page busy, frame after frame.
+    // No breathing halo any more: it was decoration.
+    if (still || !fab || true) return;
+    const loop = Animated.loop(Animated.sequence([Animated.timing(breathe, { toValue: 1, duration: 1800, useNativeDriver: true }), Animated.timing(breathe, { toValue: 0, duration: 1800, useNativeDriver: true })]));
     loop.start();
     return () => loop.stop();
   }, [still, fab, breathe]);
@@ -83,7 +86,6 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   };
   const add = fab && (
     <View key="fab" style={{ width: FAB, height: FAB, alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View pointerEvents="none" style={[styles.fabHalo, { opacity: haloOpacity, transform: [{ scale: halo }] }]} />
       <PressableScale accessibilityLabel="New match" haptic="medium" scaleTo={0.88} onPress={() => router.push('/new')} style={styles.fab}>
         <Ionicons name="add" size={30} color={colors.onAccent} />
       </PressableScale>

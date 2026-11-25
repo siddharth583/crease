@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
 // Crease's motion: quick to start, slow to settle (ease-out-quint), with springs only where a thing lands. Every
@@ -37,44 +37,11 @@ export function useReducedMotion() {
 }
 
 /**
- * A number that counts up to its value, and from one value to the next when it changes: season totals, records,
- * purses. `format` turns the running number into text (rupees, decimals).
+ * A figure with its format applied. It used to count up from nothing; that's gone (it only delayed the real number),
+ * so it shows the value straight away. Kept as a component so every call site stays the same.
  */
-export function CountUp({
-  value,
-  style,
-  duration = 1100,
-  delay = 0,
-  format = (n) => String(Math.round(n)),
-}: {
-  value: number;
-  style?: StyleProp<TextStyle>;
-  duration?: number;
-  delay?: number;
-  format?: (n: number) => string;
-}) {
-  const still = useReducedMotion();
-  const [shown, setShown] = useState(still ? value : 0);
-  const from = useRef(still ? value : 0);
-  useEffect(() => {
-    if (still) {
-      setShown(value);
-      from.current = value;
-      return;
-    }
-    const v = new Animated.Value(from.current);
-    const id = v.addListener(({ value: n }) => setShown(n));
-    const anim = Animated.timing(v, { toValue: value, duration, delay, easing: EASE_OUT, useNativeDriver: false });
-    anim.start(() => {
-      from.current = value;
-    });
-    return () => {
-      anim.stop();
-      v.removeListener(id);
-      from.current = value;
-    };
-  }, [value, duration, delay, still]);
-  return <Text style={style}>{format(shown)}</Text>;
+export function CountUp({ value, style, format = (n) => String(Math.round(n)) }: { value: number; style?: StyleProp<TextStyle>; duration?: number; delay?: number; format?: (n: number) => string }) {
+  return <Text style={style}>{format(value)}</Text>;
 }
 
 /**
@@ -113,36 +80,12 @@ export function Ticker({ value, style, lineHeight }: { value: string | number; s
   );
 }
 
-/** A bar that grows to its share (0 to 1) when it appears, and glides when the share changes. */
-export function GrowBar({
-  share,
-  style,
-  trackStyle,
-  vertical,
-  delay = 0,
-  duration = 900,
-}: {
-  share: number;
-  style?: StyleProp<ViewStyle>;
-  trackStyle?: StyleProp<ViewStyle>;
-  vertical?: boolean;
-  delay?: number;
-  duration?: number;
-}) {
-  const still = useReducedMotion();
-  const v = useRef(new Animated.Value(still ? share : 0)).current;
-  useEffect(() => {
-    const target = Math.max(0, Math.min(1, share));
-    if (still) {
-      v.setValue(target);
-      return;
-    }
-    Animated.timing(v, { toValue: target, duration, delay, easing: EASE_OUT, useNativeDriver: false }).start();
-  }, [share, still, v, delay, duration]);
-  const size = v.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+/** A bar at its share (0 to 1) of its track: drawn at full size straight away. */
+export function GrowBar({ share, style, trackStyle, vertical }: { share: number; style?: StyleProp<ViewStyle>; trackStyle?: StyleProp<ViewStyle>; vertical?: boolean; delay?: number; duration?: number }) {
+  const pct = `${Math.round(Math.max(0, Math.min(1, share)) * 1000) / 10}%` as const;
   return (
     <View style={[trackStyle, vertical && { justifyContent: 'flex-end' }]}>
-      <Animated.View style={[style, vertical ? { height: size } : { width: size }]} />
+      <View style={[style, vertical ? { height: pct } : { width: pct }]} />
     </View>
   );
 }
@@ -152,7 +95,7 @@ export function GrowBar({
  * frame, and a page waiting to open (records, the squad, a match) waits behind it for as long as the loop runs.
  */
 const compiled = new Map<string, ViewStyle>();
-const css = (keyframes: Record<string, object>, ms: number, timing: string): ViewStyle => {
+export const css = (keyframes: Record<string, object>, ms: number, timing: string): ViewStyle => {
   // React Native Web writes keyframes only from StyleSheet.create, never from an inline style: one sheet per shape.
   const key = JSON.stringify([keyframes, ms, timing]);
   let style = compiled.get(key);
@@ -163,6 +106,42 @@ const css = (keyframes: Record<string, object>, ms: number, timing: string): Vie
   }
   return style;
 };
+
+/**
+ * A web animation that plays once (an entrance) as CSS: the browser runs it, React isn't touched once per frame. Held
+ * at its first frame through the delay and at its last after it ends.
+ */
+const compiledOnce = new Map<string, ViewStyle>();
+export const cssOnce = (keyframes: Record<string, object>, ms: number, timing: string, delay = 0): ViewStyle => {
+  const key = JSON.stringify([keyframes, ms, timing, delay]);
+  let style = compiledOnce.get(key);
+  if (!style) {
+    const rule = { animationKeyframes: [keyframes], animationDuration: `${ms}ms`, animationTimingFunction: timing, animationDelay: `${Math.round(delay)}ms`, animationFillMode: 'both', animationIterationCount: 1 };
+    style = StyleSheet.create({ rule: rule as unknown as ViewStyle }).rule;
+    compiledOnce.set(key, style);
+  }
+  return style;
+};
+/** False for the first moment after mounting, then true: lets a CSS transition run from a starting size to the real one. */
+export function useArrived(skip = false) {
+  const [on, set] = useState(skip || native);
+  useEffect(() => {
+    if (on) return;
+    const t = setTimeout(() => set(true), 30);
+    return () => clearTimeout(t);
+  }, [on]);
+  return on;
+}
+/** A CSS transition for one property on the web. */
+export const webTransition = (property: string, ms: number, delay = 0, timing = 'cubic-bezier(0.22, 1, 0.36, 1)') =>
+  ({ transitionProperty: property, transitionDuration: `${ms}ms`, transitionDelay: `${delay}ms`, transitionTimingFunction: timing }) as unknown as ViewStyle;
+/** The house curve as CSS. */
+export const CSS_EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const RISE = { '0%': { opacity: 0, transform: 'translateY(22px) scale(0.97)' }, '100%': { opacity: 1, transform: 'translateY(0px) scale(1)' } };
+const FADE_UP = { '0%': { opacity: 0, transform: 'translateY(20px) scale(0.98)' }, '100%': { opacity: 1, transform: 'translateY(0px) scale(1)' } };
+/** Entrances on the web, ready made: a card rising into place. */
+export const webRise = (delay = 0, ms = 620) => cssOnce(RISE, ms, CSS_EASE_OUT, delay);
+export const webFadeUp = (delay = 0, ms = 640) => cssOnce(FADE_UP, ms, CSS_EASE_OUT, delay);
 
 /** The live dot: a steady centre with a ring that keeps breathing out from it. */
 export function Pulse({ color, size = 8 }: { color: string; size?: number }) {
@@ -199,70 +178,14 @@ export function Pulse({ color, size = 8 }: { color: string; size?: number }) {
   );
 }
 
-/** A soft band of light that sweeps across a card now and then, like floodlights catching glass. */
-export function Sheen({ every = 5200, strength = 0.09 }: { every?: number; strength?: number }) {
-  const still = useReducedMotion();
-  const v = useRef(new Animated.Value(0)).current;
-  const [w, setW] = useState(0);
-  useEffect(() => {
-    if (still || !w || !native) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(900),
-        Animated.timing(v, { toValue: 1, duration: 1500, easing: EASE_IN_OUT, useNativeDriver: native }),
-        Animated.delay(every),
-        Animated.timing(v, { toValue: 0, duration: 0, useNativeDriver: native }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [v, still, w, every]);
-  if (still) return null;
-  const translateX = v.interpolate({ inputRange: [0, 1], outputRange: [-w * 0.8, w * 1.2] });
-  // The web: the same sweep as CSS. A pause, the sweep, a longer pause, then round again.
-  const total = 900 + 1500 + every;
-  const at = (ms: number) => `${((ms / total) * 100).toFixed(2)}%`;
-  const from = { transform: `translateX(${-w * 0.8}px) rotate(18deg)` };
-  const to = { transform: `translateX(${w * 1.2}px) rotate(18deg)` };
-  const sweep = css({ '0%': from, [at(900)]: from, [at(2400)]: to, '100%': to }, total, 'cubic-bezier(0.65, 0, 0.35, 1)');
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
-      <Animated.View style={[styles.sheen, { width: Math.max(120, w * 0.45) }, native ? { transform: [{ translateX }, { rotate: '18deg' }] } : w ? sweep : { opacity: 0 }]}>
-        <LinearGradient
-          colors={['rgba(255,255,255,0)', `rgba(255,255,255,${strength})`, 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
-    </View>
-  );
+/** The light that used to sweep across cards: retired, it was decoration that kept phones busy. */
+export function Sheen(_: { every?: number; strength?: number }) {
+  return null;
 }
 
-/** Children rise into place one after another: give each a growing `index`. */
-export function Rise({ children, index = 0, style, step = 55 }: { children: ReactNode; index?: number; style?: StyleProp<ViewStyle>; step?: number }) {
-  const still = useReducedMotion();
-  const v = useRef(new Animated.Value(still ? 1 : 0)).current;
-  useEffect(() => {
-    if (still) return;
-    Animated.timing(v, { toValue: 1, duration: 620, delay: Math.min(index, 12) * step, easing: EASE_OUT, useNativeDriver: native }).start();
-  }, [v, index, step, still]);
-  return (
-    <Animated.View
-      style={[
-        style,
-        {
-          opacity: v,
-          transform: [
-            { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) },
-            { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) },
-          ],
-        },
-      ]}
-    >
-      {children}
-    </Animated.View>
-  );
+/** A list item. Items used to rise in one after another; now they're simply there. */
+export function Rise({ children, style }: { children: ReactNode; index?: number; style?: StyleProp<ViewStyle>; step?: number }) {
+  return <View style={style}>{children}</View>;
 }
 
 const CONFETTI = ['#D7FF3A', '#F4F1E6', '#7FE6FF', '#FFCB52', '#B9A6FF'];
@@ -271,7 +194,8 @@ const CONFETTI = ['#D7FF3A', '#F4F1E6', '#7FE6FF', '#FFCB52', '#B9A6FF'];
 export function Confetti({ count = 28, height = 520 }: { count?: number; height?: number }) {
   const still = useReducedMotion();
   const pieces = useRef(
-    Array.from({ length: count }, (_, i) => ({
+    // The web moves each piece frame by frame: fewer of them, so a phone keeps up.
+    Array.from({ length: native ? count : Math.min(count, 18) }, (_, i) => ({
       v: new Animated.Value(0),
       x: Math.random(),
       drift: (Math.random() - 0.5) * 120,
@@ -321,46 +245,16 @@ const styles = StyleSheet.create({
   sheen: { position: 'absolute', top: '-40%', bottom: '-40%', left: 0 },
 });
 
-/** Something that lands with a little bounce and a turn: the trophy, a stamp. */
-export function PopIn({ children, delay = 0, turn = -12, style }: { children: ReactNode; delay?: number; turn?: number; style?: StyleProp<ViewStyle> }) {
-  const still = useReducedMotion();
-  const v = useRef(new Animated.Value(still ? 1 : 0)).current;
-  useEffect(() => {
-    if (still) return;
-    Animated.sequence([Animated.delay(delay), Animated.spring(v, { toValue: 1, useNativeDriver: native, speed: 9, bounciness: 14 })]).start();
-  }, [v, delay, still]);
-  return (
-    <Animated.View
-      style={[
-        style,
-        {
-          opacity: v.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 1, 1] }),
-          transform: [
-            { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) },
-            { rotate: v.interpolate({ inputRange: [0, 1], outputRange: [`${turn}deg`, '0deg'] }) },
-          ],
-        },
-      ]}
-    >
-      {children}
-    </Animated.View>
-  );
+/** A badge or stamp. It used to land with a bounce; now it's simply there. */
+export function PopIn({ children, style }: { children: ReactNode; delay?: number; turn?: number; style?: StyleProp<ViewStyle> }) {
+  return <View style={style}>{children}</View>;
 }
 
-/** A tug of war: the left side pulls to `edge` (0 to 1) from the middle when it appears. */
-export function Tug({ edge, style, leftStyle, rightStyle, delay = 150 }: { edge: number; style?: StyleProp<ViewStyle>; leftStyle?: StyleProp<ViewStyle>; rightStyle?: StyleProp<ViewStyle>; delay?: number }) {
-  const still = useReducedMotion();
-  const v = useRef(new Animated.Value(still ? edge : 0.5)).current;
-  useEffect(() => {
-    if (still) {
-      v.setValue(edge);
-      return;
-    }
-    Animated.spring(v, { toValue: Math.max(0.02, Math.min(0.98, edge)), delay, useNativeDriver: false, speed: 6, bounciness: 8 }).start();
-  }, [edge, still, v, delay]);
+/** A tug of war: the left side's share (`edge`, 0 to 1) against the right, drawn straight away. */
+export function Tug({ edge, style, leftStyle, rightStyle }: { edge: number; style?: StyleProp<ViewStyle>; leftStyle?: StyleProp<ViewStyle>; rightStyle?: StyleProp<ViewStyle>; delay?: number }) {
   return (
     <View style={[style, { flexDirection: 'row', gap: 2 }]}>
-      <Animated.View style={[leftStyle, { width: v.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+      <View style={[leftStyle, { width: `${Math.max(0.02, Math.min(0.98, edge)) * 100}%` }]} />
       <View style={[rightStyle, { flex: 1 }]} />
     </View>
   );

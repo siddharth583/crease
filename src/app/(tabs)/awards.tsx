@@ -31,7 +31,6 @@ function Headline({ award }: { award: Award }) {
       {/* The spotlight: a cone of brass light from above onto the winner. */}
       <LinearGradient pointerEvents="none" colors={[colors.goldDim, 'transparent']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.8 }} style={StyleSheet.absoluteFill} />
       <Sheen />
-      <Confetti count={34} height={460} />
       <PopIn>
         <View style={styles.heroTag}>
           <Ionicons name="trophy" size={13} color={hero.gold} />

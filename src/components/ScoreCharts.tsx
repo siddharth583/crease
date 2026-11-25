@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Animated, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { playerName, type InningsState, type MatchState } from '../engine/engine.ts';
 import type { Match } from '../engine/types.ts';
 import { colors, font, ink, radius, space, type } from '../theme.ts';
 import { SeamDivider } from './cricket.tsx';
-import { EASE_OUT, GrowBar, PopIn, useReducedMotion } from './motion.tsx';
+import { EASE_OUT, GrowBar, PopIn, useArrived, useReducedMotion, webTransition } from './motion.tsx';
 import { Card, SectionLabel } from './ui.tsx';
 
 // The scorecard's charts and their shared pieces: a draw-in reveal, a one-line takeaway, cricket-word axes.
@@ -31,35 +31,15 @@ export const niceTop = (peak: number) => {
   return Math.max(step, Math.ceil(peak / step) * step);
 };
 
-/** Reveals what's inside from the left, like a pen drawing the line. */
-export function DrawIn({ children, width, height, delay = 120, duration = 1100 }: { children: ReactNode; width: number; height: number; delay?: number; duration?: number }) {
-  const still = useReducedMotion();
-  const v = useRef(new Animated.Value(still ? 1 : 0)).current;
-  useEffect(() => {
-    if (still) return;
-    Animated.timing(v, { toValue: 1, duration, delay, easing: EASE_OUT, useNativeDriver: false }).start();
-  }, [v, still, delay, duration]);
-  return (
-    <Animated.View style={{ width: v.interpolate({ inputRange: [0, 1], outputRange: [0, width] }), height, overflow: 'hidden' }}>
-      <View style={{ width, height }}>{children}</View>
-    </Animated.View>
-  );
+/** A chart's drawing area. It used to be revealed from the left; now it's drawn straight away. */
+export function DrawIn({ children, width, height }: { children: ReactNode; width: number; height: number; delay?: number; duration?: number }) {
+  return <View style={{ width, height }}>{children}</View>;
 }
 
-/** A box that grows to its share of its parent's width (or height) with its children inside. */
-export function Grow({ share, vertical, delay = 0, duration = 900, style, children }: { share: number; vertical?: boolean; delay?: number; duration?: number; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
-  const still = useReducedMotion();
-  const target = Math.max(0, Math.min(1, share));
-  const v = useRef(new Animated.Value(still ? target : 0)).current;
-  useEffect(() => {
-    if (still) {
-      v.setValue(target);
-      return;
-    }
-    Animated.timing(v, { toValue: target, duration, delay, easing: EASE_OUT, useNativeDriver: false }).start();
-  }, [target, still, v, delay, duration]);
-  const size = v.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
-  return <Animated.View style={[style, vertical ? { height: size } : { width: size }]}>{children}</Animated.View>;
+/** A box at its share of its parent's width (or height), with its children inside. */
+export function Grow({ share, vertical, style, children }: { share: number; vertical?: boolean; delay?: number; duration?: number; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
+  const pct = `${Math.max(0, Math.min(1, share)) * 100}%` as const;
+  return <View style={[style, vertical ? { height: pct } : { width: pct }]}>{children}</View>;
 }
 
 /** The one plain-English sentence under a chart: what it says. */
