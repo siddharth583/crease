@@ -59,7 +59,7 @@ export function lineupHtml(sides: [LineupSide, LineupSide], table: Map<string, S
 ${REPORT_HEAD}
 <style>
   body { background: #0B0F0C; }
-  .lu-poster { position: relative; overflow: hidden; color: #F1F5EE; padding: 26px 22px 18px; font-family: Inter, sans-serif;
+  .lu-poster { position: relative; overflow: hidden; color: #F4F1E6; padding: 26px 22px 18px; font-family: Inter, sans-serif;
     background-image: radial-gradient(130% 55% at 50% -10%, rgba(215,255,58,.16), transparent 62%), repeating-linear-gradient(90deg, rgba(255,255,255,.022) 0 40px, transparent 40px 80px); }
   .lu-top { display: flex; align-items: center; justify-content: space-between; }
   .lu-brand { display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 19px; letter-spacing: -.3px; }
@@ -89,7 +89,7 @@ ${REPORT_HEAD}
   .lu-nm i { font-style: normal; font-size: 8.5px; font-weight: 800; letter-spacing: .5px; color: #98A396; border: 1px solid rgba(214,236,200,.2); border-radius: 4px; padding: 0 3px; margin-left: 3px; vertical-align: 2px; }
   .lu-nm i.lu-c { color: #0A0D06; background: #D7FF3A; border-color: #D7FF3A; }
   .lu-sub { font-size: 10.5px; color: #8C978A; margin-top: 1px; }
-  .lu-chip { min-width: 38px; text-align: center; padding: 5px 6px; border-radius: 9px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 14px; background: #1A221C; color: #F1F5EE; }
+  .lu-chip { min-width: 38px; text-align: center; padding: 5px 6px; border-radius: 9px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 900; font-size: 14px; background: #1A221C; color: #F4F1E6; }
   .lu-chip.lu-best { background: #D7FF3A; color: #0A0D06; } .lu-chip.lu-good { background: rgba(127,230,255,.16); color: #7FE6FF; } .lu-chip.lu-poor { background: rgba(255,90,60,.16); color: #FF8A73; }
   .lu-foot { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; font-size: 10.5px; color: #6E7A6C; }
 </style></head>

@@ -5,13 +5,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PlayerAvatar } from '../../components/Avatar.tsx';
 import { ExportSheet } from '../../components/ExportSheet.tsx';
 import { Columns, Page, useLayout } from '../../components/layout.tsx';
-import { Button, FadeIn, GhostWord, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, useToast } from '../../components/ui.tsx';
-import { matchState, oversText } from '../../engine/engine.ts';
-import { careerStats, playerOfTheMatch, seriesState, type SeriesState } from '../../engine/stats.ts';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { OvalGround, SeamDivider } from '../../components/cricket.tsx';
+import { MatchTicket, TrophyRace, sideInk } from '../../components/HomeX.tsx';
+import { CountUp, Rise, Sheen } from '../../components/motion.tsx';
+import { TeamCrest } from '../../components/TeamCrest.tsx';
+import { Button, FadeIn, IconButton, PitchStripes, PressableScale, Screen, SectionLabel, useToast } from '../../components/ui.tsx';
+import { matchState } from '../../engine/engine.ts';
+import { careerStats, seriesState, type SeriesState } from '../../engine/stats.ts';
 import type { Match } from '../../engine/types.ts';
 import { useMatches } from '../../store/matches.tsx';
 import { useMatchFiles } from '../../store/useMatchFiles.ts';
-import { colors, font, radius, space, type, hero, edge, ownTeamTheme } from '../../theme.ts';
+import { colors, font, gradients, radius, space, type, hero, edge, ownTeamTheme } from '../../theme.ts';
 
 /**
  * A dot per match of the series: who won it, in the winner's own colour when it has one, or still to play. `onHero`
@@ -123,28 +129,43 @@ export default function SeriesScreen() {
   const live = s.matches.find((m) => !matchState(m).result);
   const mosN = (
     <>
-    {s.best && (
-      <FadeIn delay={80}>
-        <PressableScale
-          scaleTo={0.98}
-          onPress={() => router.push({ pathname: '/player/[key]', params: { key: s.best!.key } })}
-          style={styles.mos}
-        >
-          <PlayerAvatar name={s.best.name} size={40} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.mosLabel}>{s.over ? 'MAN OF THE SERIES' : 'LEADING FOR MAN OF THE SERIES'}</Text>
-            <Text style={styles.mosName} numberOfLines={1}>
-              {s.best.name}
-            </Text>
-            <Text style={styles.mosLine}>
-              {s.best.team} · {s.best.summary}
-            </Text>
-          </View>
-        </PressableScale>
-      </FadeIn>
-    )}
+      {s.best && (
+        <FadeIn delay={80}>
+          <PressableScale
+            scaleTo={0.98}
+            onPress={() => router.push({ pathname: '/player/[key]', params: { key: s.best!.key } })}
+            accessibilityLabel={`${s.over ? 'Man of the Series' : 'Leading for Man of the Series'}: ${s.best.name}`}
+            style={styles.mos}
+          >
+            <LinearGradient pointerEvents="none" colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <OvalGround opacity={0.07} drift={false} />
+            <Sheen every={7000} strength={0.07} />
+            <View style={styles.mosInner}>
+              <View style={styles.mosHead}>
+                <Ionicons name="star" size={11} color={colors.gold} />
+                <Text style={styles.mosLabel}>{s.over ? 'MAN OF THE SERIES' : 'LEADING FOR MAN OF THE SERIES'}</Text>
+                <Ionicons name="star" size={11} color={colors.gold} />
+              </View>
+              <View style={styles.mosRow}>
+                <View style={styles.mosRing}>
+                  <PlayerAvatar name={s.best.name} size={56} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.mosName} numberOfLines={2}>
+                    {s.best.name}
+                  </Text>
+                  <Text style={styles.mosLine}>
+                    {s.best.team} · {s.best.summary}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </PressableScale>
+        </FadeIn>
+      )}
     </>
   );
+  const leader = s.played === 0 ? null : s.wins[0] === s.wins[1] ? 'Level' : s.wins[0] > s.wins[1] ? s.teams[0] : s.teams[1];
 
   return (
     <Screen>
@@ -158,31 +179,43 @@ export default function SeriesScreen() {
         {/* Each column opens on a label, so the scoreline and the right column start level. */}
         {wide && <SectionLabel flush>The series</SectionLabel>}
         <FadeIn>
-          <View style={[styles.hero, wide && { padding: space.xxl }]}>
+          <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, wide && { padding: space.xxl }]}>
             <PitchStripes tint="255,255,255" />
-            <GhostWord size={200} style={{ right: -20, bottom: -50, color: hero.ink(0.05) }}>
-              SERIES
-            </GhostWord>
-            <Text style={styles.eyebrow}>SERIES · BEST OF {s.of}</Text>
+            <OvalGround opacity={0.1} />
+            <Sheen />
+            <View style={styles.eyebrowRow}>
+              <Ionicons name="trophy" size={13} color={colors.gold} />
+              <Text style={styles.eyebrow}>SERIES · BEST OF {s.of}</Text>
+            </View>
             <Text style={[styles.name, wide && { fontSize: 48, lineHeight: 54 }]}>{s.name}</Text>
             <View style={styles.scoreline}>
-              <View style={styles.side}>
-                <Text style={[styles.sideScore, s.wins[0] >= s.wins[1] && s.played > 0 && { color: ownTeamTheme(s.teams[0])?.accent ?? hero.accent }]}>{s.wins[0]}</Text>
-                <Text style={styles.sideName} numberOfLines={1}>
-                  {s.teams[0]}
-                </Text>
-              </View>
-              <Text style={styles.dash}>–</Text>
-              <View style={[styles.side, { alignItems: 'flex-end' }]}>
-                <Text style={[styles.sideScore, s.wins[1] >= s.wins[0] && s.played > 0 && { color: ownTeamTheme(s.teams[1])?.accent ?? hero.text }]}>{s.wins[1]}</Text>
-                <Text style={styles.sideName} numberOfLines={1}>
-                  {s.teams[1]}
-                </Text>
-              </View>
+              {([0, 1] as const).map((i) => (
+                <View key={i} style={[styles.side, i === 1 && { alignItems: 'flex-end' }]}>
+                  <TeamCrest name={s.teams[i]} size={44} />
+                  <CountUp
+                    value={s.wins[i]}
+                    delay={150 + i * 120}
+                    style={[styles.sideScore, s.wins[i] >= s.wins[1 - i] && s.played > 0 && { color: sideInk(s.teams[i], i, true) }]}
+                  />
+                  <Text style={styles.sideName} numberOfLines={1}>
+                    {s.teams[i]}
+                  </Text>
+                </View>
+              ))}
             </View>
-            <SeriesPips series={s} onHero />
+            <TrophyRace series={s} onHero />
+            <SeamDivider color={hero.ink(0.2)} />
+            <View style={styles.statusRow}>
+              <SeriesPips series={s} onHero />
+              {leader && (
+                <Text style={styles.leading} numberOfLines={1}>
+                  {s.over ? 'Won by ' : leader === 'Level' ? '' : 'Leading: '}
+                  {leader === 'Level' ? 'Level' : leader}
+                </Text>
+              )}
+            </View>
             <Text style={styles.status}>{s.status}</Text>
-          </View>
+          </LinearGradient>
         </FadeIn>
 
         {!wide && mosN}
@@ -220,47 +253,17 @@ export default function SeriesScreen() {
         )}
         <SectionLabel flush={wide && !s.best}>Matches</SectionLabel>
         <View style={{ gap: space.sm }}>
-          {s.matches.map((m) => {
+          {s.matches.map((m, i) => {
             const st = matchState(m);
-            const mom = playerOfTheMatch(m);
             return (
-              <PressableScale
-                key={m.id}
-                scaleTo={0.98}
-                onPress={() =>
-                  router.push(
-                    st.result
-                      ? { pathname: '/match/[id]/scorecard', params: { id: m.id } }
-                      : { pathname: '/match/[id]', params: { id: m.id } },
-                  )
-                }
-                style={styles.match}
-              >
-                <View style={styles.matchNo}>
-                  <Text style={styles.matchNoText}>{m.series!.number}</Text>
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  {st.innings.slice(0, 2).map((inn, i) => (
-                    <View key={i} style={styles.matchLine}>
-                      <Text style={[styles.matchTeam, st.winner === inn.battingTeam.id && { color: colors.text }]} numberOfLines={1}>
-                        {inn.battingTeam.name}
-                      </Text>
-                      <Text style={[styles.matchScore, st.winner === inn.battingTeam.id && { color: colors.text }]}>
-                        {inn.runs}/{inn.wickets}
-                        <Text style={styles.matchOvers}> {oversText(inn.legalBalls)}</Text>
-                      </Text>
-                    </View>
-                  ))}
-                  <Text style={styles.matchResult} numberOfLines={1}>
-                    {st.result ?? 'In progress'}
-                  </Text>
-                  {mom && (
-                    <Text style={styles.matchMom} numberOfLines={1}>
-                      ★ {mom.name} · {mom.summary}
-                    </Text>
-                  )}
-                </View>
-              </PressableScale>
+              <Rise key={m.id} index={i}>
+                <MatchTicket
+                  match={m}
+                  label={`Match ${m.series!.number} of ${s.of} · ${new Date(m.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}
+                  accessibilityLabel={`Match ${m.series!.number}: ${st.result ?? 'in progress'}`}
+                  onPress={() => router.push(st.result ? { pathname: '/match/[id]/scorecard', params: { id: m.id } } : { pathname: '/match/[id]', params: { id: m.id } })}
+                />
+              </Rise>
             );
           })}
           {Array.from({ length: s.over ? 0 : s.of - s.matches.length }, (_, i) => (
@@ -294,7 +297,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.sm },
   missing: { color: colors.muted, textAlign: 'center', marginTop: space.xxl, fontFamily: font.medium },
   hero: {
-    backgroundColor: '#101010',
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: hero.line,
@@ -302,27 +304,25 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     gap: space.md,
   },
-  eyebrow: { ...type.label, color: hero.accent },
-  name: { fontFamily: font.posterBlack, fontSize: 36, lineHeight: 40, color: hero.text, marginTop: -space.sm },
-  scoreline: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md },
-  side: { flex: 1 },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  eyebrow: { ...type.label, color: colors.gold },
+  name: { fontFamily: font.posterBlack, fontSize: 34, lineHeight: 38, color: hero.text },
+  scoreline: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md, marginTop: space.sm },
+  side: { flex: 1, gap: 2 },
   sideScore: { fontFamily: font.posterBlack, fontSize: 79, lineHeight: 88, color: hero.muted, ...type.num },
-  sideName: { fontFamily: font.poster, fontSize: 16, color: hero.muted },
-  dash: { fontFamily: font.posterBlack, fontSize: 46, color: hero.faint, paddingBottom: 34 },
+  sideName: { fontFamily: font.poster, fontSize: 15, color: hero.muted },
+  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md },
+  leading: { flexShrink: 1, color: colors.gold, fontFamily: font.bold, fontSize: 12 },
   status: { fontFamily: font.poster, fontSize: 18, color: hero.text },
-  mos: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    backgroundColor: colors.accent,
-    borderRadius: radius.lg,
-    padding: space.lg,
-    marginTop: space.md,
-    ...edge,
-  },
-  mosLabel: { ...type.label, fontSize: 10, color: colors.onAccent, opacity: 0.65 },
-  mosName: { fontFamily: font.posterBlack, fontSize: 25, lineHeight: 28, color: colors.onAccent },
-  mosLine: { fontFamily: font.bold, fontSize: 13, color: colors.onAccent },
+  // Man of the Series: an honours-board plaque, brass on the deep green.
+  mos: { borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.gold, marginTop: space.md, overflow: 'hidden' },
+  mosInner: { margin: 5, borderRadius: radius.lg - 5, borderWidth: 1, borderColor: hero.ink(0.12), padding: space.lg, gap: space.md },
+  mosHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  mosLabel: { ...type.label, fontSize: 10, color: colors.gold },
+  mosRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  mosRing: { padding: 3, borderRadius: 40, borderWidth: 2, borderColor: colors.gold },
+  mosName: { fontFamily: font.posterBlack, fontSize: 25, lineHeight: 28, color: hero.text },
+  mosLine: { fontFamily: font.semibold, fontSize: 13, color: hero.muted, marginTop: 2 },
   leaders: { flexDirection: 'row', gap: space.sm },
   leaderCol: {
     flex: 1,
@@ -340,25 +340,9 @@ const styles = StyleSheet.create({
   leaderName: { flex: 1, color: colors.text, fontSize: 13, fontFamily: font.bold },
   leaderValue: { fontFamily: font.posterBlack, fontSize: 16, color: colors.text, ...type.num },
   leaderUnit: { fontFamily: font.poster, fontSize: 13, color: colors.faint },
-  match: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: space.md,
-    ...edge,
-  },
+  match: { flexDirection: 'row', alignItems: 'center', gap: space.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.md },
   matchEmpty: { backgroundColor: 'transparent', borderStyle: 'dashed' },
   matchNo: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.surfaceHi, alignItems: 'center', justifyContent: 'center' },
   matchNoText: { fontFamily: font.posterBlack, fontSize: 20, color: colors.text },
-  matchLine: { flexDirection: 'row', alignItems: 'center' },
-  matchTeam: { flex: 1, color: colors.muted, fontSize: 14, fontFamily: font.bold },
-  matchScore: { color: colors.muted, fontSize: 16, fontFamily: font.posterBlack, ...type.num },
-  matchOvers: { fontSize: 13, fontFamily: font.poster, color: colors.faint },
-  matchResult: { color: colors.accentInk, fontSize: 12, fontFamily: font.bold, marginTop: 2 },
-  matchMom: { color: colors.muted, fontSize: 12, fontFamily: font.semibold },
   matchTbd: { color: colors.faint, fontSize: 14, fontFamily: font.bold },
 });

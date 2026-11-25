@@ -317,12 +317,27 @@ export function matchups(matches: Match[]): Matchup[] {
     if (out) p.outs += 1;
     // A dot: nothing off the bat and no wicket. A no-ball gave the batting side a run, so it isn't one.
     if (!runs && !out && d.ball.extra !== 'noball') p.dots += 1;
-    if (runs === 4 && !d.ball.extra) p.fours += 1;
-    if (runs === 6 && !d.ball.extra) p.sixes += 1;
+    // Off the bat counts on a no-ball too, as in the batter's and bowler's own figures.
+    if (runs === 4) p.fours += 1;
+    if (runs === 6) p.sixes += 1;
     p.seen.add(m.id);
     p.matches = p.seen.size;
   }
   return [...pairs.values()].map(({ seen: _, ...p }) => p);
+}
+
+/** A bowler a batter has hit boundaries off, with how many of each. */
+export type BigHit = { bowler: string; bowlerKey: string; batterKey: string; sixes: number; fours: number; balls: number; matches: number };
+
+/**
+ * Whom a batter has hit sixes and fours off: one row per bowler who has gone for at least one, most sixes first, then
+ * most fours, then fewest balls faced (the quicker hitter).
+ */
+export function bigHits(duels: Matchup[], batterKey: string): BigHit[] {
+  return duels
+    .filter((d) => d.batterKey === batterKey && (d.sixes > 0 || d.fours > 0))
+    .map((d) => ({ bowler: d.bowler, bowlerKey: d.bowlerKey, batterKey: d.batterKey, sixes: d.sixes, fours: d.fours, balls: d.balls, matches: d.matches }))
+    .sort((a, b) => b.sixes - a.sixes || b.fours - a.fours || a.balls - b.balls);
 }
 
 /** Everything between one batter and one bowler: the numbers, every meeting ball by ball, and the other way round. */

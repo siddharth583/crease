@@ -14,68 +14,103 @@ import { colors, font, radius, space, edge } from '../../theme.ts';
 
 const PAD = 6;
 const GAP = 4;
+/** The round New match button in the middle of the dock. */
+const FAB = 58;
 
-const TABS: Record<string, { label: string; icon: IconName; iconOn: IconName }> = {
-  index: { label: 'Matches', icon: 'albums-outline', iconOn: 'albums' },
-  players: { label: 'Players', icon: 'podium-outline', iconOn: 'podium' },
-  teams: { label: 'Teams', icon: 'people-outline', iconOn: 'people' },
+type Tab = { label: string; icon: IconName; iconOn: IconName; /** Routes that light this tab up. */ owns: string[] };
+// Four places, in the order they sit. Stats holds the leaderboards, the record book and the season awards together.
+const TABS: Record<string, Tab> = {
+  index: { label: 'Home', icon: 'home-outline', iconOn: 'home', owns: ['index'] },
+  players: { label: 'Stats', icon: 'stats-chart-outline', iconOn: 'stats-chart', owns: ['players', 'records', 'awards'] },
+  teams: { label: 'Teams', icon: 'shield-outline', iconOn: 'shield', owns: ['teams'] },
+  profile: { label: 'Me', icon: 'person-circle-outline', iconOn: 'person-circle', owns: ['profile'] },
+};
+const ORDER = ['index', 'players', 'teams', 'profile'];
+/** Which tab the current route belongs to. */
+const activeTab = (state: BottomTabBarProps['state']) => {
+  const name = state.routes[state.index]?.name;
+  return ORDER.find((k) => TABS[k].owns.includes(name)) ?? 'index';
 };
 
-/** A floating capsule of tabs. A new match starts from the Matches tab. */
+/**
+ * A floating dock: Home and Stats, a big round New match button in the middle (the one thing you do most), then Teams
+ * and Me. The active tab's pill glides to it; the middle button breathes.
+ */
 function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const still = useReducedMotion();
-  const tabs = state.routes.filter((r) => TABS[r.name]);
+  const access = useAccess();
+  const active = activeTab(state);
+  const tabs = ORDER.map((k) => state.routes.find((r) => r.name === k)).filter((r): r is NonNullable<typeof r> => Boolean(r));
+  const fab = access.score;
   // The highlight glides to the chosen tab rather than jumping.
   const [width, setWidth] = useState(0);
-  // The capsule has a 1px border; its tabs sit inside the padding.
-  const slot = width ? (width - 2 - PAD * 2 - GAP * (tabs.length - 1)) / tabs.length : 0;
+  const slot = width ? (width - 2 - PAD * 2 - GAP * (tabs.length - 1 + (fab ? 1 : 0)) - (fab ? FAB : 0)) / tabs.length : 0;
   const x = useRef(new Animated.Value(0)).current;
-  const at = Math.max(0, tabs.findIndex((r) => r.key === state.routes[state.index]?.key));
+  const at = Math.max(0, ORDER.indexOf(active));
   useEffect(() => {
-    const to = at * (slot + GAP);
+    const to = at * (slot + GAP) + (fab && at >= 2 ? FAB + GAP : 0);
     if (still || !slot) x.setValue(to);
     else Animated.spring(x, { toValue: to, useNativeDriver: Platform.OS !== 'web', speed: 16, bounciness: 7 }).start();
-  }, [at, slot, still, x]);
+  }, [at, slot, still, x, fab]);
+  const breathe = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (still || !fab) return;
+    const loop = Animated.loop(Animated.sequence([Animated.timing(breathe, { toValue: 1, duration: 1800, useNativeDriver: Platform.OS !== 'web' }), Animated.timing(breathe, { toValue: 0, duration: 1800, useNativeDriver: Platform.OS !== 'web' })]));
+    loop.start();
+    return () => loop.stop();
+  }, [still, fab, breathe]);
+  const halo = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.22] });
+  const haloOpacity = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] });
+  const item = (route: (typeof tabs)[number]) => {
+    const tab = TABS[route.name];
+    const on = active === route.name;
+    return (
+      <PressableScale
+        key={route.key}
+        accessibilityRole="tab"
+        accessibilityLabel={tab.label}
+        accessibilityState={{ selected: on }}
+        scaleTo={0.92}
+        onPress={() => !on && navigateToTab(route.key)}
+        wrapStyle={{ flex: 1 }}
+        style={styles.tab}
+      >
+        <Ionicons name={on ? tab.iconOn : tab.icon} size={21} color={on ? colors.onAccent : colors.faint} />
+        <Text style={[styles.tabLabel, on && { color: colors.onAccent, fontFamily: font.heavy }]}>{tab.label}</Text>
+      </PressableScale>
+    );
+  };
+  const add = fab && (
+    <View key="fab" style={{ width: FAB, height: FAB, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View pointerEvents="none" style={[styles.fabHalo, { opacity: haloOpacity, transform: [{ scale: halo }] }]} />
+      <PressableScale accessibilityLabel="New match" haptic="medium" scaleTo={0.88} onPress={() => router.push('/new')} style={styles.fab}>
+        <Ionicons name="add" size={30} color={colors.onAccent} />
+      </PressableScale>
+    </View>
+  );
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, space.md) }]}>
       <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, `${colors.bg}EB`, colors.bg]} style={styles.fade} />
       <View style={styles.capsule} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
         {slot > 0 && <Animated.View pointerEvents="none" style={[styles.indicator, { width: slot, transform: [{ translateX: x }] }]} />}
-        {state.routes.map((route, i) => {
-          const tab = TABS[route.name];
-          if (!tab) return null;
-          const on = state.index === i;
-          return (
-            <PressableScale
-              key={route.key}
-              accessibilityRole="tab"
-              accessibilityLabel={tab.label}
-              accessibilityState={{ selected: on }}
-              scaleTo={0.94}
-              onPress={() => !on && navigateToTab(route.key)}
-              wrapStyle={{ flex: 1 }}
-              style={styles.tab}
-            >
-              <Ionicons name={on ? tab.iconOn : tab.icon} size={19} color={on ? colors.text : colors.faint} />
-              <Text style={[styles.tabLabel, on && styles.tabLabelOn]}>{tab.label}</Text>
-            </PressableScale>
-          );
-        })}
+        {tabs.slice(0, 2).map(item)}
+        {add}
+        {tabs.slice(2).map(item)}
       </View>
     </View>
   );
 }
 
 /**
- * On a tablet or laptop the tabs are a rail down the left, the way an app built for a big screen keeps its places:
- * the mark at the top, the three places, New match, then profile and settings at the foot. Names show beside the icons
- * on a laptop, under them on a tablet.
+ * On a tablet or laptop the tabs are a rail down the left: the mark at the top, New match, the four places, then
+ * Settings at the foot. Names show beside the icons on a laptop, under them on a tablet.
  */
 function SideRail({ state, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { desk } = useLayout();
   const access = useAccess();
+  const active = activeTab(state);
   const item = (label: string, icon: IconName, on: boolean, onPress: () => void, key: string) => (
     <PressableScale
       key={key}
@@ -86,8 +121,8 @@ function SideRail({ state, navigateToTab }: BottomTabBarProps) {
       onPress={onPress}
       style={[desk ? styles.railItemWide : styles.railItem, on && styles.railItemOn]}
     >
-      <Ionicons name={icon} size={desk ? 20 : 22} color={on ? colors.text : colors.muted} />
-      <Text numberOfLines={1} style={[desk ? styles.railLabelWide : styles.railLabel, on && styles.tabLabelOn]}>
+      <Ionicons name={icon} size={desk ? 20 : 22} color={on ? colors.onAccent : colors.muted} />
+      <Text numberOfLines={1} style={[desk ? styles.railLabelWide : styles.railLabel, on && { color: colors.onAccent, fontFamily: font.heavy }]}>
         {label}
       </Text>
     </PressableScale>
@@ -105,19 +140,16 @@ function SideRail({ state, navigateToTab }: BottomTabBarProps) {
         </PressableScale>
       )}
       <View style={styles.railTabs}>
-        {state.routes.map((route, i) => {
-          const tab = TABS[route.name];
-          if (!tab) return null;
-          const on = state.index === i;
+        {ORDER.map((k) => {
+          const route = state.routes.find((r) => r.name === k);
+          if (!route) return null;
+          const tab = TABS[k];
+          const on = active === k;
           return item(tab.label, on ? tab.iconOn : tab.icon, on, () => !on && navigateToTab(route.key), route.key);
         })}
       </View>
       <View style={{ flex: 1 }} />
-      <View style={styles.railTabs}>
-        {item('Records', 'trophy-outline', false, () => router.push('/records'), 'records')}
-        {item('My profile', 'person-circle-outline', false, () => router.push('/profile'), 'profile')}
-        {item('Settings', 'settings-outline', false, () => router.push('/settings'), 'settings')}
-      </View>
+      <View style={styles.railTabs}>{item('Settings', 'settings-outline', false, () => router.push('/settings'), 'settings')}</View>
     </View>
   );
 }
@@ -132,6 +164,11 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="players" />
       <Tabs.Screen name="teams" />
+      <Tabs.Screen name="profile" />
+      {/* Part of Stats: reached from its segmented bar, with the dock still showing. The dock draws only the four places,
+          so these need no href: null (which would make them unreachable by address). */}
+      <Tabs.Screen name="records" />
+      <Tabs.Screen name="awards" />
     </Tabs>
   );
 }
@@ -156,7 +193,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    height: 62,
+    height: 68,
     padding: 6,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
@@ -165,12 +202,12 @@ const styles = StyleSheet.create({
     ...edge,
   },
   tab: {
-    height: 48,
+    height: 54,
     borderRadius: radius.pill,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 2,
   },
   indicator: {
     position: 'absolute',
@@ -178,11 +215,9 @@ const styles = StyleSheet.create({
     top: PAD,
     bottom: PAD,
     borderRadius: radius.pill,
-    backgroundColor: colors.surfaceHi,
-    borderWidth: 1,
-    borderColor: colors.borderHi,
+    backgroundColor: colors.accent,
   },
-  tabLabel: { color: colors.faint, fontFamily: font.semibold, fontSize: 14 },
+  tabLabel: { color: colors.faint, fontFamily: font.semibold, fontSize: 11 },
   rail: {
     width: 96,
     alignItems: 'center',
@@ -197,9 +232,11 @@ const styles = StyleSheet.create({
   railTabs: { gap: space.xs, alignSelf: 'stretch', paddingHorizontal: space.sm },
   railItem: { alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 64, borderRadius: radius.lg, paddingVertical: space.sm },
   railItemWide: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 48, borderRadius: radius.md, paddingHorizontal: space.md },
-  railItemOn: { backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.borderHi },
+  railItemOn: { backgroundColor: colors.accent },
   railLabel: { color: colors.muted, fontFamily: font.semibold, fontSize: 11 },
   railLabelWide: { color: colors.muted, fontFamily: font.semibold, fontSize: 15 },
+  fab: { width: FAB - 6, height: FAB - 6, borderRadius: (FAB - 6) / 2, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', boxShadow: '0px 6px 20px rgba(215,255,58,0.45)' },
+  fabHalo: { position: 'absolute', width: FAB - 6, height: FAB - 6, borderRadius: (FAB - 6) / 2, backgroundColor: colors.accent },
   railNew: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   railNewWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs, height: 48, borderRadius: radius.pill, backgroundColor: colors.accent },
   railNewLabel: { color: colors.onAccent, fontFamily: font.bold, fontSize: 15 },

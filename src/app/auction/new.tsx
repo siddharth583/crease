@@ -12,7 +12,11 @@ import { ratedSquad } from '../../engine/ratings.ts';
 import { isPlaceholder } from '../../engine/stats.ts';
 import { newId, useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
-import { colors, edge, font, radius, space, type } from '../../theme.ts';
+import { LinearGradient } from 'expo-linear-gradient';
+import { OvalGround } from '../../components/cricket.tsx';
+import { CountUp, Rise, Sheen } from '../../components/motion.tsx';
+import { TeamCrest } from '../../components/TeamCrest.tsx';
+import { colors, edge, font, gradients, hero, radius, space, type } from '../../theme.ts';
 
 const first = (name: string) => name.trim().split(/\s+/)[0];
 const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
@@ -168,6 +172,29 @@ export default function NewAuction() {
             </>
           )}
 
+          <Rise>
+            <View style={styles.hero}>
+              <LinearGradient pointerEvents="none" colors={gradients.hero} style={StyleSheet.absoluteFill} />
+              <OvalGround opacity={0.09} />
+              <Sheen />
+              <Text style={styles.heroKicker}>LIVE AUCTION · {today.length} PLAYERS</Text>
+              <View style={styles.heroRow}>
+                <View style={styles.heroSide}>
+                  <TeamCrest name={teamName(0)} size={50} />
+                  <Text style={styles.heroName} numberOfLines={1}>{teamName(0)}</Text>
+                </View>
+                <View style={styles.heroMid}>
+                  <Ionicons name="hammer" size={22} color={hero.gold} />
+                  <CountUp value={settings.purse} format={moneyShort} duration={500} style={styles.heroPurse} />
+                  <Text style={styles.heroSub}>each</Text>
+                </View>
+                <View style={styles.heroSide}>
+                  <TeamCrest name={teamName(1)} size={50} />
+                  <Text style={styles.heroName} numberOfLines={1}>{teamName(1)}</Text>
+                </View>
+              </View>
+            </View>
+          </Rise>
           {/* A tablet or laptop: who's playing on the left, the captains and the wallet beside it. */}
           <Columns weights={[3, 2]} gap={wide ? space.lg : 0}>
           <View>
@@ -303,6 +330,14 @@ const styles = StyleSheet.create({
   title: { fontFamily: font.posterBlack, fontSize: 38, lineHeight: 42, color: colors.text, letterSpacing: -1.4 },
   lead: { color: colors.muted, fontSize: 14, fontFamily: font.medium, marginTop: 4, lineHeight: 20 },
   count: { color: colors.faint, fontSize: 12, fontFamily: font.medium, ...type.num },
+  hero: { borderRadius: radius.xl, padding: space.lg, overflow: 'hidden', marginTop: space.md, borderWidth: 1, borderColor: hero.line },
+  heroKicker: { ...type.label, color: hero.gold, fontSize: 10, letterSpacing: 2, textAlign: 'center' },
+  heroRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.md },
+  heroSide: { flex: 1, alignItems: 'center', gap: 6 },
+  heroName: { color: hero.text, fontSize: 15, fontFamily: font.posterBlack, maxWidth: '100%' },
+  heroMid: { alignItems: 'center', minWidth: 90 },
+  heroPurse: { color: hero.text, fontSize: 24, fontFamily: font.posterBlack, ...type.num },
+  heroSub: { color: hero.muted, fontSize: 11, fontFamily: font.semibold },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   guestRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   input: {

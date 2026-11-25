@@ -1,75 +1,74 @@
 import type { BallTone } from './engine/engine.ts';
 import { startupPrefs } from './store/prefs.ts';
 
-// "Clubhouse": a cricket ground after dark, made calm and clean. A deep pitch-green black, soft rounded surfaces,
-// one bright volt accent used sparingly, cricket-ball red for wickets, and Bricolage Grotesque for headlines and
-// big numbers. "Day" is the same design on white, for bright sun.
+// "Pavilion": a cricket ground after dark. Deep outfield green, cricket whites for the type, the original volt green for what
+// you can act on, leather red for wickets and the live dot, champagne brass for honours. Bricolage Grotesque for headlines and big numbers, like a scoreboard. "Day" is the same on warm paper.
 
 const NIGHT = {
-  bg: '#090C0A',
-  surface: '#121814',
-  surfaceHi: '#1A221C',
-  border: 'rgba(214,236,200,0.07)',
-  borderHi: 'rgba(214,236,200,0.16)',
-  text: '#F1F5EE',
-  muted: '#98A396',
+  bg: '#050D09',
+  surface: '#0B1711',
+  surfaceHi: '#13241A',
+  border: 'rgba(205,235,215,0.075)',
+  borderHi: 'rgba(205,235,215,0.17)',
+  /** Cricket whites, a touch warm. */
+  text: '#F4F1E6',
+  muted: '#94AB9D',
   /** Small print: raised so it still reads at a glance (4.5:1 on the cards). */
-  faint: '#7A867B',
-  /** Volt: the one accent. Primary actions, sixes, the live state. */
+  faint: '#7A9384',
+  /** Mown grass: the one accent. Primary actions, sixes, selected, the good news. */
   accent: '#D7FF3A',
-  /** The accent as text or an icon on the page (on night it's the volt itself). */
+  /** The accent as text or an icon on the page. */
   accentInk: '#D7FF3A',
   accentDim: 'rgba(215,255,58,0.11)',
   onAccent: '#0A0D06',
   /** Fours. */
-  cyan: '#7FE6FF',
-  cyanDim: 'rgba(127,230,255,0.12)',
-  /** Trophies and medals. */
-  gold: '#FFCB52',
-  goldDim: 'rgba(255,203,82,0.12)',
-  /** Cricket-ball red: wickets, live dot, destructive. */
-  danger: '#FF5A3C',
-  dangerDim: 'rgba(255,90,60,0.14)',
+  cyan: '#6CCFF0',
+  cyanDim: 'rgba(108,207,240,0.13)',
+  /** Trophies and medals: brass, like an honours board. */
+  gold: '#DDB66E',
+  goldDim: 'rgba(221,182,110,0.14)',
+  /** Leather red: wickets, the live dot, destructive. */
+  danger: '#E5485D',
+  dangerDim: 'rgba(229,72,93,0.15)',
   /** Extras. */
-  violet: '#B9A6FF',
-  violetDim: 'rgba(185,166,255,0.14)',
+  violet: '#B4A2FF',
+  violetDim: 'rgba(180,162,255,0.15)',
   /** "r,g,b" of the ink, for faint tracks and lines: rgba(${ink}, a). */
-  ink: '241,245,238',
+  ink: '244,241,230',
   /** Mown-grass stripes. */
-  stripe: '214,236,200',
+  stripe: '200,235,205',
   /** A recessed panel inside a card. */
-  inset: 'rgba(0,0,0,0.35)',
-  scrim: 'rgba(3,5,4,0.72)',
+  inset: 'rgba(0,0,0,0.38)',
+  scrim: 'rgba(2,7,4,0.76)',
 };
 
-// Day: the same clubhouse on white. A soft off-white ground, white cards on a gentle shadow, the volt as a bright
-// fill with black type (deep green when it has to be text), and the scoreboards on the dark pitch green.
+// Day: the same Pavilion on warm paper. White cards on a gentle shadow, the grass green as a fill with dark type
+// (a deep green when it has to be text), and the scoreboards on the dark outfield panel.
 const DAY: typeof NIGHT = {
-  bg: '#F2F3EE',
+  bg: '#F4F2EA',
   surface: '#FFFFFF',
-  surfaceHi: '#F1F3EC',
-  border: 'rgba(17,24,14,0.07)',
-  borderHi: 'rgba(17,24,14,0.14)',
-  text: '#0E130D',
-  muted: '#5C6358',
-  /** Small print: dark enough to read in the sun (4.5:1 on white). */
-  faint: '#6E7569',
+  surfaceHi: '#ECEEE4',
+  border: 'rgba(14,30,18,0.08)',
+  borderHi: 'rgba(14,30,18,0.16)',
+  text: '#0F1A13',
+  muted: '#566A5C',
+  faint: '#69806F',
   accent: '#D4FF3A',
   accentInk: '#3B7200',
   accentDim: 'rgba(130,190,0,0.13)',
   onAccent: '#0A0D06',
-  cyan: '#00728F',
-  cyanDim: 'rgba(0,114,143,0.08)',
-  gold: '#A26E00',
+  cyan: '#007A9E',
+  cyanDim: 'rgba(0,122,158,0.08)',
+  gold: '#8F6A1F',
   goldDim: 'rgba(196,140,0,0.12)',
-  danger: '#E0301E',
-  dangerDim: 'rgba(224,48,30,0.08)',
+  danger: '#C9283E',
+  dangerDim: 'rgba(216,39,61,0.08)',
   violet: '#5B3FCB',
   violetDim: 'rgba(91,63,203,0.08)',
-  ink: '14,19,13',
-  stripe: '14,19,13',
-  inset: 'rgba(14,19,13,0.04)',
-  scrim: 'rgba(10,14,9,0.42)',
+  ink: '15,26,19',
+  stripe: '15,26,19',
+  inset: 'rgba(15,26,19,0.04)',
+  scrim: 'rgba(8,16,10,0.44)',
 };
 
 export const isDay = startupPrefs.theme === 'day';
@@ -99,26 +98,26 @@ export const edge = isDay
 export const ink = (alpha: number) => `rgba(${colors.ink},${alpha})`;
 
 /** The pitch at night: the scoreboards and hero panels, the same in both themes. */
-const PITCH = ['#1C3324', '#122017', '#0B130D'] as const;
-export const HERO_BG = '#0F1A12';
+const PITCH = ['#17402B', '#0D2418', '#07120C'] as const;
+export const HERO_BG = '#0B1A12';
 
 export const gradients = isDay
   ? {
       hero: PITCH,
       accent: ['#DBFF4A', '#C2EC10'] as const,
-      danger: ['#E2342A', '#C61D14'] as const,
+      danger: ['#EE4A5E', '#CC2A40'] as const,
       /** Morning light over the ground. */
-      glow: ['rgba(196,240,90,0.22)', 'rgba(242,243,238,0)'] as const,
+      glow: ['rgba(60,190,130,0.24)', 'rgba(244,242,234,0)'] as const,
     }
   : {
       hero: PITCH,
       accent: ['#E6FF6B', '#C8F51E'] as const,
-      danger: ['#FF6A4D', '#FF3B1C'] as const,
+      danger: ['#FF6477', '#EC3A50'] as const,
       /** The floodlights' green haze at the top of the screen. */
-      glow: ['rgba(80,140,70,0.20)', 'rgba(9,12,10,0)'] as const,
+      glow: ['rgba(40,170,115,0.24)', 'rgba(5,13,9,0)'] as const,
     };
 
-export const radius = { sm: 10, md: 14, lg: 20, xl: 26, pill: 999 };
+export const radius = { sm: 12, md: 16, lg: 22, xl: 30, pill: 999 };
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 
 export const ballColors: Record<BallTone, { bg: string; fg: string }> = {
@@ -180,7 +179,7 @@ function theme(label: string, accent: string, rgb: string, onAccent: string, ink
     ink: isDay ? ink[0] : ink[1],
     hero,
     soft: tint(rgb, 0.16),
-    glow: [tint(rgb, isDay ? 0.22 : 0.2), isDay ? 'rgba(242,243,238,0)' : 'rgba(9,12,10,0)'],
+    glow: [tint(rgb, isDay ? 0.22 : 0.2), isDay ? 'rgba(244,242,234,0)' : 'rgba(5,13,9,0)'],
     card: isDay ? card[0] : card[1],
     line: tint(rgb, isDay ? 0.35 : 0.22),
   };

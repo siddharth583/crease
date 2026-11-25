@@ -1,15 +1,20 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { TeamCrest, TeamWash } from '../../components/TeamCrest.tsx';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PlayerAvatar } from '../../components/Avatar.tsx';
+import { OvalGround, SeamDivider } from '../../components/cricket.tsx';
+import { CountUp, GrowBar, Rise, Sheen, Tug } from '../../components/motion.tsx';
+import { FormChips, RoleIcon, ROLE_NAME, useSquadByName } from '../../components/TeamsX.tsx';
+import { Stars } from '../../components/Stars.tsx';
 import { NameSuggestions } from '../../components/NameSuggestions.tsx';
 import { FormBadge } from '../../components/Ratings.tsx';
 import { Columns, Page, useLayout, widePad } from '../../components/layout.tsx';
-import { Button, Card, Chip, FadeIn, PitchStripes, PressableScale, Screen, SectionLabel, Segmented, useToast, WideHead, type IconName } from '../../components/ui.tsx';
+import { Button, Card, Chip, FadeIn, PitchStripes, PressableScale, Screen, SectionLabel, useToast, WideHead, type IconName } from '../../components/ui.tsx';
 import { LINEUP_IMAGE, lineupFileName, lineupHtml } from '../../engine/lineup.ts';
-import { DEFAULT_SQUAD } from '../../engine/squad.ts';
+import { DEFAULT_SQUAD, overall } from '../../engine/squad.ts';
 import {
   applyFix,
   evenSides,
@@ -31,7 +36,7 @@ import { newId, useMatches } from '../../store/matches.tsx';
 import { saveReportImage } from '../../store/files.ts';
 import { useSquad } from '../../store/squad.ts';
 import { useAccess } from '../../store/sync.tsx';
-import { colors, font, hero, ownTeamTheme, radius, space, teamTheme, type } from '../../theme.ts';
+import { colors, font, hero, ink, ownTeamTheme, radius, space, teamTheme, type } from '../../theme.ts';
 
 // The sides: how strong each is on current form, and two even sides from whoever turns up today.
 
@@ -81,10 +86,16 @@ function SideCard({
   const isTagged = (n: string) => tagged.some((x) => nameKey(x) === nameKey(n));
   const isCaptain = (n: string) => Boolean(captain) && nameKey(captain!) === nameKey(n);
   const tint = tintOf(name, side);
+  const th = ownTeamTheme(name);
+  const roster = useSquadByName();
+  const best = Math.max(...s.players.map((p) => p.power), 0.1);
   return (
     <Card style={[{ padding: 0, overflow: 'hidden' }, fill && { flex: 1 }]}>
       <View style={styles.sideHead}>
-        <View style={[styles.sideBar, { backgroundColor: tint }]} />
+        <TeamWash color={tint} strength={0.16} />
+        <View style={{ marginLeft: space.lg }}>
+          <TeamCrest name={name} size={48} />
+        </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           {edit ? (
             <TextInput
@@ -111,12 +122,8 @@ function SideCard({
             {s.players.length} players{note ? ` · ${note}` : ''}
           </Text>
           {results && results.length > 0 && (
-            <View style={styles.results} accessibilityLabel={`Last ${results.length} results, newest first: ${results.join(' ')}`}>
-              {results.map((r, k) => (
-                <Text key={k} style={[styles.result, r === 'W' ? styles.won : r === 'L' ? styles.lost : null]}>
-                  {r}
-                </Text>
-              ))}
+            <View style={styles.results}>
+              <FormChips results={results} size={20} accent={th?.accent} onAccent={th?.onAccent} />
               <Text style={styles.sideMeta}>  last {results.length}, newest first</Text>
             </View>
           )}
@@ -124,13 +131,13 @@ function SideCard({
         <View style={{ alignItems: 'flex-end' }}>
           {byTotal ? (
             <>
-              <Text style={[styles.power, { color: inkOf(name, side) }]}>{s.total.toFixed(1)}</Text>
+              <CountUp value={s.total} format={(n) => n.toFixed(1)} style={[styles.power, { color: inkOf(name, side) }]} />
               <Text style={styles.sideMeta}>Total · avg {s.power.toFixed(1)}</Text>
             </>
           ) : (
             <>
               <Text style={[styles.power, { color: inkOf(name, side) }]}>
-                {s.power.toFixed(1)}
+                <CountUp value={s.power} format={(n) => n.toFixed(1)} style={[styles.power, { color: inkOf(name, side) }]} />
                 <Text style={styles.powerOf}>/10</Text>
               </Text>
               <Text style={styles.sideMeta}>Strength</Text>
@@ -138,32 +145,37 @@ function SideCard({
           )}
         </View>
       </View>
+      {!byTotal && <GrowBar share={s.power / 10} trackStyle={styles.bigTrack} style={[styles.bigFill, { backgroundColor: tint }]} delay={250} />}
       <View style={styles.facts}>
-        {[
-          ['Form', s.form === null ? '–' : s.form.toFixed(1)],
-          ['Batting', `${s.bat.toFixed(1)}★`],
-          ['Bowling', `${s.bowl.toFixed(1)}★`],
-          ['Bowlers', String(s.bowlers)],
-          ['Keepers', String(s.keepers)],
-        ].map(([k, v]) => (
+        {(
+          [
+            ['Form', s.form === null ? '–' : s.form.toFixed(1), s.form === null ? 0 : s.form / 10],
+            ['Batting', `${s.bat.toFixed(1)}★`, s.bat / 5],
+            ['Bowling', `${s.bowl.toFixed(1)}★`, s.bowl / 5],
+            ['Bowlers', String(s.bowlers), -1],
+            ['Keepers', String(s.keepers), -1],
+          ] as [string, string, number][]
+        ).map(([k, v, share]) => (
           <View key={k} style={styles.fact}>
             <Text style={styles.factValue}>{v}</Text>
+            {share >= 0 ? <GrowBar share={share} trackStyle={styles.miniTrack} style={[styles.miniFill, { backgroundColor: tint }]} delay={400} /> : <View style={{ height: 4 }} />}
             <Text style={styles.factKey}>{k}</Text>
           </View>
         ))}
       </View>
       {[...s.players].sort((p, q) => Number(isCaptain(q.name)) - Number(isCaptain(p.name))).map((p, i) => {
         const picked = edit?.picked !== null && edit?.picked !== undefined && nameKey(edit.picked) === nameKey(p.name);
+        const sq = roster.get(nameKey(p.name));
         const row = (
           <>
-          <PlayerAvatar name={p.name} size={28} />
+          <PlayerAvatar name={p.name} size={36} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.playerName} numberOfLines={1}>
               {p.name}
-              {isCaptain(p.name) ? <Text style={styles.mark}>{'\u00A0\u00A0'}C</Text> : null}
-              {p.keeper ? <Text style={styles.mark}>{'\u00A0\u00A0'}WK</Text> : null}
-              {p.keepsSometimes ? <Text style={styles.markDim}>{'\u00A0\u00A0'}(WK)</Text> : null}
-              {p.guest ? <Text style={styles.markDim}>{'\u00A0\u00A0'}GUEST</Text> : null}
+              {isCaptain(p.name) ? <Text style={styles.mark}>{'  '}C</Text> : null}
+              {p.keeper ? <Text style={styles.mark}>{'  '}WK</Text> : null}
+              {p.keepsSometimes ? <Text style={styles.markDim}>{'  '}(WK)</Text> : null}
+              {p.guest ? <Text style={styles.markDim}>{'  '}GUEST</Text> : null}
             </Text>
             {isTagged(p.name) && (
               <View style={styles.tag}>
@@ -171,36 +183,49 @@ function SideCard({
                 <Text style={styles.tagText}>Suggested: to even it up</Text>
               </View>
             )}
-            <Text style={styles.playerSub} numberOfLines={1}>
-              {p.guest ? 'Not in the squad: counted as average' : `Bat ${p.bat}★ · Bowl ${p.bowl}★${p.form === null ? ' · no matches yet' : ''}`}
-            </Text>
+            {p.guest ? (
+              <Text style={styles.playerSub} numberOfLines={1}>Not in the squad: counted as average</Text>
+            ) : (
+              <View style={styles.subRow}>
+                {sq && <RoleIcon role={sq.role} size={18} />}
+                {sq && <Stars value={Math.max(1, Math.min(5, Math.round(overall(sq))))} size={11} />}
+                <Text style={styles.playerSub} numberOfLines={1}>
+                  {sq ? `${ROLE_NAME[sq.role]} · ` : ''}Bat {p.bat}★ · Bowl {p.bowl}★{p.form === null ? ' · no matches yet' : ''}
+                </Text>
+              </View>
+            )}
           </View>
           {p.form !== null && <FormBadge form={p.form} />}
-          <Text style={styles.playerPower}>{p.power.toFixed(1)}</Text>
+          <View style={styles.rateCol}>
+            <Text style={styles.playerPower}>{p.power.toFixed(1)}</Text>
+            <GrowBar share={p.power / best} trackStyle={styles.rateTrack} style={[styles.miniFill, { backgroundColor: tint }]} delay={300 + i * 40} />
+          </View>
           </>
         );
         const rowStyle = [styles.player, i === 0 && { borderTopWidth: 0 }, picked && styles.picked];
         // The row picks the player; ⇅ sits beside it (a button can't hold another).
-        return edit ? (
-          <View key={p.name} style={[rowStyle, { paddingVertical: 0 }]}>
-            <PressableScale
-              scaleTo={0.99}
-              accessibilityLabel={picked ? `${p.name}, picked: tap a player in ${edit.other} to swap` : `Pick ${p.name} to swap`}
-              accessibilityState={{ selected: picked }}
-              onPress={() => edit.onPick(p.name)}
-              wrapStyle={{ flex: 1, minWidth: 0 }}
-              style={styles.pickArea}
-            >
-              {row}
-            </PressableScale>
-            <PressableScale accessibilityLabel={`Move ${p.name} to ${edit.other}`} hitSlop={7} onPress={() => edit.onMove(p.name)} style={styles.move}>
-              <Ionicons name="swap-vertical" size={16} color={colors.muted} />
-            </PressableScale>
-          </View>
-        ) : (
-          <View key={p.name} style={rowStyle}>
-            {row}
-          </View>
+        return (
+          <Rise key={p.name} index={Math.min(i, 9)} step={35}>
+            {edit ? (
+              <View style={[rowStyle, { paddingVertical: 0 }]}>
+                <PressableScale
+                  scaleTo={0.99}
+                  accessibilityLabel={picked ? `${p.name}, picked: tap a player in ${edit.other} to swap` : `Pick ${p.name} to swap`}
+                  accessibilityState={{ selected: picked }}
+                  onPress={() => edit.onPick(p.name)}
+                  wrapStyle={{ flex: 1, minWidth: 0 }}
+                  style={styles.pickArea}
+                >
+                  {row}
+                </PressableScale>
+                <PressableScale accessibilityLabel={`Move ${p.name} to ${edit.other}`} hitSlop={7} onPress={() => edit.onMove(p.name)} style={styles.move}>
+                  <Ionicons name="swap-vertical" size={16} color={colors.muted} />
+                </PressableScale>
+              </View>
+            ) : (
+              <View style={rowStyle}>{row}</View>
+            )}
+          </Rise>
         );
       })}
     </Card>
@@ -222,47 +247,84 @@ function splitSides<T extends { team: Team }>(sides: T[]): { usual: T[]; others:
 }
 
 /**
- * The way into each usual side's own page, at the top of the tab: a card in the side's colours with its name, its
- * record and View team. The whole card opens the page.
+ * The hero of the tab: a big badge card for each usual side in its colours, with its record, its last five results
+ * and its strength. The whole card opens the side's page.
  */
-function TeamDoors() {
+function TeamDoors({ table }: { table: Map<string, Strength> }) {
   const { savedTeams, matches } = useMatches();
   const { wide } = useLayout();
   const { usual } = splitSides(savedTeams.filter((t) => t.players.length >= 2).map((team) => ({ team })));
   if (!usual.length) return null;
   return (
     <View style={styles.doors}>
-      {usual.map(({ team }) => {
+      {usual.map(({ team }, i) => {
         const th = teamTheme(team.name);
         const t = teamProfile(matches, team.name);
+        const power = sideStrength(team.players.filter((p) => !p.common).map((p) => strengthOf(table, p.name))).power;
+        const form = recentResults(matches, team.name);
         return (
-          <PressableScale
-            key={team.id}
-            scaleTo={0.97}
-            onPress={() => router.push({ pathname: '/team/[name]', params: { name: team.name } })}
-            accessibilityRole="link"
-            accessibilityLabel={`View team: ${team.name}`}
-            wrapStyle={{ flex: 1, minWidth: 0 }}
-            style={{ flex: 1 }}
-          >
-            <LinearGradient colors={th.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.door, wide && styles.doorWide]}>
-              <PitchStripes opacity={0.04} tint="255,255,255" />
-              <View style={[styles.doorBar, { backgroundColor: th.accent }]} />
-              <Text style={[styles.doorName, wide && { fontSize: 30, lineHeight: 34 }]} numberOfLines={2}>
-                {team.name}
-              </Text>
-              <Text style={styles.doorRecord} numberOfLines={1}>
-                {t.played ? `${t.played} played · ${t.won} won` : 'No matches yet'}
-              </Text>
-              <View style={[styles.doorGo, { backgroundColor: th.accent }]}>
-                <Text style={[styles.doorGoText, { color: th.onAccent }]}>View team</Text>
-                <Ionicons name="arrow-forward" size={15} color={th.onAccent} />
-              </View>
-            </LinearGradient>
-          </PressableScale>
+          <Rise key={team.id} index={i} step={110} style={{ flex: 1, minWidth: 0 }}>
+            <PressableScale
+              scaleTo={0.97}
+              onPress={() => router.push({ pathname: '/team/[name]', params: { name: team.name } })}
+              accessibilityRole="link"
+              accessibilityLabel={`View team: ${team.name}`}
+              wrapStyle={{ flex: 1, minWidth: 0 }}
+              style={{ flex: 1 }}
+            >
+              <LinearGradient colors={th.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.door, wide && styles.doorWide]}>
+                <OvalGround opacity={0.08} />
+                <PitchStripes opacity={0.04} tint="255,255,255" />
+                <TeamWash color={th.accent} strength={0.22} />
+                <Sheen />
+                <View style={styles.doorTop}>
+                  <TeamCrest name={team.name} size={wide ? 92 : 68} />
+                  <View style={styles.doorScore}>
+                    <CountUp value={power} format={(n) => n.toFixed(1)} delay={300} style={[styles.doorPower, wide && { fontSize: 44, lineHeight: 48 }]} />
+                    <Text style={styles.doorPowerKey}>Strength /10</Text>
+                  </View>
+                </View>
+                <Text style={[styles.doorName, wide && { fontSize: 30, lineHeight: 34 }]} numberOfLines={2}>
+                  {team.name}
+                </Text>
+                <Text style={styles.doorRecord} numberOfLines={1}>
+                  {t.played ? `${t.played} played · ${t.won}W ${t.lost}L` : 'No matches yet'}
+                </Text>
+                {form.length > 0 && <FormChips results={form} size={wide ? 26 : 21} accent={th.accent} onAccent={th.onAccent} onDark delay={300 + i * 150} />}
+                <View style={[styles.doorGo, { backgroundColor: th.accent }]}>
+                  <Text style={[styles.doorGoText, { color: th.onAccent }]}>View team</Text>
+                  <Ionicons name="arrow-forward" size={15} color={th.onAccent} />
+                </View>
+              </LinearGradient>
+            </PressableScale>
+          </Rise>
         );
       })}
     </View>
+  );
+}
+
+/** The comparison as a tug of war: whose squad is stronger, and the sentence that says it. */
+function CompareCard({ a, b }: { a: { name: string; s: SideStrength }; b: { name: string; s: SideStrength } }) {
+  const total = a.s.power + b.s.power || 1;
+  const ta = tintOf(a.name, 0);
+  const tb = tintOf(b.name, 1);
+  return (
+    <Card style={styles.compare}>
+      <Text style={styles.verdict}>{verdict([a.name, b.name], a.s, b.s)}</Text>
+      <View style={styles.compareRow}>
+        {[a, b].map((x, i) => (
+          <View key={x.name} style={[styles.compareSide, i === 1 && { alignItems: 'flex-end' }]}>
+            <CountUp value={x.s.power} format={(n) => n.toFixed(1)} style={[styles.comparePower, { color: inkOf(x.name, i) }]} />
+            <Text style={styles.compareName} numberOfLines={1}>
+              {x.name}
+            </Text>
+          </View>
+        ))}
+      </View>
+      <Tug edge={a.s.power / total} style={styles.tug} leftStyle={[styles.tugSide, { backgroundColor: ta, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }]} rightStyle={[styles.tugSide, { backgroundColor: tb, borderTopRightRadius: 8, borderBottomRightRadius: 8 }]} />
+      <Text style={styles.compareHint}>Strength out of 10, averaged per player.</Text>
+    </Card>
   );
 }
 
@@ -290,17 +352,7 @@ function StrengthView({ table }: { table: Map<string, Strength> }) {
     <View style={{ gap: space.md }}>
       {b && (
         <FadeIn>
-          <Card style={styles.compare}>
-            {[a, b].map((x, i) => (
-              <View key={x.team.id} style={[styles.compareSide, i === 1 && { alignItems: 'flex-end' }]}>
-                <Text style={[styles.comparePower, { color: inkOf(x.team.name, i) }]}>{x.s.power.toFixed(1)}</Text>
-                <Text style={styles.compareName} numberOfLines={1}>
-                  {x.team.name}
-                </Text>
-              </View>
-            ))}
-          </Card>
-          <Text style={styles.verdict}>{verdict([a.team.name, b.team.name], a.s, b.s)}</Text>
+          <CompareCard a={{ name: a.team.name, s: a.s }} b={{ name: b.team.name, s: b.s }} />
         </FadeIn>
       )}
       {/* On a tablet or laptop the two usual sides stand side by side, player against player. */}
@@ -340,7 +392,6 @@ function StrengthView({ table }: { table: Map<string, Strength> }) {
     </View>
   );
 }
-
 /** One action under the sides: an icon and its few words; `label` is the whole sentence for screen readers. */
 function Action({ icon, text, label, onPress, armed, disabled }: { icon: IconName; text: string; label: string; onPress: () => void; armed?: boolean; disabled?: boolean }) {
   // On a tablet or laptop they share the bar's width, so each row of them ends on the bar's right edge.
@@ -693,6 +744,18 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
                 </Text>
               </View>
             </View>
+            <View style={{ marginTop: space.md, gap: 6 }}>
+              <View style={styles.compareRow}>
+                <Text style={[styles.tugName, { color: inkOf(names[0], 0) }]} numberOfLines={1}>{names[0]}</Text>
+                <Text style={[styles.tugName, { color: inkOf(names[1], 1), textAlign: 'right' }]} numberOfLines={1}>{names[1]}</Text>
+              </View>
+              <Tug
+                edge={strength[0].total / (strength[0].total + strength[1].total || 1)}
+                style={styles.tug}
+                leftStyle={[styles.tugSide, { backgroundColor: tintOf(names[0], 0), borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }]}
+                rightStyle={[styles.tugSide, { backgroundColor: tintOf(names[1], 1), borderTopRightRadius: 8, borderBottomRightRadius: 8 }]}
+              />
+            </View>
             {suggestion && (
               <View style={styles.suggest}>
                 <Text style={styles.suggestText}>
@@ -813,22 +876,74 @@ function RecommendView({ table }: { table: Map<string, Strength> }) {
   );
 }
 
+/** Strength or Recommend, said in plain words: each tool has a title and a line on what it does. */
+function ToolBar({ view, onChange }: { view: 'strength' | 'recommend'; onChange: (v: 'strength' | 'recommend') => void }) {
+  const tools: { value: 'strength' | 'recommend'; title: string; line: string; icon: IconName }[] = [
+    { value: 'strength', title: 'Strength', line: 'Compare the two squads', icon: 'barbell-outline' },
+    { value: 'recommend', title: 'Recommend', line: 'Balanced sides for the next match', icon: 'scale-outline' },
+  ];
+  return (
+    <View style={styles.tools}>
+      {tools.map((t) => {
+        const on = t.value === view;
+        return (
+          <PressableScale
+            key={t.value}
+            accessibilityLabel={t.title}
+            accessibilityState={{ selected: on }}
+            scaleTo={0.96}
+            onPress={() => onChange(t.value)}
+            wrapStyle={{ flex: 1, minWidth: 0 }}
+            style={[styles.tool, on && styles.toolOn]}
+          >
+            <View style={styles.toolHead}>
+              <Ionicons name={t.icon} size={18} color={on ? colors.onAccent : colors.accentInk} />
+              <Text style={[styles.toolTitle, on && { color: colors.onAccent }]}>{t.title}</Text>
+            </View>
+            <Text style={[styles.toolLine, on && { color: colors.onAccent, opacity: 0.8 }]} numberOfLines={2}>
+              {t.line}
+            </Text>
+          </PressableScale>
+        );
+      })}
+    </View>
+  );
+}
+
+/** The way into an auction: pick the two sides by bidding for players. */
+function AuctionEntry() {
+  const { auctions } = useSquad();
+  const last = auctions[0];
+  return (
+    <Card style={styles.auction}>
+      <View style={styles.auctionIcon}>
+        <MaterialCommunityIcons name="gavel" size={24} color={colors.gold} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.auctionTitle}>Pick the sides by auction</Text>
+        <Text style={styles.hint}>Two captains bid for the squad, player by player, and the sides write themselves.</Text>
+        {last && (
+          <PressableScale scaleTo={0.97} hitSlop={8} onPress={() => router.push({ pathname: '/auction/[id]', params: { id: last.id } })} accessibilityLabel="Open the last auction" style={{ alignSelf: 'flex-start', marginTop: 6 }}>
+            <Text style={styles.auctionLast}>
+              Last auction: {last.sides[0].name} v {last.sides[1].name} ›
+            </Text>
+          </PressableScale>
+        )}
+      </View>
+      <PressableScale scaleTo={0.94} onPress={() => router.push('/auction/new')} accessibilityLabel="Start an auction" style={styles.auctionBtn}>
+        <Text style={styles.auctionBtnText}>Start an auction</Text>
+        <Ionicons name="arrow-forward" size={15} color={colors.onAccent} />
+      </PressableScale>
+    </Card>
+  );
+}
+
 export default function TeamsScreen() {
   const { matches } = useMatches();
   const { squad } = useSquad();
   const table = useMemo(() => strengths(matches, squad), [matches, squad]);
   const [view, setView] = useState<'strength' | 'recommend'>('strength');
   const layout = useLayout();
-  const switcher = (
-    <Segmented
-      value={view}
-      onChange={setView}
-      options={[
-        { value: 'strength', label: 'Strength' },
-        { value: 'recommend', label: 'Recommend' },
-      ]}
-    />
-  );
   return (
     <Screen>
       <ScrollView
@@ -837,20 +952,16 @@ export default function TeamsScreen() {
       >
         <Page>
         {layout.wide ? (
-          // A tablet or laptop: the title large, what to look at beside it.
-          <WideHead
-            title="Teams"
-            sub={view === 'strength' ? 'The sides on current form' : 'Two even sides from whoever turns up'}
-            right={<View style={{ width: 320 }}>{switcher}</View>}
-          />
+          <WideHead title="Teams" sub="The two sides, how strong they are, and fair teams for the next match" />
         ) : (
           <View style={styles.header}>
             <Text style={styles.title}>Teams</Text>
           </View>
         )}
         <View style={{ gap: space.md }}>
-          <TeamDoors />
-          {!layout.wide && switcher}
+          <TeamDoors table={table} />
+          <SeamDivider />
+          <ToolBar view={view} onChange={setView} />
           {/* Both stay mounted: switching to Strength and back keeps the sides being worked on. */}
           <View style={view === 'strength' ? null : styles.hidden}>
             <StrengthView table={table} />
@@ -858,6 +969,7 @@ export default function TeamsScreen() {
           <View style={view === 'recommend' ? null : styles.hidden}>
             <RecommendView table={table} />
           </View>
+          <AuctionEntry />
         </View>
         </Page>
       </ScrollView>
@@ -874,14 +986,18 @@ const styles = StyleSheet.create({
   count: { color: colors.faint, fontSize: 12, fontFamily: font.semibold },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 
-  compare: { flexDirection: 'row', justifyContent: 'space-between', gap: space.md },
+  compare: { gap: space.md },
+  compareRow: { flexDirection: 'row', justifyContent: 'space-between', gap: space.md },
+  compareHint: { color: colors.faint, fontSize: 11, fontFamily: font.medium, textAlign: 'center' },
+  tug: { height: 14 },
+  tugSide: { height: 14 },
+  tugName: { flex: 1, fontSize: 12, fontFamily: font.bold },
   compareSide: { flex: 1, minWidth: 0 },
   comparePower: { fontFamily: font.posterBlack, fontSize: 40, lineHeight: 44, ...type.num },
   compareName: { color: colors.text, fontSize: 15, fontFamily: font.bold },
-  verdict: { color: colors.text, fontSize: 14, fontFamily: font.semibold, textAlign: 'center', marginTop: space.sm },
+  verdict: { color: colors.text, fontSize: 19, lineHeight: 24, fontFamily: font.posterBlack, letterSpacing: -0.4, textAlign: 'center' },
 
-  sideHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, paddingLeft: 0 },
-  sideBar: { width: 4, alignSelf: 'stretch', borderTopRightRadius: 2, borderBottomRightRadius: 2 },
+  sideHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, paddingLeft: 0, overflow: 'hidden' },
   sideName: { color: colors.text, fontSize: 20, fontFamily: font.posterBlack },
   sideNameInput: { padding: 0, borderBottomWidth: 1, borderBottomColor: colors.borderHi },
   picked: { backgroundColor: colors.accentDim },
@@ -902,9 +1018,12 @@ const styles = StyleSheet.create({
 
   hidden: { display: 'none' },
   doors: { flexDirection: 'row', gap: space.md },
-  door: { flex: 1, borderRadius: radius.lg, padding: space.lg, paddingTop: space.lg + 6, gap: 6, overflow: 'hidden', borderWidth: 1, borderColor: hero.line, minHeight: 150 },
-  doorWide: { padding: space.xl, paddingTop: space.xl + 6, minHeight: 176 },
-  doorBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
+  door: { flex: 1, borderRadius: radius.lg, padding: space.md, paddingTop: space.lg, gap: 8, overflow: 'hidden', borderWidth: 1, borderColor: hero.line, minHeight: 250 },
+  doorTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  doorScore: { alignItems: 'flex-end' },
+  doorPower: { color: hero.text, fontFamily: font.posterBlack, fontSize: 30, lineHeight: 34, ...type.num },
+  doorPowerKey: { color: hero.muted, fontSize: 9, fontFamily: font.semibold, letterSpacing: 0.6, textTransform: 'uppercase' },
+  doorWide: { padding: space.xl, minHeight: 300, gap: 10 },
   doorName: { fontFamily: font.posterBlack, fontSize: 22, lineHeight: 26, color: hero.text, letterSpacing: -0.6 },
   doorRecord: { color: hero.muted, fontSize: 13, fontFamily: font.semibold, ...type.num },
   doorGo: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', minHeight: 36, paddingHorizontal: space.md, borderRadius: radius.pill, marginTop: 'auto' },
@@ -921,7 +1040,26 @@ const styles = StyleSheet.create({
   tagText: { color: colors.onAccent, fontSize: 10, fontFamily: font.bold },
   suggest: { gap: space.sm, marginTop: space.md, paddingTop: space.md, borderTopWidth: 1, borderTopColor: colors.border },
   suggestText: { color: colors.text, fontSize: 13, fontFamily: font.semibold, lineHeight: 19 },
-  results: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 6 },
+  results: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 3, marginTop: 6 },
+  bigTrack: { height: 5, backgroundColor: ink(0.08) },
+  bigFill: { height: 5, borderRadius: 3 },
+  miniTrack: { height: 4, borderRadius: 2, backgroundColor: ink(0.1), alignSelf: 'stretch', marginHorizontal: 10, marginTop: 3 },
+  miniFill: { height: 4, borderRadius: 2 },
+  rateTrack: { height: 3, borderRadius: 2, backgroundColor: ink(0.1), width: 34, marginTop: 3 },
+  rateCol: { alignItems: 'flex-end' },
+  subRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 5, marginTop: 2 },
+  tools: { flexDirection: 'row', gap: space.sm },
+  tool: { flex: 1, gap: 4, padding: space.md, minHeight: 74, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderHi },
+  toolOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  toolHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  toolTitle: { color: colors.text, fontSize: 16, fontFamily: font.posterBlack },
+  toolLine: { color: colors.muted, fontSize: 12, lineHeight: 16, fontFamily: font.medium },
+  auction: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.md, marginTop: space.sm },
+  auctionIcon: { width: 46, height: 46, borderRadius: radius.md, backgroundColor: colors.goldDim, alignItems: 'center', justifyContent: 'center' },
+  auctionTitle: { color: colors.text, fontSize: 16, fontFamily: font.posterBlack, marginBottom: 2 },
+  auctionLast: { color: colors.gold, fontSize: 12, fontFamily: font.bold },
+  auctionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: space.lg, borderRadius: radius.pill, backgroundColor: colors.accent },
+  auctionBtnText: { color: colors.onAccent, fontSize: 14, fontFamily: font.heavy },
   result: { width: 18, height: 18, borderRadius: 4, overflow: 'hidden', textAlign: 'center', lineHeight: 18, fontSize: 10, fontFamily: font.heavy, color: colors.muted, backgroundColor: colors.surfaceHi },
   won: { backgroundColor: colors.accentDim, color: colors.accentInk },
   lost: { backgroundColor: colors.dangerDim, color: colors.danger },

@@ -1,8 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 import { addEvent, matchState } from '../engine/engine.ts';
 import type { Match } from '../engine/types.ts';
-import { colors, font, space } from '../theme.ts';
-import { Button, Sheet } from './ui.tsx';
+import { colors, font, radius, space } from '../theme.ts';
+import { PressableScale, Sheet } from './ui.tsx';
 
 type Outcome = Match['outcome'];
 
@@ -32,17 +33,30 @@ export function ResultSheet({ match, visible, onClose, onPick }: { match: Match;
   return (
     <Sheet visible={visible} onClose={onClose} title="Change the result">
       <View style={{ gap: space.sm, paddingBottom: space.md }}>
-        <Text style={styles.note}>{state.innings[1]?.battingTeam.name ?? 'The chase'} batted second, and the innings was ended early. Call the match on the score, a draw, or a forfeit.</Text>
+        <View style={styles.intro}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.gold} />
+          <Text style={styles.note}>
+            {state.innings[1]?.battingTeam.name ?? 'The chase'} batted second and the innings was ended early. Pick how the match is called: on the score, a draw, or a forfeit.
+          </Text>
+        </View>
         {outcomeChoices(match, matchState({ ...match, outcome: undefined }).result).map((c) => {
           const current = outcomeKey(match.outcome) === c.key;
+          const label = current ? `${c.label} (now)` : c.label;
           return (
-            <Button
+            <PressableScale
               key={c.key}
-              variant={current ? 'primary' : 'ghost'}
-              label={current ? `${c.label} (now)` : c.label}
-              icon={current ? 'checkmark-circle' : c.icon}
+              accessibilityLabel={label}
+              accessibilityState={{ selected: current }}
+              scaleTo={0.97}
               onPress={() => (current ? onClose() : onPick(c.outcome))}
-            />
+              style={[styles.choice, current && styles.choiceOn]}
+            >
+              <View style={[styles.icon, current && { backgroundColor: colors.accent }]}>
+                <Ionicons name={current ? 'checkmark' : c.icon} size={18} color={current ? colors.onAccent : colors.muted} />
+              </View>
+              <Text style={styles.choiceText}>{c.label}</Text>
+              {current && <Text style={styles.now}>CURRENT</Text>}
+            </PressableScale>
           );
         })}
       </View>
@@ -51,5 +65,11 @@ export function ResultSheet({ match, visible, onClose, onPick }: { match: Match;
 }
 
 const styles = StyleSheet.create({
-  note: { color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 19 },
+  note: { flex: 1, color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 19 },
+  intro: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start', backgroundColor: colors.goldDim, borderRadius: radius.md, padding: space.md },
+  choice: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 56, paddingHorizontal: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.border },
+  choiceOn: { borderColor: colors.accent },
+  icon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  choiceText: { flex: 1, color: colors.text, fontSize: 15, fontFamily: font.bold },
+  now: { color: colors.accentInk, fontSize: 10, fontFamily: font.heavy, letterSpacing: 1 },
 });

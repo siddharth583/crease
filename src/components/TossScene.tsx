@@ -3,9 +3,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, font, radius, space } from '../theme.ts';
+import { colors, font, gradients, hero, radius, space } from '../theme.ts';
+import { OvalGround } from './cricket.tsx';
+import { TeamCrest } from './TeamCrest.tsx';
 import { useLayout } from './layout.tsx';
-import { useReducedMotion } from './motion.tsx';
+import { Confetti, PopIn, Sheen, useReducedMotion } from './motion.tsx';
 import { Button, IconButton, PressableScale, Segmented, tap } from './ui.tsx';
 
 // The toss. Most of the time it was done with a real coin out on the field, so the quickest way is to say who won.
@@ -88,6 +90,7 @@ export function TossScene({
   const [face, setFace] = useState<Face | null>(null);
   const [winner, setWinner] = useState<Side>(0);
   const [turns, setTurns] = useState(6);
+  const callRef = useRef<Face>('heads');
   const t = useRef(new Animated.Value(0)).current;
   const land = useRef(new Animated.Value(1)).current;
   const result = useRef(new Animated.Value(0)).current;
@@ -107,6 +110,7 @@ export function TossScene({
   };
 
   const toss = (call: Face) => {
+    callRef.current = call;
     const landed: Face = Math.random() < 0.5 ? 'heads' : 'tails';
     const won = (landed === call ? caller : 1 - caller) as Side;
     setTurns(5 + Math.floor(Math.random() * 3) + (landed === 'tails' ? 0.5 : 0));
@@ -146,12 +150,23 @@ export function TossScene({
   return (
     <Modal visible={visible} animationType={still ? 'none' : 'slide'} onRequestClose={onClose}>
       <View style={[styles.screen, { paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.lg }, wide && { paddingHorizontal: gutter }]}>
+        <LinearGradient pointerEvents="none" colors={gradients.hero} style={StyleSheet.absoluteFill} />
+        <OvalGround opacity={0.08} />
+        <Sheen />
         <View style={styles.head}>
-          <IconButton icon="close" label="Back to the teams" onPress={onClose} />
+          <IconButton icon="close" tint={hero.text} label="Back to the teams" onPress={onClose} />
           <Text style={[styles.title, wide && styles.titleWide]}>The toss</Text>
           <View style={{ width: 44 }} />
         </View>
+        <View style={styles.matchup} accessibilityLabel={`${names[0]} versus ${names[1]}`}>
+          <TeamCrest name={names[0]} size={34} />
+          <Text style={styles.matchupText} numberOfLines={1}>
+            {names[0]} <Text style={{ color: hero.gold }}>v</Text> {names[1]}
+          </Text>
+          <TeamCrest name={names[1]} size={34} />
+        </View>
 
+        {phase === 'choose' && face && <Confetti count={34} height={620} />}
         <View style={[{ flex: 1 }, wide && styles.column]}>
         <View style={[styles.stage, wide && styles.stageWide]}>
           <Animated.View style={[styles.shadow, { opacity: path.shadow, transform: [{ scaleX: path.shadow }] }]} />
@@ -174,8 +189,9 @@ export function TossScene({
               <Text style={styles.question}>Who won the toss?</Text>
               <View style={styles.row}>
                 {([0, 1] as Side[]).map((s) => (
-                  <PressableScale key={s} scaleTo={0.96} wrapStyle={{ flex: 1 }} onPress={() => wonOnField(s)} style={styles.choice}>
-                    <Text style={styles.choiceText} numberOfLines={1}>
+                  <PressableScale key={s} scaleTo={0.96} wrapStyle={{ flex: 1 }} onPress={() => wonOnField(s)} style={styles.choice} accessibilityLabel={`${names[s]} won the toss`}>
+                    <TeamCrest name={names[s]} size={26} />
+                    <Text style={[styles.choiceText, { fontSize: 14, flexShrink: 1, textAlign: 'center' }]} numberOfLines={2}>
                       {names[s]}
                     </Text>
                   </PressableScale>
@@ -214,14 +230,19 @@ export function TossScene({
             </>
           )}
 
-          {phase === 'flight' && <Text style={styles.question}>In the air…</Text>}
+          {phase === 'flight' && <Text style={styles.question}>{names[caller]} called {callRef.current}. In the air…</Text>}
 
           {phase === 'choose' && (
             <Animated.View style={{ gap: space.md, opacity: result, transform: [{ translateY: rise }] }}>
               {face && <Text style={styles.face}>{face === 'heads' ? 'Heads' : 'Tails'}!</Text>}
-              <Text style={styles.won}>
-                <Text style={styles.strong}>{names[winner]}</Text> won the toss and chose to
-              </Text>
+              <PopIn key={`${winner}-${face}`} style={styles.winner}>
+                <TeamCrest name={names[winner]} size={46} />
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={styles.winnerKicker}>WON THE TOSS</Text>
+                  <Text style={styles.winnerName} numberOfLines={1}>{names[winner]}</Text>
+                </View>
+              </PopIn>
+              <Text style={styles.won}>and chose to</Text>
               <View style={styles.row}>
                 {(['bat', 'bowl'] as const).map((c) => (
                   <PressableScale
@@ -251,9 +272,9 @@ export function TossScene({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: space.lg },
+  screen: { flex: 1, backgroundColor: '#0B1A12', paddingHorizontal: space.lg },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontFamily: font.posterBlack, fontSize: 22, color: colors.text, letterSpacing: -0.5 },
+  title: { fontFamily: font.posterBlack, fontSize: 22, color: hero.text, letterSpacing: -0.5 },
   titleWide: { fontSize: 28, letterSpacing: -0.8 },
   // A tablet or laptop: the coin and the choices together in the middle of the screen, not dropped to its foot with
   // the whole height empty above them; the stage keeps the coin's flight room.
@@ -282,15 +303,20 @@ const styles = StyleSheet.create({
   },
   coinRing: { position: 'absolute', left: 10, top: 10, right: 10, bottom: 10, borderRadius: COIN, borderWidth: 2, borderColor: 'rgba(107,71,8,0.4)' },
   panel: { gap: space.md, minHeight: 250 },
-  question: { color: colors.muted, fontSize: 15, fontFamily: font.semibold, textAlign: 'center' },
-  strong: { color: colors.text, fontFamily: font.bold },
+  matchup: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.md, marginTop: space.sm },
+  matchupText: { color: hero.text, fontSize: 15, fontFamily: font.bold, flexShrink: 1 },
+  winner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.md },
+  winnerKicker: { color: hero.gold, fontSize: 11, fontFamily: font.heavy, letterSpacing: 2 },
+  winnerName: { color: hero.text, fontSize: 26, fontFamily: font.posterBlack, letterSpacing: -0.6 },
+  question: { color: hero.muted, fontSize: 15, fontFamily: font.semibold, textAlign: 'center' },
+  strong: { color: hero.text, fontFamily: font.bold },
   row: { flexDirection: 'row', gap: space.sm },
   choice: {
-    height: 58,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
+    minHeight: 62,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: 1,
-    borderColor: colors.borderHi,
+    borderColor: hero.line,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -298,10 +324,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
   },
   primary: { backgroundColor: colors.accent, borderColor: colors.accent },
-  choiceText: { color: colors.text, fontSize: 16, fontFamily: font.bold },
-  or: { color: colors.faint, fontSize: 13, fontFamily: font.medium, textAlign: 'center', marginTop: space.md },
-  face: { fontFamily: font.posterBlack, fontSize: 40, color: colors.gold, textAlign: 'center', letterSpacing: -1 },
-  won: { color: colors.muted, fontSize: 16, fontFamily: font.medium, textAlign: 'center' },
+  choiceText: { color: hero.text, fontSize: 16, fontFamily: font.bold },
+  or: { color: hero.faint, fontSize: 13, fontFamily: font.medium, textAlign: 'center', marginTop: space.md },
+  face: { fontFamily: font.posterBlack, fontSize: 44, color: hero.gold, textAlign: 'center', letterSpacing: -1 },
+  won: { color: hero.muted, fontSize: 16, fontFamily: font.medium, textAlign: 'center' },
   link: { alignSelf: 'center', justifyContent: 'center', minHeight: 44, paddingHorizontal: space.md },
-  linkText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold, textDecorationLine: 'underline' },
+  linkText: { color: hero.muted, fontSize: 14, fontFamily: font.semibold, textDecorationLine: 'underline' },
 });

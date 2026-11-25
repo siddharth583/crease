@@ -50,7 +50,7 @@ const PageTone = createContext<TeamTheme | null>(null);
 export const PageToneProvider = PageTone.Provider;
 export const usePageTone = () => useContext(PageTone);
 
-/** A screen at the ground after dark: the pitch-black page with a faint green haze from the floodlights. */
+/** A screen at the ground after dark: the ink-blue page with a warm haze from the floodlights. */
 export function Screen({ children, style, glow = true }: { children: ReactNode; style?: StyleProp<ViewStyle>; glow?: boolean }) {
   const insets = useSafeAreaInsets();
   const tone = usePageTone();
@@ -64,7 +64,13 @@ export function Screen({ children, style, glow = true }: { children: ReactNode; 
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const tone = usePageTone();
-  return <View style={[styles.card, tone && { backgroundColor: tone.card, borderColor: tone.line }, style]}>{children}</View>;
+  return (
+    <View style={[styles.card, tone && { backgroundColor: tone.card, borderColor: tone.line }, style]}>
+      {/* A faint light from above, so a card reads as a raised piece of glass rather than a flat box. */}
+      {!isDay && <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']} style={styles.cardSheen} />}
+      {children}
+    </View>
+  );
 }
 
 /** Mown-grass stripes, as seen on a ground from the stands. Fills its parent. */
@@ -182,60 +188,8 @@ export function PopText({ value, style }: { value: string | number; style?: Styl
 
 export type Moment = { kind: 'four' | 'six' | 'wicket' | 'fifty' | 'hundred' | 'hattrick'; caption?: string; key: number };
 
-const MOMENTS = {
-  four: { word: 'FOUR!', bg: colors.cyan, fg: colors.onAccent, size: 1, hold: 520 },
-  six: { word: 'SIX!', bg: colors.accent, fg: colors.onAccent, size: 1, hold: 520 },
-  wicket: { word: 'OUT!', bg: colors.danger, fg: '#FFFFFF', size: 1, hold: 520 },
-  fifty: { word: 'FIFTY!', bg: colors.gold, fg: colors.onAccent, size: 0.82, hold: 1100 },
-  hundred: { word: 'CENTURY!', bg: colors.gold, fg: colors.onAccent, size: 0.6, hold: 1400 },
-  hattrick: { word: 'HAT-TRICK!', bg: colors.danger, fg: '#FFFFFF', size: 0.5, hold: 1400 },
-};
-
-/** The broadcast takeover after a boundary or a wicket: a flood of colour and one giant word. */
-export function MomentFlash({ moment }: { moment: Moment | null }) {
-  const v = useRef(new Animated.Value(0)).current;
-  const [shown, setShown] = useState<Moment | null>(null);
-
-  useEffect(() => {
-    if (!moment) return;
-    setShown(moment);
-    v.setValue(0);
-    Animated.sequence([
-      Animated.spring(v, { toValue: 1, useNativeDriver: native, speed: 11, bounciness: 9 }),
-      Animated.delay(MOMENTS[moment.kind].hold),
-      Animated.timing(v, { toValue: 2, duration: 380, easing: Easing.bezier(0.55, 0, 1, 0.45), useNativeDriver: native }),
-    ]).start(() => setShown(null));
-  }, [moment, v]);
-
-  if (!shown) return null;
-  const m = MOMENTS[shown.kind];
-  const opacity = v.interpolate({ inputRange: [0, 0.5, 1.5, 2], outputRange: [0, 0.97, 0.97, 0] });
-  const scale = v.interpolate({ inputRange: [0, 1, 2], outputRange: [0.6, 1, 1.12] });
-  const translateY = v.interpolate({ inputRange: [0, 1, 2], outputRange: [40, 0, -30] });
-  // A ring bursts out from the centre as the colour floods in.
-  const ring = v.interpolate({ inputRange: [0, 1, 2], outputRange: [0.2, 2.6, 4] });
-  const ringOpacity = v.interpolate({ inputRange: [0, 0.4, 1, 2], outputRange: [0, 0.5, 0.15, 0] });
-
-  return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.moment, { backgroundColor: m.bg, opacity }]}>
-      <PitchStripes count={7} opacity={0.06} />
-      <Animated.View style={[styles.momentRing, { borderColor: m.fg, opacity: ringOpacity, transform: [{ scale: ring }] }]} />
-      <Animated.Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        style={[
-          styles.momentWord,
-          { color: m.fg, fontSize: 150 * m.size, lineHeight: 160 * m.size, transform: [{ translateY }, { scale }] },
-        ]}
-      >
-        {m.word}
-      </Animated.Text>
-      {shown.caption ? (
-        <Animated.Text style={[styles.momentCaption, { color: m.fg, transform: [{ translateY }] }]}>{shown.caption}</Animated.Text>
-      ) : null}
-    </Animated.View>
-  );
-}
+// The broadcast moment after a boundary, a wicket or a milestone lives in its own file.
+export { MomentFlash } from './MomentFlash.tsx';
 
 // ─── Controls ────────────────────────────────────────────────────────────────
 
@@ -276,6 +230,7 @@ export function Button({
       style={[styles.buttonWrap, { opacity: disabled ? 0.35 : 1 }, style]}
     >
       <Animated.View style={[styles.buttonFill, fill, { transform: [{ scale }] }]}>
+        {variant === 'primary' && <LinearGradient pointerEvents="none" colors={gradients.accent} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: radius.md + 2 }]} />}
         {icon && <Ionicons name={icon} size={18} color={fg} />}
         <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
       </Animated.View>
@@ -328,7 +283,7 @@ export function Chip({
   icon?: IconName;
 }) {
   const on = {
-    accent: [colors.text, colors.bg],
+    accent: [colors.accent, colors.onAccent],
     violet: [colors.violet, isDay ? '#FFFFFF' : colors.onAccent],
     danger: [colors.danger, '#FFFFFF'],
   }[tone];
@@ -381,7 +336,7 @@ export function Segmented<T extends string>({
           >
             <Text
               numberOfLines={multiline ? 2 : 1}
-              style={[styles.segmentText, dense && styles.segmentTextDense, multiline && { textAlign: 'center', lineHeight: 17 }, on && { color: colors.bg }]}
+              style={[styles.segmentText, dense && styles.segmentTextDense, multiline && { textAlign: 'center', lineHeight: 17 }, on && { color: colors.onAccent, fontFamily: font.heavy }]}
             >
               {o.label}
             </Text>
@@ -650,26 +605,27 @@ export const styles = StyleSheet.create({
     padding: space.lg,
     ...edge,
   },
+  cardSheen: { position: 'absolute', top: 0, left: 0, right: 0, height: 90, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: space.xl + 4,
+    marginTop: space.xl + 8,
     marginBottom: space.md,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
-  sectionLabel: { ...type.label, color: colors.muted },
-  buttonWrap: { height: 56 },
+  sectionLabel: { fontFamily: font.posterBlack, fontSize: 20, letterSpacing: -0.5, color: colors.text },
+  buttonWrap: { height: 54 },
   buttonFill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
-    borderRadius: radius.pill,
+    borderRadius: radius.md + 2,
     paddingHorizontal: space.xl,
   },
-  primaryFill: { backgroundColor: colors.accent, ...edge },
+  primaryFill: { backgroundColor: colors.accent, boxShadow: isDay ? '0px 6px 18px rgba(130,190,0,0.25)' : '0px 8px 26px rgba(215,255,58,0.26)' },
   dangerFill: { backgroundColor: colors.danger },
   ghostFill: { backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.border },
   buttonText: { fontSize: 16, fontFamily: font.bold, letterSpacing: -0.1 },
@@ -689,8 +645,8 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
-    height: 36,
-    borderRadius: radius.pill,
+    height: 38,
+    borderRadius: radius.sm + 2,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceHi,
@@ -698,20 +654,20 @@ export const styles = StyleSheet.create({
   chipText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold },
   segmented: {
     flexDirection: 'row',
-    backgroundColor: colors.surfaceHi,
-    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md + 2,
     padding: 4,
     gap: 4,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  segment: { height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, paddingHorizontal: 10 },
+  segment: { height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md - 2, paddingHorizontal: 10 },
   segmentDense: { paddingHorizontal: 4 },
   segmentTall: { height: undefined, minHeight: 38, paddingVertical: 4, borderRadius: radius.md },
   segmentTextDense: { fontSize: 13 },
   // Room above and below for the chips' larger touch area.
   years: { gap: space.sm, paddingVertical: 4 },
-  segmentOn: { backgroundColor: colors.text },
+  segmentOn: { backgroundColor: colors.accent },
   segmentText: { color: colors.muted, fontSize: 14, fontFamily: font.semibold },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.sm, minHeight: 58 },
   rowTitle: { color: colors.text, fontSize: 15, fontFamily: font.semibold },

@@ -1,3 +1,4 @@
+import { inPlay, UNUSED_EXTRAS, UNUSED_WICKETS } from '../engine/clubRules.ts';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -125,15 +126,22 @@ export function OverEditSheet({
   return (
     <Sheet visible onClose={onClose} title={`Over ${over + 1}`}>
       <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
-        <View style={styles.countRow}>
-          <Text style={[styles.count, { color: whole ? colors.accentInk : colors.danger }]}>
-            {fair} of 6 fair balls
-          </Text>
-          <Text style={styles.bowlers} numberOfLines={1}>
-            {bowlers}
-          </Text>
+        <View style={styles.countCard}>
+          <View style={styles.countRow}>
+            <Text style={[styles.count, { color: whole ? colors.accentInk : colors.danger }]}>
+              {fair} of 6 fair balls
+            </Text>
+            <Text style={styles.bowlers} numberOfLines={1}>
+              {bowlers}
+            </Text>
+          </View>
+          <View style={styles.pips}>
+            {Array.from({ length: 6 }, (_, i) => (
+              <View key={i} style={[styles.pip, i < fair && { backgroundColor: fair > 6 ? colors.danger : colors.accent }]} />
+            ))}
+          </View>
+          {need ? <Text style={styles.need}>{need}</Text> : <Text style={styles.note}>Tap a ball to change it, add a missed one, or move the bowler.</Text>}
         </View>
-        {need ? <Text style={styles.need}>{need}</Text> : null}
 
         <View style={styles.balls}>
           {draft.map((d, i) => (
@@ -146,7 +154,7 @@ export function OverEditSheet({
           </PressableScale>
         </View>
 
-        <Text style={styles.label}>Ball {at + 1}</Text>
+        <Text style={styles.label}>Ball {at + 1}: what happened?</Text>
         {canBeOut && (
           <Segmented
             value={ball.wicket ? 'out' : kind}
@@ -158,7 +166,7 @@ export function OverEditSheet({
                 d.map((x, i) => (i === at ? { ...x, ball: { type: 'ball', runs: v === 'wide' ? 0 : (v === 'bye' || v === 'legbye') && x.ball.runs === 0 ? 1 : x.ball.runs, extra: v === 'none' ? undefined : v } } : x)),
               );
             }}
-            options={WITH_OUT}
+            options={inPlay(WITH_OUT, UNUSED_EXTRAS, ball.wicket ? 'out' : ball.extra ?? 'none')}
           />
         )}
         {ball.wicket ? (
@@ -190,7 +198,7 @@ export function OverEditSheet({
               <Text style={styles.note}>{playerName(match, ball.wicket.playerOut)} is out on this ball. Fix how, or who took it.</Text>
             )}
             <View style={styles.wrap}>
-              {WICKET_KINDS.map((k) => (
+              {inPlay(WICKET_KINDS, UNUSED_WICKETS, ball.wicket!.kind).map((k) => (
                 <Chip
                   key={k.value}
                   tone="danger"
@@ -245,10 +253,13 @@ export function OverEditSheet({
 }
 
 const styles = StyleSheet.create({
+  countCard: { backgroundColor: colors.surfaceHi, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderHi, padding: space.md, gap: space.sm },
+  pips: { flexDirection: 'row', gap: 5 },
+  pip: { flex: 1, height: 5, borderRadius: 3, backgroundColor: colors.border },
   countRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: space.md },
   count: { fontFamily: font.posterBlack, fontSize: 20 },
   bowlers: { flex: 1, textAlign: 'right', color: colors.muted, fontSize: 13, fontFamily: font.semibold },
-  need: { color: colors.danger, fontSize: 13, fontFamily: font.semibold, marginTop: -space.sm },
+  need: { color: colors.danger, fontSize: 13, fontFamily: font.semibold },
   balls: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   ring: { padding: 2, borderRadius: radius.pill, borderWidth: 2, borderColor: 'transparent' },
   ringOn: { borderColor: colors.accentInk },

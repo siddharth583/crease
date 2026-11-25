@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { sampleSeason } from '../demo/sampleSeason.ts';
 import { matchState } from './engine.ts';
 import { careerStats } from './stats.ts';
-import { BALLS_TO_CALL, headToHead, matchups, records, rivalry, rivalryContext, verdict } from './records.ts';
+import { BALLS_TO_CALL, bigHits, headToHead, matchups, records, rivalry, rivalryContext, verdict } from './records.ts';
 
 const { matches } = sampleSeason(new Date('2026-10-23T12:00:00Z'));
 
@@ -130,4 +130,15 @@ test('a rivalry is judged against how the two usually go, and not called on a ha
 
 test('a no-ball is never a dot ball in a rivalry', () => {
   for (const m of matchups(matches)) assert.ok(m.dots + m.outs <= m.balls);
+});
+
+test('whom a batter has hit boundaries off adds up to their own sixes and fours', () => {
+  const duels = matchups(matches);
+  for (const c of careerStats(matches)) {
+    const hits = bigHits(duels, c.key);
+    assert.equal(hits.reduce((n, h) => n + h.sixes, 0), c.batting.sixes, `${c.name}: sixes`);
+    assert.equal(hits.reduce((n, h) => n + h.fours, 0), c.batting.fours, `${c.name}: fours`);
+    assert.ok(hits.every((h) => h.sixes + h.fours > 0));
+    assert.ok(hits.every((h, i) => i === 0 || hits[i - 1].sixes >= h.sixes), `${c.name}: most sixes first`);
+  }
 });

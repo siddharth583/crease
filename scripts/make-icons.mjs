@@ -4,6 +4,7 @@
 import { writeFileSync } from 'node:fs';
 import { Resvg } from '@resvg/resvg-js';
 import { appIconSvg, markAloneSvg } from '../src/engine/mark.ts';
+import { teamLogoSvg } from '../src/engine/teamLogos.ts';
 
 const png = (svg, width) => new Resvg(svg, { fitTo: { mode: 'width', value: width } }).render().asPng();
 const square = appIconSvg(1024, { rounded: false });
@@ -20,6 +21,11 @@ const files = {
   'assets/android-icon-background.png': [pitch, 1024],
   'assets/android-icon-monochrome.png': [markAloneSvg(1024, 0.62, { color: '#ffffff', cutSeam: true }), 1024],
   'assets/splash-icon.png': [markAloneSvg(1024, 0.9), 1024],
+  // The two sides' badges, to share or print.
+  'assets/teams/copan-strikers.png': [teamLogoSvg('Copan Strikers', 1024), 1024],
+  'assets/teams/copan-royals.png': [teamLogoSvg('Copan Royals', 1024), 1024],
 };
+import { mkdirSync } from 'node:fs';
+mkdirSync('assets/teams', { recursive: true });
 for (const [file, [svg, width]] of Object.entries(files)) writeFileSync(file, png(svg, width));
 console.log(`Drew ${Object.keys(files).length} icons`);

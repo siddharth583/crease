@@ -1,12 +1,70 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CLUB_DOMAIN, CLUB_OWNER, LIVE_HOST, useClubSync, type ClubRole } from '../store/sync.tsx';
 import { colors, font, radius, space } from '../theme.ts';
-import { Button, Card, Chip, SectionLabel, Segmented, Sheet } from './ui.tsx';
+import { Ionicons } from '@expo/vector-icons';
+import { Button, Card, Chip, SectionLabel, Segmented, Sheet, type IconName } from './ui.tsx';
+import { Pulse } from './motion.tsx';
 
 // Settings › Club sync: sign in, what this phone can do in the club, when it last synced; the admin's members list.
 
 export const ROLE: Record<ClubRole, string> = { owner: 'Admin', scorer: 'Editor', viewer: 'Viewer' };
+const ROLE_LOOK: Record<ClubRole, { icon: IconName; tint: string; bg: string; fg: string }> = {
+  owner: { icon: 'shield-checkmark', tint: colors.gold, bg: colors.goldDim, fg: colors.gold },
+  scorer: { icon: 'create', tint: colors.onAccent, bg: colors.accent, fg: colors.onAccent },
+  viewer: { icon: 'eye', tint: colors.muted, bg: colors.surfaceHi, fg: colors.text },
+};
+
+/** Admin / Editor / Viewer as a chip with its own icon, so the role reads at a glance. */
+export function RoleChip({ role }: { role: ClubRole | null }) {
+  const look = role ? ROLE_LOOK[role] : { icon: 'help-circle' as IconName, tint: colors.muted, bg: colors.surfaceHi, fg: colors.text };
+  return (
+    <View style={[styles.roleChip, { backgroundColor: look.bg }]} accessibilityLabel={role ? `Your role: ${ROLE[role]}` : 'Not in the club'}>
+      <Ionicons name={look.icon} size={13} color={look.tint} />
+      <Text style={[styles.roleChipText, { color: look.fg }]}>{role ? ROLE[role] : 'Not in the club'}</Text>
+    </View>
+  );
+}
+
+/** A settings group's heading: an icon tile, a title and one line saying what it is for. */
+export function GroupHeader({ icon, title, hint, right }: { icon: IconName; title: string; hint?: string; right?: ReactNode }) {
+  return (
+    <View style={styles.group} accessibilityRole="header">
+      <View style={styles.groupIcon}>
+        <Ionicons name={icon} size={18} color={colors.accentInk} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.groupTitle}>{title}</Text>
+        {hint ? <Text style={styles.note}>{hint}</Text> : null}
+      </View>
+      {right}
+    </View>
+  );
+}
+
+/** One plain sentence for where the sync stands, with a dot: green when live, red when it failed, grey when offline. */
+export function useSyncLine() {
+  const { status, user, role, lastSync, online, pending } = useClubSync();
+  const ago = useAgo(lastSync);
+  if (status === 'unavailable') return { text: 'Club sync runs on the live app.', tone: 'off' as const };
+  if (!user) return { text: 'Not signed in. Matches stay on this phone only.', tone: 'off' as const };
+  if (status === 'error') return { text: 'Couldn’t reach the club. We’ll keep trying.', tone: 'bad' as const };
+  if (!role || status === 'not-member') return { text: 'Signed in, but this account isn’t in the club yet.', tone: 'off' as const };
+  if (!online) return { text: pending ? 'Offline. Your changes will send when you’re back online.' : 'Offline. Everything saves here and catches up later.', tone: 'off' as const };
+  return { text: ago ? `Up to date with the club, synced ${ago}.` : 'Syncing with the club…', tone: 'good' as const };
+}
+
+/** The sync sentence with its status dot. */
+export function SyncLine() {
+  const { text, tone } = useSyncLine();
+  return (
+    <View style={styles.syncLine} accessibilityLiveRegion="polite">
+      {tone === 'good' ? <Pulse color={colors.accent} size={8} /> : <View style={[styles.dot, { backgroundColor: tone === 'bad' ? colors.danger : colors.faint }]} />}
+      <Text style={[styles.note, { flex: 1 }, tone === 'bad' && { color: colors.danger }]}>{text}</Text>
+    </View>
+  );
+}
+
 const when = (at: number) => new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
 /** For a viewer, or someone signed in outside the club: ask the admin to be an editor, and where that stands. */
@@ -202,12 +260,11 @@ export function SignOutButton() {
 }
 
 export function ClubSyncSettings() {
-  const { status, user, role, lastSync, error, signIn, online, pending, canRequest } = useClubSync();
-  const ago = useAgo(lastSync);
+  const { status, user, role, error, signIn, canRequest } = useClubSync();
   if (status === 'unavailable') {
     return (
       <>
-        <SectionLabel>Club sync</SectionLabel>
+        <GroupHeader icon="people-circle-outline" title="Club sync" hint="Share every match with the club, live" />
         <Card>
           <Text style={styles.note}>
             {Platform.OS === 'web'
@@ -218,20 +275,9 @@ export function ClubSyncSettings() {
       </>
     );
   }
-  const inClub = Boolean(role) && status !== 'not-member';
   return (
     <>
-      <SectionLabel right={inClub ? <Text style={[styles.count, status === 'error' && { color: colors.danger }]}>{status === 'error'
-                ? 'Not synced'
-                : !online
-                  ? pending
-                    ? 'Offline · changes to send'
-                    : 'Offline'
-                  : ago
-                    ? `Synced ${ago}`
-                    : 'Syncing…'}</Text> : undefined}>
-        Club sync
-      </SectionLabel>
+      <GroupHeader icon="people-circle-outline" title="Club sync" hint="Share every match with the club, live" />
       <Card style={{ gap: space.md }}>
         {!user ? (
           <>
@@ -253,8 +299,9 @@ export function ClubSyncSettings() {
                   {user.email}
                 </Text>
               </View>
-              {role && <Text style={[styles.role, role === 'owner' && styles.roleAdmin]}>{ROLE[role]}</Text>}
+              <RoleChip role={role} />
             </View>
+            <SyncLine />
             {status === 'not-member' ? (
               <Text style={styles.body}>
                 This account isn’t in the club. Sign in with your {CLUB_DOMAIN} account
@@ -288,6 +335,13 @@ export function ClubSyncSettings() {
 }
 
 const styles = StyleSheet.create({
+  roleChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
+  roleChipText: { fontSize: 12, fontFamily: font.bold },
+  group: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.xl, marginBottom: space.md },
+  groupIcon: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.accentDim, alignItems: 'center', justifyContent: 'center' },
+  groupTitle: { color: colors.text, fontSize: 18, fontFamily: font.posterBlack, letterSpacing: -0.3 },
+  syncLine: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  dot: { width: 8, height: 8, borderRadius: 4 },
   count: { color: colors.faint, fontSize: 12, fontFamily: font.semibold },
   note: { color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 19 },
   body: { color: colors.text, fontSize: 14, fontFamily: font.medium, lineHeight: 20 },

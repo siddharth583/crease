@@ -71,9 +71,13 @@ import {
   type MatchState,
 } from '../../../engine/engine.ts';
 import { plural } from '../../../engine/text.ts';
+import { chaseChance, situationOf } from '../../../engine/winProb.ts';
 import { Confetti, GrowBar, PopIn, Pulse, Sheen, Ticker } from '../../../components/motion.tsx';
-import { BallByBall, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
+import { BallByBall, ChaseInsights, Partnerships, RunRace } from '../../../components/MatchCharts.tsx';
 import { Columns, Page, useLayout } from '../../../components/layout.tsx';
+import { Crease, NextBall, RecentOvers, RecentStrip, Scoreboard, ThisOver } from '../../../components/LiveScore.tsx';
+import { Banner, bounceInfo, Pad, UndoBar, type Armed } from '../../../components/LivePad.tsx';
+import { BreakHero, MilestoneBurst, OverSummary, ResultView, WicketHit, type OverDone } from '../../../components/LiveMoments.tsx';
 import { isPlaceholder, playerOfTheMatch, seriesState } from '../../../engine/stats.ts';
 import type { BallEvent, Extra, InningsEvent, Match, WicketKind } from '../../../engine/types.ts';
 import { newId, useMatch, useMatches } from '../../../store/matches.tsx';
@@ -82,216 +86,6 @@ import { colors, font, gradients, radius, space, type, ink, hero, edge, HERO_BG 
 
 
 const rate = (runs: number, balls: number) => (balls ? ((runs * 6) / balls).toFixed(2) : '0.00');
-
-// ─── Scoreboard ──────────────────────────────────────────────────────────────
-
-function Scoreboard({ match, s, index }: { match: Match; s: InningsState; index: number }) {
-  const ballsLeft = s.maxBalls - s.legalBalls;
-  const chasing = s.target !== null && s.status !== 'done';
-  const need = chasing ? Math.max(s.target! - s.runs, 0) : null;
-  const projected = s.legalBalls >= 6 ? Math.round(s.runs + (s.runs / s.legalBalls) * ballsLeft) : null;
-  const progress = Math.min(1, s.legalBalls / s.maxBalls);
-
-  return (
-    <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-      <PitchStripes opacity={0.03} tint="255,255,255" />
-      <Sheen every={7000} strength={0.07} />
-
-      <View style={styles.heroTop}>
-        <View style={styles.livePill}>
-          <Pulse color={hero.accent} size={6} />
-          <Text style={styles.liveText}>{index >= 2 ? 'Super over' : index === 0 ? '1st innings' : '2nd innings'}</Text>
-        </View>
-        <Text style={styles.heroOvers}>
-          <Text style={{ color: hero.text }}>{oversText(s.legalBalls)}</Text>
-          <Text style={{ color: hero.faint }}> / {match.rules.overs} ov</Text>
-        </Text>
-      </View>
-
-      <Text numberOfLines={1} style={styles.heroTeam}>
-        {s.battingTeam.name}
-      </Text>
-      <View style={styles.heroScoreRow}>
-        <View style={styles.scoreWrap}>
-          <Ticker value={s.runs} style={styles.heroScore} lineHeight={114} />
-          <Text style={styles.heroWickets}>/{s.wickets}</Text>
-        </View>
-        <View style={styles.heroStats}>
-          <Stat label="CRR" value={rate(s.runs, s.legalBalls)} />
-          {need !== null ? (
-            <Stat label="RRR" value={ballsLeft ? rate(need, ballsLeft) : '–'} hot />
-          ) : (
-            <Stat label="PROJ" value={projected === null ? '–' : String(projected)} />
-          )}
-        </View>
-      </View>
-
-      {/* One notch per over, filling as the innings goes. */}
-      <View style={styles.progress} accessibilityLabel={`${oversText(s.legalBalls)} of ${match.rules.overs} overs`}>
-        <GrowBar share={progress} trackStyle={StyleSheet.absoluteFill} style={styles.progressFill} />
-        {match.rules.overs <= 25 &&
-          Array.from({ length: match.rules.overs - 1 }, (_, i) => (
-            <View key={i} style={[styles.notch, { left: `${((i + 1) / match.rules.overs) * 100}%` }]} />
-          ))}
-      </View>
-
-      {need !== null ? (
-        <View style={styles.chase}>
-          <Text style={styles.chaseText}>
-            Need <Text style={styles.chaseBig}>{need}</Text> off <Text style={styles.chaseBig}>{ballsLeft}</Text>
-          </Text>
-          <Text style={styles.chaseTarget}>Target {s.target}</Text>
-        </View>
-      ) : (
-        <Text style={styles.heroFoot}>
-          Extras {s.extras.wide + s.extras.noball + s.extras.bye + s.extras.legbye + s.extras.penalty}
-          {s.partnership.balls > 0 || s.partnership.runs > 0
-            ? `   ·   Partnership ${s.partnership.runs} (${s.partnership.balls})`
-            : ''}
-        </Text>
-      )}
-    </LinearGradient>
-  );
-}
-
-function Stat({ label, value, hot }: { label: string; value: string; hot?: boolean }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, hot && { color: hero.accent }]}>{value}</Text>
-    </View>
-  );
-}
-
-// ─── Crease ──────────────────────────────────────────────────────────────────
-
-/** The batters and bowler. Without `onSwap` and `onRetire` it's to watch only. `big`: larger photos on a tablet or laptop. */
-function Crease({
-  match,
-  s,
-  onSwap,
-  onRetire,
-  big,
-}: {
-  match: Match;
-  s: InningsState;
-  onSwap?: () => void;
-  onRetire?: (batter: string) => void;
-  big?: boolean;
-}) {
-  const bowler = s.bowlers.find((b) => b.id === s.bowler);
-  const batters = [s.striker, s.nonStriker].filter((id): id is string => id !== null);
-
-  return (
-    <Card style={{ padding: 0, overflow: 'hidden' }}>
-      {batters.map((id, i) => {
-        const b = s.batters.find((x) => x.id === id);
-        const onStrike = id === s.striker;
-        return (
-          <View key={id} style={[styles.batter, i > 0 && styles.rowBorder]}>
-            <View style={[styles.strikeBar, onStrike && { backgroundColor: colors.accent }]} />
-            <PlayerAvatar name={playerName(match, id)} size={big ? 44 : 32} />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <View style={styles.batterName}>
-                <Text numberOfLines={1} style={[styles.name, onStrike && { color: colors.text }]}>
-                  {playerName(match, id)}
-                </Text>
-                {onStrike && <MaterialCommunityIcons name="cricket" size={15} color={colors.accentInk} />}
-                {onRetire && (
-                  <PressableScale accessibilityLabel={`Retire ${playerName(match, id)}`} hitSlop={7} onPress={() => onRetire(id)} style={styles.retire}>
-                    <Text style={styles.retireText}>Retire</Text>
-                  </PressableScale>
-                )}
-              </View>
-              <Text style={styles.batterMeta}>
-                {b?.fours ?? 0}×4   {b?.sixes ?? 0}×6   SR {b && b.balls ? ((b.runs * 100) / b.balls).toFixed(0) : '–'}
-              </Text>
-            </View>
-            <Text style={[styles.batterRuns, onStrike && { color: colors.text }]}>
-              {b?.runs ?? 0}
-              <Text style={styles.batterBalls}> {b?.balls ?? 0}</Text>
-            </Text>
-          </View>
-        );
-      })}
-      <View style={[styles.bowlerRow, styles.rowBorder]}>
-        {s.bowler ? (
-          <View>
-            <PlayerAvatar name={playerName(match, s.bowler)} size={big ? 44 : 34} />
-            <View style={styles.bowlerBadge}>
-              <MaterialCommunityIcons name="baseball" size={10} color={colors.danger} />
-            </View>
-          </View>
-        ) : (
-          <View style={styles.bowlerIcon}>
-            <MaterialCommunityIcons name="baseball" size={16} color={colors.danger} />
-          </View>
-        )}
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text numberOfLines={1} style={styles.bowlerName}>
-            {s.bowler ? playerName(match, s.bowler) : 'Pick a bowler'}
-          </Text>
-          {bowler && <Text style={styles.batterMeta}>Econ {rate(bowler.runs, bowler.balls)}</Text>}
-        </View>
-        {bowler && (
-          <Text style={styles.figures}>
-            {oversText(bowler.balls)}-{bowler.maidens}-{bowler.runs}-{bowler.wickets}
-          </Text>
-        )}
-        {s.nonStriker && onSwap && <IconButton icon="swap-vertical" label="Swap strike" onPress={onSwap} />}
-      </View>
-    </Card>
-  );
-}
-
-// ─── This over and over-by-over ──────────────────────────────────────────────
-
-/** A ball chip and the gap after it, in the over strip. */
-const CHIP_STEP = 36 + 4;
-
-/**
- * This over's balls; tap one to fix it. Before the first ball of a new over, the last over stays editable. `stacked`
- * puts the label above the balls, for the narrow scoring panel on a big screen.
- */
-function ThisOver({ s, onEdit, stacked }: { s: InningsState; onEdit?: (b: BallView) => void; stacked?: boolean }) {
-  const current = s.overs[s.overs.length - 1] ?? [];
-  const showLast = current.length === 0 && s.overs.length > 1;
-  const balls = showLast ? s.overs[s.overs.length - 2] : current;
-  const totals = s.overTotals[s.overTotals.length - (showLast ? 2 : 1)];
-  const slots = showLast ? 0 : 6 - (s.legalBalls % 6);
-  const overNo = Math.floor(s.legalBalls / 6) + (showLast ? 0 : 1);
-  // On a narrow phone the over runs off the edge: keep the newest ball (and the slot after it) in view.
-  const strip = useRef<ScrollViewInstance>(null);
-  const [stripWidth, setStripWidth] = useState(0);
-  useEffect(() => {
-    if (stripWidth) strip.current?.scrollTo({ x: Math.max(0, (balls.length + 1) * CHIP_STEP - stripWidth), animated: true });
-  }, [balls.length, stripWidth]);
-  return (
-    <View style={[styles.scorebug, stacked && styles.scorebugStacked]}>
-      <View style={[styles.scorebugLabel, stacked && styles.scorebugLabelStacked]}>
-        <Text style={styles.scorebugTitle}>{showLast ? 'LAST OVER' : `OVER ${overNo}`}</Text>
-        <Text style={styles.scorebugRuns}>{totals?.runs ?? 0} runs{onEdit ? ' · tap to fix' : ''}</Text>
-      </View>
-      <ScrollView
-        ref={strip}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={stacked ? undefined : { flex: 1 }}
-        contentContainerStyle={styles.overBalls}
-        onLayout={(e) => setStripWidth(e.nativeEvent.layout.width)}
-      >
-        {balls.map((b, i) => (
-          <PressableScale key={`${s.overs.length}-${i}`} scaleTo={0.85} hitSlop={4} accessibilityLabel={`Fix ball ${i + 1}`} disabled={!onEdit} dimWhenDisabled={false} onPress={() => onEdit?.(b)}>
-            <BallChip ball={b} animate={!showLast && i === balls.length - 1} />
-          </PressableScale>
-        ))}
-        {Array.from({ length: slots }, (_, i) => (
-          <BallChip key={`e${i}`} />
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
 
 /** A late arrival joins a side: their name, with the squad's names to pick from. `teamId` fixes the side. */
 function LateArrival({ match, teamId, onAdd }: { match: Match; teamId?: string; onAdd: (teamId: string, name: string) => void }) {
@@ -338,6 +132,9 @@ function MatchMenu({
   onTarget,
   onAddPlayer,
   onDeadBall,
+  onSwap,
+  onRetire,
+  onPenalty,
   onEndInnings,
   onDelete,
   canDelete,
@@ -359,6 +156,12 @@ function MatchMenu({
   onTarget: (target: number | undefined) => void;
   onAddPlayer: (teamId: string, name: string) => void;
   onDeadBall: () => void;
+  /** Swap who is on strike. */
+  onSwap: () => void;
+  /** Retire one of the batters at the crease. */
+  onRetire: (batter: string) => void;
+  /** Penalty runs to the batting side. */
+  onPenalty: (runs: number) => void;
   /** Ending the chase also says how it's called: on the score (no outcome), a draw or a forfeit. */
   onEndInnings: (outcome?: Outcome) => void;
   /** The match is called off: it goes, without a result. */
@@ -403,8 +206,26 @@ function MatchMenu({
   }, [visible, match.rules.overs, match.revisedTarget, firstInningsRuns]);
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Match">
+    <Sheet visible={visible} onClose={onClose} title="More">
       <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
+        {s.status === 'live' && (
+          <>
+            <Text style={styles.sheetLabel}>Quick actions</Text>
+            <View style={styles.tiles}>
+              {s.nonStriker && <ActionTile icon="swap-vertical" label="Swap strike" sub="Batters crossed" onPress={onSwap} />}
+              <ActionTile icon="hand-left-outline" label="Dead ball" sub="Nothing counts" onPress={onDeadBall} />
+              <ActionTile icon="add-circle-outline" label="Penalty runs" sub="+5 to the batters" onPress={() => onPenalty(5)} />
+            </View>
+            <Text style={styles.sheetLabel}>Retire a batter</Text>
+            <View style={styles.wrap}>
+              {[s.striker, s.nonStriker]
+                .filter((id): id is string => id !== null)
+                .map((id) => (
+                  <Chip key={id} icon="walk" label={`Retire ${playerName(match, id)}`} onPress={() => onRetire(id)} />
+                ))}
+            </View>
+          </>
+        )}
         {midOver && (
           <>
             <Text style={styles.sheetLabel}>Bowler can’t finish the over</Text>
@@ -510,8 +331,7 @@ function MatchMenu({
           </>
         )}
 
-        <Text style={styles.sheetLabel}>Umpire’s call</Text>
-        <Button variant="ghost" label="Dead ball" icon="hand-left-outline" onPress={onDeadBall} />
+        <Text style={styles.sheetLabel}>End of the innings</Text>
 
         {chase && arming ? (
           // The chase ended by hand: the match is called on the score, a draw, or a forfeit.
@@ -541,6 +361,17 @@ function MatchMenu({
         )}
       </ScrollView>
     </Sheet>
+  );
+}
+
+/** A square quick action in the More menu. */
+function ActionTile({ icon, label, sub, onPress }: { icon: IconName; label: string; sub: string; onPress: () => void }) {
+  return (
+    <PressableScale accessibilityLabel={label} scaleTo={0.95} wrapStyle={{ flex: 1, minWidth: 96 }} onPress={onPress} style={styles.tile}>
+      <Ionicons name={icon} size={22} color={colors.accentInk} />
+      <Text style={styles.tileLabel}>{label}</Text>
+      <Text style={styles.tileSub}>{sub}</Text>
+    </PressableScale>
   );
 }
 
@@ -709,53 +540,6 @@ function Sides({ match }: { match: Match }) {
   );
 }
 
-/** The overs before this one, newest first, for the scoring panel on a big screen. */
-function RecentOvers({ match, s, count }: { match: Match; s: InningsState; count: number }) {
-  // The over being bowled is on the strip above; before its first ball, the strip shows the last one instead.
-  const current = s.overs[s.overs.length - 1] ?? [];
-  const skip = current.length === 0 && s.overs.length > 1 ? 2 : 1;
-  const done = s.overs.slice(0, Math.max(0, s.overs.length - skip));
-  if (!done.length) return null;
-  const shown = done.map((balls, i) => ({ balls, i })).slice(-count).reverse();
-  return (
-    <View style={{ gap: space.sm }}>
-      <Text style={styles.nextLabel}>EARLIER OVERS</Text>
-      {shown.map(({ balls, i }) => (
-        <View key={i} style={styles.recentRow}>
-          <Text style={styles.recentNo}>{i + 1}</Text>
-          <View style={styles.recentBalls}>
-            {balls.map((b, j) => (
-              <BallChip key={j} ball={b} size={26} />
-            ))}
-          </View>
-          <Text numberOfLines={1} style={styles.recentMeta}>
-            {plural(s.overTotals[i]?.runs ?? 0, 'run')} · {playerName(match, s.overBowlers[i]?.[0] ?? null)}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-/** Above the pad on a big screen: which ball is next, and who's bowling it to whom. */
-function NextBall({ match, s }: { match: Match; s: InningsState }) {
-  const ball = `${Math.floor(s.legalBalls / 6)}.${(s.legalBalls % 6) + 1}`;
-  return (
-    <View style={styles.nextBall}>
-      <Text style={styles.nextLabel}>NEXT BALL · {ball}</Text>
-      <View style={styles.nextRow}>
-        {s.bowler && <PlayerAvatar name={playerName(match, s.bowler)} size={28} />}
-        <Text numberOfLines={1} style={styles.nextText}>
-          {s.bowler ? playerName(match, s.bowler) : 'Pick a bowler'}
-          <Text style={styles.nextTo}>  to  </Text>
-          {playerName(match, s.striker)}
-        </Text>
-        {s.striker && <PlayerAvatar name={playerName(match, s.striker)} size={28} />}
-      </View>
-    </View>
-  );
-}
-
 // ─── Picking players ─────────────────────────────────────────────────────────
 
 function PlayerPicker({
@@ -820,295 +604,12 @@ function PlayerPicker({
   );
 }
 
-// ─── Scoring pad ─────────────────────────────────────────────────────────────
-
-type PadMode = Extra | 'bouncer';
-
-/** What OUT was pressed with: an extra picked first, or a bounce and its call. */
-type Armed = { mode: Extra | null; bouncer?: 'fair' | 'wide' };
-
-const EXTRAS: { value: PadMode; label: string }[] = [
-  { value: 'wide', label: 'Wide' },
-  { value: 'noball', label: 'No ball' },
-  { value: 'bouncer', label: 'Bounce' },
-];
-
-const MODE_HINT: Record<Extra, string> = {
-  wide: 'WIDE · tap Wd to add it',
-  noball: 'NO BALL · tap the runs off the bat',
-  bye: 'BYE · tap the runs they ran',
-  legbye: 'LEG BYE · tap the runs they ran',
-};
-
-/** How the next bounce counts: the umpire's call (fair or wide) while the over's allowance lasts, then called. */
-const ordinal = (n: number) => `${n}${[, 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10] ?? 'th'}`;
-
-type Bounce = { choice: boolean; hint: string; calledAs: 'wide' | 'noball' };
-
-function bounceInfo(match: Match, s: InningsState): Bounce {
-  const rule = match.rules.bouncer ?? { fair: 1, calledAs: 'noball' as const };
-  const left = rule.fair - s.bouncersThisOver;
-  return left > 0
-    ? { choice: true, calledAs: rule.calledAs, hint: `BOUNCE · umpire’s call: fair or wide · ${left === 1 ? 'the next one is' : `${left} left, then`} a ${rule.calledAs === 'wide' ? 'wide' : 'no ball'}` }
-    : {
-        choice: false,
-        calledAs: rule.calledAs,
-        hint: `BOUNCE · ${ordinal(s.bouncersThisOver + 1)} this over: a ${rule.calledAs === 'wide' ? 'wide · tap Wd' : 'no ball · tap the runs'}`,
-      };
-}
-
-function Key({
-  label,
-  sub,
-  onPress,
-  disabled,
-  variant = 'plain',
-  height = 66,
-  icon,
-  kbd,
-}: {
-  label: string;
-  sub?: string;
-  onPress: () => void;
-  disabled?: boolean;
-  variant?: 'plain' | 'four' | 'six' | 'out' | 'mode';
-  height?: number;
-  /** Shown instead of the label (the label still names it for screen readers). */
-  icon?: ComponentProps<typeof Ionicons>['name'];
-  /** Its key on a keyboard, in the corner (laptops). */
-  kbd?: string;
-}) {
-  const v = {
-    plain: [styles.key, colors.text],
-    four: [[styles.key, styles.keyFour], colors.cyan],
-    six: [[styles.key, styles.keySix], colors.onAccent],
-    out: [[styles.key, styles.keyOut], '#FFFFFF'],
-    mode: [[styles.key, styles.keyMode], colors.violet],
-  }[variant] as [object, string];
-  return (
-    <View style={{ flex: 1 }}>
-      <PressableScale
-        accessibilityLabel={sub ? `${label} ${sub}` : label}
-        disabled={disabled}
-        haptic={null}
-        scaleTo={0.9}
-        onPress={onPress}
-        style={[v[0], { height }]}
-      >
-        {icon ? (
-          <Ionicons name={icon} size={26} color={v[1]} />
-        ) : (
-          <Text style={[styles.keyText, { color: v[1] }, height > 70 && styles.keyTextBig, label.length > 2 && { fontSize: 26 }]}>{label}</Text>
-        )}
-        {sub && <Text style={[styles.keySub, { color: v[1] }]}>{sub}</Text>}
-        {kbd && <Text style={[styles.kbd, { color: v[1] }]}>{kbd}</Text>}
-      </PressableScale>
-    </View>
-  );
-}
-
-function Banner({ tone, title, body }: { tone: 'volt' | 'red'; title: string; body: string }) {
-  return (
-    <FadeIn>
-      <View style={[styles.banner, tone === 'red' && { backgroundColor: colors.danger }]}>
-        <Text style={[styles.bannerTitle, tone === 'red' && { color: '#FFFFFF' }]}>{title}</Text>
-        <Text style={[styles.bannerBody, tone === 'red' && { color: '#FFFFFF' }]}>{body}</Text>
-      </View>
-    </FadeIn>
-  );
-}
-
-/** The pad's keys on a keyboard, for the extras row. */
-const EXTRA_KBD: Partial<Record<PadMode, string>> = { wide: 'D', noball: 'N' };
-
-function Pad({
-  onBall,
-  onWicket,
-  bounce,
-  extraRun,
-  big,
-  shortcuts,
-  hints,
-  onUndo,
-}: {
-  onBall: (b: BallEvent) => void;
-  /** OUT: the extra or bounce armed before it goes with the wicket, so it isn't lost. */
-  onWicket: (armed: Armed) => void;
-  /** How a bounce would count right now. */
-  bounce: Bounce;
-  /** The wide's run, from the rules. */
-  extraRun: number;
-  /** Taller keys, for a tablet or laptop. */
-  big?: boolean;
-  /** Listen to the keyboard: 0–6 runs, W out, D wide, N no ball, Esc clears, U or Backspace undoes. */
-  shortcuts?: boolean;
-  /** Show each key's keyboard key in its corner. */
-  hints?: boolean;
-  /** Undo from the keyboard; missing when there's nothing to undo. */
-  onUndo?: () => void;
-}) {
-  const [mode, setMode] = useState<PadMode | null>(null);
-  const [call, setCall] = useState<'fair' | 'wide'>('fair');
-  const score = (r: number) => {
-    tap(r >= 4 ? 'heavy' : 'light');
-    onBall(mode === 'bouncer' ? { type: 'ball', runs: r, bouncer: bounce.choice ? call : 'fair' } : { type: 'ball', runs: r, extra: mode ?? undefined });
-    setMode(null);
-    setCall('fair');
-  };
-  const out = () => {
-    tap('warning');
-    onWicket(mode === 'bouncer' ? { mode: null, bouncer: bounce.choice ? call : 'fair' } : { mode });
-    setMode(null);
-    setCall('fair');
-  };
-  const byes = mode === 'bye' || mode === 'legbye';
-  // A wide is the one wide run the rules give and nothing more (turf: nobody runs on a wide). A bounce called wide too.
-  const wide = mode === 'wide' || (mode === 'bouncer' && (bounce.choice ? call === 'wide' : bounce.calledAs === 'wide'));
-  const blocked = (r: number) => (byes && r === 0) || (wide && r > 0);
-  const keyHeight = big ? 84 : undefined;
-  const runKey = (r: number) => {
-    const boundary = !mode && (r === 4 || r === 6);
-    const kbd = hints ? String(r) : undefined;
-    if (wide && r === 0)
-      return <Key key={r} label="Wd" sub={extraRun ? `+${extraRun} RUN` : 'NO RUN'} variant="mode" height={keyHeight} kbd={kbd} onPress={() => score(0)} />;
-    return (
-      <Key
-        key={r}
-        label={String(r)}
-        sub={!mode ? (r === 0 ? 'DOT' : r === 4 ? 'FOUR' : r === 6 ? 'SIX' : undefined) : undefined}
-        variant={mode ? 'mode' : boundary ? (r === 4 ? 'four' : 'six') : 'plain'}
-        disabled={blocked(r)}
-        height={keyHeight}
-        kbd={kbd}
-        onPress={() => score(r)}
-      />
-    );
-  };
-
-  // The keyboard does what the keys do. Read fresh each render, so it always sees the mode picked.
-  const onKey = useRef<(e: KeyboardEvent) => void>(() => {});
-  onKey.current = (e) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
-    const el = e.target as HTMLElement | null;
-    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
-    const k = e.key.toLowerCase();
-    if (/^[0-46]$/.test(k)) {
-      if (!blocked(Number(k))) score(Number(k));
-    } else if (k === 'w') out();
-    else if (k === 'd' || k === 'n') setMode((m) => (m === (k === 'd' ? 'wide' : 'noball') ? null : k === 'd' ? 'wide' : 'noball'));
-    else if (k === 'escape') {
-      setMode(null);
-      setCall('fair');
-    } else if ((k === 'u' || k === 'backspace') && onUndo) onUndo();
-    else return;
-    e.preventDefault();
-  };
-  useEffect(() => {
-    if (!shortcuts || Platform.OS !== 'web' || typeof document === 'undefined') return;
-    const listen = (e: KeyboardEvent) => onKey.current(e);
-    document.addEventListener('keydown', listen);
-    return () => document.removeEventListener('keydown', listen);
-  }, [shortcuts]);
-
-  return (
-    <View style={styles.pad}>
-      <View style={styles.extrasRow}>
-        {EXTRAS.map((e) => {
-          const on = mode === e.value;
-          return (
-            <PressableScale
-              key={e.value}
-              accessibilityState={{ selected: on }}
-              scaleTo={0.92}
-              wrapStyle={{ flex: 1 }}
-              onPress={() => setMode(on ? null : e.value)}
-              style={[styles.extraKey, big && { height: 52 }, on && styles.extraKeyOn]}
-            >
-              <Text numberOfLines={1} style={[styles.extraText, big && { fontSize: 15 }, on && { color: colors.onAccent }]}>
-                {e.label}
-              </Text>
-              {hints && EXTRA_KBD[e.value] && <Text style={[styles.kbd, on && { color: colors.onAccent }]}>{EXTRA_KBD[e.value]}</Text>}
-            </PressableScale>
-          );
-        })}
-      </View>
-      <Text style={[styles.modeHint, mode && { color: colors.violet }]}>
-        {mode === 'bouncer' ? bounce.hint : mode ? MODE_HINT[mode] : 'TAP THE RUNS OFF THIS BALL'}
-      </Text>
-      {mode === 'bouncer' && bounce.choice && (
-        <Segmented
-          value={call}
-          onChange={setCall}
-          options={[
-            { value: 'fair', label: 'Fair ball' },
-            { value: 'wide', label: 'Wide' },
-          ]}
-        />
-      )}
-      <View style={styles.grid}>{[0, 1, 2, 3].map(runKey)}</View>
-      {/* OUT is two keys wide and Undo lives above the pad: nothing to mistake for it next to the runs. */}
-      <View style={styles.grid}>
-        {runKey(4)}
-        {runKey(6)}
-        <View style={{ flex: 2 }}>
-          <Key label="OUT" variant="out" height={keyHeight} kbd={hints ? 'W' : undefined} onPress={out} />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-/** Undo and Redo, on their own above the pad (or above the page between balls), with the club sync beside them. */
-function UndoBar({
-  canUndo: undoable,
-  canRedo,
-  onUndo,
-  onRedo,
-  label = 'Undo last ball',
-}: {
-  canUndo: boolean;
-  canRedo: boolean;
-  onUndo: () => void;
-  onRedo: () => void;
-  label?: string;
-}) {
-  return (
-    <View style={styles.undoBar}>
-      <PressableScale accessibilityLabel={label} disabled={!undoable} hitSlop={4} scaleTo={0.94} onPress={onUndo} style={styles.undoPill}>
-        <Ionicons name="arrow-undo" size={16} color={colors.text} />
-        <Text style={styles.undoText}>Undo</Text>
-      </PressableScale>
-      {canRedo && (
-        <PressableScale accessibilityLabel="Redo the ball just undone" hitSlop={4} scaleTo={0.94} onPress={onRedo} style={styles.undoPill}>
-          <Ionicons name="arrow-redo" size={16} color={colors.text} />
-          <Text style={styles.undoText}>Redo</Text>
-        </PressableScale>
-      )}
-      <View style={{ flex: 1 }} />
-      <SyncBadge />
-    </View>
-  );
-}
-
-/** Whether this phone's balls have reached the club. Nothing where there's no club sync (a test copy, signed out). */
-function SyncBadge() {
-  const sync = useClubSync();
-  if (sync.status === 'unavailable' || !sync.user) return null;
-  const waiting = !sync.online || sync.pending;
-  return (
-    <View style={styles.syncBadge} accessibilityLiveRegion="polite">
-      <Ionicons name={waiting ? 'cloud-offline-outline' : 'cloud-done-outline'} size={15} color={waiting ? colors.gold : colors.muted} />
-      <Text style={[styles.syncText, waiting && { color: colors.gold }]}>{waiting ? 'Waiting for signal' : 'Saved to club'}</Text>
-    </View>
-  );
-}
-
 // ─── Wicket sheet ────────────────────────────────────────────────────────────
 
 const KINDS: { value: WicketKind; label: string }[] = [
   { value: 'bowled', label: 'Bowled' },
   { value: 'caught', label: 'Caught' },
-  { value: 'lbw', label: 'LBW' },
+  // No LBW on the turf.
   { value: 'runout', label: 'Run out' },
   { value: 'stumped', label: 'Stumped' },
   { value: 'hitwicket', label: 'Hit wicket' },
@@ -1277,16 +778,6 @@ function WicketSheet({
           <>
             <Text style={styles.sheetLabel}>Runs completed</Text>
             <Segmented value={runs} onChange={setRuns} options={['0', '1', '2', '3'].map((v) => ({ value: v, label: v }))} />
-            {delivery === 'legal' && runs !== '0' && (
-              <Segmented
-                value={runsFrom}
-                onChange={setRunsFrom}
-                options={[
-                  { value: 'bat', label: 'Off the bat' },
-                  { value: 'byes', label: 'Byes' },
-                ]}
-              />
-            )}
           </>
         )}
 
@@ -1416,6 +907,7 @@ export default function LiveMatch() {
   const [wicketFor, setWicketFor] = useState<Armed | undefined>(undefined);
   const [retiring, setRetiring] = useState<string | null>(null);
   const [moment, setMoment] = useState<Moment | null>(null);
+  const [overDone, setOverDone] = useState<OverDone | null>(null);
   const [editing, setEditing] = useState<BallView | null>(null);
   const [fixingOver, setFixingOver] = useState<{ innings: number; over: number } | null>(null);
   const [menu, setMenu] = useState(false);
@@ -1478,6 +970,23 @@ export default function LiveMatch() {
     const maiden = found.find((h) => h.kind === 'maiden');
     if (maiden) toast.show(`Maiden over · ${playerName(match, maiden.player)}`, 'info');
     setRedo([]);
+    // An over just finished: a summary card drops in after any flash.
+    const after = matchState(next).innings[index];
+    if (e.type === 'ball' && after.legalBalls > s.legalBalls && after.legalBalls % 6 === 0 && after.status !== 'done' && !matchState(next).result) {
+      const o = after.legalBalls / 6 - 1;
+      const who = after.overBowlers[o]?.[0] ?? null;
+      const line = after.bowlers.find((b) => b.id === who);
+      setOverDone({
+        key: Date.now(),
+        over: o + 1,
+        balls: after.overs[o] ?? [],
+        runs: after.overTotals[o]?.runs ?? 0,
+        wickets: after.overTotals[o]?.wickets ?? 0,
+        bowler: playerName(match, who),
+        figures: line ? `${oversText(line.balls)}-${line.maidens}-${line.runs}-${line.wickets}` : '',
+        score: `${after.runs}/${after.wickets}`,
+      });
+    }
     commit(next);
   };
 
@@ -1528,6 +1037,7 @@ export default function LiveMatch() {
       canRedo={redo.length > 0 && !state.result}
       onUndo={undoLast}
       onRedo={redoLast}
+      onMore={canScore && !state.result ? () => setMenu(true) : undefined}
       label={oversUndoable ? 'Undo the change of overs' : 'Undo last ball'}
     />
   );
@@ -1612,163 +1122,34 @@ export default function LiveMatch() {
   const twoUp = !side || layout.width - layout.gutter * 2 - panelWidth - space.lg >= 640;
 
   // Everyone sees the break: scorers above the openers, watchers above the line on who's scoring.
-  const breakCard =
-    freshChase && s.status === 'openers' ? (
-      <FadeIn>
-        <View style={[styles.breakCard, layout.wide && styles.breakCardWide]}>
-          <PitchStripes tint="255,255,255" />
-          <Text style={styles.breakEyebrow}>{superOver ? 'SUPER OVER · ONE OVER, TWO WICKETS' : 'INNINGS BREAK'}</Text>
-          {s.target !== null ? (
-            <>
-              <Text style={styles.breakTarget}>{s.target}</Text>
-              <Text style={styles.breakTitle}>{s.battingTeam.name} need this to win</Text>
-            </>
-          ) : (
-            <>
-              <Text style={[styles.breakTarget, { fontSize: 72, lineHeight: 76 }]}>Tied</Text>
-              <Text style={styles.breakTitle}>{s.battingTeam.name} bat first</Text>
-            </>
-          )}
-          <Text style={styles.breakSub}>
-            {superOver
-              ? s.target !== null
-                ? `${state.innings[2].battingTeam.name} made ${state.innings[2].runs}/${state.innings[2].wickets} in their over`
-                : 'The side that batted second goes first. Most runs in the over wins it.'
-              : `${state.innings[0].battingTeam.name} made ${state.innings[0].runs}/${state.innings[0].wickets} in ${oversText(state.innings[0].legalBalls)} overs · ${Math.max(0, s.maxBalls)} balls to get them${match.revisedTarget ? ' (revised target)' : ''}`}
-          </Text>
-        </View>
-      </FadeIn>
-    ) : null;
+  const breakCard = freshChase && s.status === 'openers' ? <BreakHero match={match} state={state} s={s} wide={layout.wide} /> : null;
 
   const pickColumns = layout.wide && !side ? 2 : 1;
   let body = null;
   if (state.result) {
-    const winner = state.winner ? match.teams.find((t) => t.id === state.winner) : null;
-    const margin = winner ? state.result.replace(`${winner.name} won `, '') : '';
-    const potm = playerOfTheMatch(match);
-    const series = match.series ? seriesState(matches.filter((m) => m.series?.id === match.series!.id)) : null;
     body = (
-      <FadeIn>
-        {/* A result waits for the scorer's yes: a wrong tap on the last ball can still be undone until then. */}
-        {match.confirmed === false &&
-          (access.score && !lock ? (
-            <Card style={[styles.confirmCard, { marginBottom: space.md }]}>
-              <Text style={styles.watchTitle}>Is that the result?</Text>
-              <Text style={styles.editNote}>Check the last ball. Undo puts a wrong tap right; once it’s confirmed only the admin can change it.</Text>
-              <Button
-                label="Confirm result"
-                icon="checkmark-circle"
-                onPress={() => {
-                  saveMatch({ ...match, confirmed: true });
-                  setRedo([]);
-                  setOversBefore([]);
-                  toast.show('Result confirmed', 'success');
-                }}
-              />
-            </Card>
-          ) : (
-            <Text style={[styles.exportHint, { marginBottom: space.md, marginTop: 0 }]}>Waiting for the scorer to confirm the result.</Text>
-          ))}
-        <View style={styles.result}>
-          <PitchStripes opacity={0.07} />
-          {winner && prefs.celebrate && <Confetti height={640} />}
-          <PopIn delay={150}>
-            <MaterialCommunityIcons name="trophy" size={34} color={colors.onAccent} />
-          </PopIn>
-          <Text style={styles.resultEyebrow}>
-            {series ? `${series.name.toUpperCase()} · MATCH ${match.series!.number} OF ${series.of}` : winner ? 'RESULT' : state.drawn ? 'NO WINNER' : 'ALL SQUARE'}
-          </Text>
-          <Text style={styles.resultWinner} numberOfLines={2}>
-            {winner ? `${winner.name} win` : state.drawn ? 'Match drawn' : 'Match tied'}
-          </Text>
-          {winner && <Text style={styles.resultMargin}>{margin}</Text>}
-          {potm && (
-            <PressableScale
-              disabled={isPlaceholder(potm.name)}
-              dimWhenDisabled={false}
-              wrapStyle={{ alignSelf: 'stretch' }}
-              scaleTo={0.97}
-              onPress={() => router.push({ pathname: '/player/[key]', params: { key: potm.key } })}
-              style={styles.potm}
-              accessibilityLabel={`Man of the Match: ${potm.name}, ${potm.summary}`}
-            >
-              <MaterialCommunityIcons name="star-four-points" size={18} color={hero.accent} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.potmLabel}>MAN OF THE MATCH</Text>
-                <Text style={styles.potmName} numberOfLines={1}>
-                  {potm.name}
-                </Text>
-              </View>
-              <Text style={styles.potmLine}>{potm.summary}</Text>
-            </PressableScale>
-          )}
-          {series && (
-            <PressableScale
-              scaleTo={0.97}
-              wrapStyle={{ alignSelf: 'stretch' }}
-              onPress={() => router.push({ pathname: '/series/[id]', params: { id: series.id } })}
-              style={styles.seriesLine}
-            >
-              <Text style={styles.seriesLineText}>{series.status}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.onAccent} />
-            </PressableScale>
-          )}
-          <View style={styles.resultScores}>
-            {state.innings.map((inn, i) => (
-              <View key={i} style={styles.resultScore}>
-                <Text style={styles.resultTeam} numberOfLines={1}>
-                  {inn.battingTeam.name}
-                  {i >= 2 ? ' · super over' : ''}
-                </Text>
-                <Text style={styles.resultRuns}>
-                  {inn.runs}/{inn.wickets}
-                  <Text style={styles.resultOvers}> {oversText(inn.legalBalls)}</Text>
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-        <View style={{ gap: space.md, marginTop: space.lg }}>
-          {state.result === 'Match tied' && match.innings.length < 4 && canScore && (
-            <Button label={'Play a super over'} icon="flash" onPress={() => saveMatch(startSuperOver(match))} />
-          )}
-          {/* A chase ended by hand can be called again: on the score, a draw or a forfeit. Whoever could undo can. */}
-          {canChangeResult(match, access) && !lock && (
-            <Button variant="ghost" label="Change the result" icon="create-outline" onPress={() => setCallingResult(true)} />
-          )}
-          <Button label="Share result picture" icon="image-outline" onPress={() => setSharing(true)} />
-          <Button
-            variant="ghost"
-            label={'Full scorecard'}
-            icon="list"
-            onPress={() => router.push({ pathname: '/match/[id]/scorecard', params: { id: match.id } })}
-          />
-          {!access.score ? null : series?.next ? (
-            <Button
-              label={`Next: match ${series.next} of ${series.of}`}
-              icon="play-forward"
-              onPress={() => router.push({ pathname: '/new', params: { rematch: match.id, series: 'next' } })}
-            />
-          ) : (
-            <Button
-              variant="ghost"
-              label="Rematch"
-              icon="repeat"
-              onPress={() => router.push({ pathname: '/new', params: { rematch: match.id } })}
-            />
-          )}
-          {series && (
-            <Button
-              variant="ghost"
-              label="Series table"
-              icon="trophy-outline"
-              onPress={() => router.push({ pathname: '/series/[id]', params: { id: series.id } })}
-            />
-          )}
-          <Button variant="ghost" label="Export match" icon="download-outline" onPress={() => setExporting([match])} />
-          <Text style={styles.exportHint}>A PDF scorecard for the group, or a match file so their player stats include it.</Text>
-        </View>
-      </FadeIn>
+      <ResultView
+        match={match}
+        state={state}
+        matches={matches}
+        a={{
+          canConfirm: access.score && !lock,
+          canScore,
+          isScorer: access.score,
+          celebrate: prefs.celebrate,
+          canChange: canChangeResult(match, access) && !lock,
+          onConfirm: () => {
+            saveMatch({ ...match, confirmed: true });
+            setRedo([]);
+            setOversBefore([]);
+            toast.show('Result confirmed', 'success');
+          },
+          onSuperOver: () => saveMatch(startSuperOver(match)),
+          onChange: () => setCallingResult(true),
+          onShare: () => setSharing(true),
+          onExport: () => setExporting([match]),
+        }}
+      />
     );
   } else if (s.status === 'openers') {
     const pool = s.battingTeam.players.map((p) => p.id).filter((p) => !openers.includes(p));
@@ -1881,7 +1262,13 @@ export default function LiveMatch() {
           </Card>
         ) : (
           <Card style={{ gap: space.sm }}>
-            <Text style={styles.watchTitle}>{live ? 'Watching live' : 'Waiting for the next ball'}</Text>
+            <View style={styles.lockRow}>
+              {live && <Pulse color={colors.danger} size={8} />}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.watchTitle}>{live ? 'Watching live' : 'Waiting for the next ball'}</Text>
+                <Text style={styles.editNote}>{live ? 'This screen is read-only and updates by itself, ball by ball.' : 'The next ball will appear here as soon as it is scored.'}</Text>
+              </View>
+            </View>
             {access.why && <Text style={styles.editNote}>{access.why}</Text>}
             {sync.canRequest && <Button variant="ghost" label="Get editor access" icon="person-outline" onPress={() => router.push('/profile')} />}
           </Card>
@@ -1956,6 +1343,20 @@ export default function LiveMatch() {
         }}
         onAddPlayer={(teamId, name) => {
           addLate(teamId, name);
+          setMenu(false);
+        }}
+        onSwap={() => {
+          push({ type: 'swap' });
+          setMenu(false);
+        }}
+        onRetire={(id) => {
+          setMenu(false);
+          setRetiring(id);
+          setWicketFor({ mode: null });
+        }}
+        onPenalty={(runs) => {
+          push({ type: 'penalty', runs });
+          toast.show(`${runs} penalty runs`, 'info');
           setMenu(false);
         }}
         onDeadBall={() => {
@@ -2053,6 +1454,9 @@ export default function LiveMatch() {
         }}
       />
       <MomentFlash moment={moment} />
+      <WicketHit moment={moment} />
+      <MilestoneBurst moment={moment} />
+      <OverSummary summary={overDone} top={insets.top + 64} />
       {toast.element}
       <WicketSheet
         visible={wicketFor !== undefined}
@@ -2083,7 +1487,7 @@ export default function LiveMatch() {
       {!state.result && canScore && <IconButton icon="ellipsis-horizontal" label="Match options" onPress={() => setMenu(true)} />}
     </View>
   );
-  const scoreboard = !(freshChase && s.status === 'openers') && !state.result ? <Scoreboard match={match} s={s} index={index} /> : null;
+  const scoreboard = !(freshChase && s.status === 'openers') && !state.result ? <Scoreboard match={match} s={s} index={index} big={layout.wide} /> : null;
   const crease =
     s.striker && !state.result ? (
       <Crease
@@ -2101,7 +1505,8 @@ export default function LiveMatch() {
         }
       />
     ) : null;
-  const thisOver = live ? <ThisOver s={s} onEdit={canScore ? setEditing : undefined} /> : null;
+  const thisOver = live ? <ThisOver s={s} match={match} onEdit={canScore ? setEditing : undefined} /> : null;
+  const earlier = live ? <RecentStrip s={s} onOpen={canScore ? (o) => setFixingOver({ innings: index, over: o }) : undefined} /> : null;
   const banners = (
     <>
       {s.freeHit && <Banner tone="volt" title={'FREE HIT'} body={'Only a run out counts on this ball'} />}
@@ -2134,15 +1539,22 @@ export default function LiveMatch() {
           {!live && undoBar}
           {scoreboard}
           {crease}
-          {thisOver}
-          {!state.result && s.status !== 'openers' && <OverChart s={s} />}
+          {/* Scoring: the over sits right above the pad, under the thumb. Watching: it's here. */}
+          {!scoring && thisOver}
+          {earlier}
           {body}
+          {!state.result && s.status !== 'openers' && <OverChart s={s} />}
+          {!canScore && !state.result && state.innings[1]?.legalBalls > 0 && index >= 1 && <ChaseInsights match={match} state={state} />}
+          {!canScore && !state.result && s.log.length > 0 && <BallByBall match={match} s={s} />}
         </ScrollView>
 
         {scoring && (
           <View style={[styles.padWrap, { paddingBottom: insets.bottom + space.sm }]}>
-            {undoBar}
             {banners}
+            <View style={styles.dockOver}>
+              <ThisOver s={s} match={match} docked onEdit={setEditing} />
+            </View>
+            {undoBar}
             <Pad onBall={push} onWicket={setWicketFor} bounce={bounceInfo(match, s)} extraRun={match.rules.extraRun} />
           </View>
         )}
@@ -2185,7 +1597,12 @@ export default function LiveMatch() {
   // At the break, the innings just gone sits beside the target.
   const before = freshChase && s.status === 'openers' ? state.innings[index - 1] : null;
   const beforeCard = before ? <MiniScorecard match={match} s={before} title={index >= 2 ? 'Their super over' : '1st innings'} onOpen={openScorecard} /> : null;
-  const chase = index >= 1 && !state.result && state.innings[1].legalBalls > 0 ? <RunRace state={state} /> : null;
+  const chase = index >= 1 && !state.result && state.innings[1].legalBalls > 0 ? (
+    <>
+      <RunRace state={state} />
+      <ChaseInsights match={match} state={state} />
+    </>
+  ) : null;
   const fresh = index === 0 && s.status === 'openers' && match.innings[0].events.length === 0 ? <Sides match={match} /> : null;
 
   const header = (
@@ -2235,6 +1652,7 @@ export default function LiveMatch() {
                   ) : null,
                 )}
                 <RunRace state={state} />
+                <ChaseInsights match={match} state={state} />
               </View>
             </Columns>
           </Page>
@@ -2278,7 +1696,7 @@ export default function LiveMatch() {
               {scoring ? (
                 <>
                   <NextBall match={match} s={s} />
-                  <ThisOver s={s} onEdit={setEditing} stacked />
+                  <ThisOver s={s} match={match} onEdit={setEditing} stacked />
                   <RecentOvers match={match} s={s} count={layout.height >= 800 ? 3 : 2} />
                   <View style={{ flex: 1, minHeight: space.sm }} />
                   {banners}
@@ -2455,8 +1873,7 @@ const styles = StyleSheet.create({
   chaseTarget: { color: colors.onAccent, fontSize: 13, fontFamily: font.semibold, opacity: 0.65 },
 
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  batter: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.md, paddingRight: space.lg, gap: space.md },
-  strikeBar: { width: 4, alignSelf: 'stretch', backgroundColor: 'transparent', borderTopRightRadius: 2, borderBottomRightRadius: 2 },
+  batter: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.md, paddingHorizontal: space.lg, gap: space.md },
   batterName: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   // 30 tall and 7 of slop all round: a 44 target without crowding the name.
   retire: { marginLeft: space.xs, paddingHorizontal: 10, height: 30, justifyContent: 'center', borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderHi },
@@ -2611,6 +2028,11 @@ const styles = StyleSheet.create({
   keySub: { fontSize: 9, fontFamily: font.semibold, letterSpacing: 1, marginTop: -1, opacity: 0.75 },
 
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  tile: { backgroundColor: colors.surfaceHi, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: 3, minHeight: 88 },
+  tileLabel: { color: colors.text, fontSize: 14, fontFamily: font.bold, marginTop: 4 },
+  tileSub: { color: colors.faint, fontSize: 11.5, fontFamily: font.medium },
+  dockOver: { paddingBottom: 8, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   editNow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   editNowText: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   dlsStrong: { color: colors.accentInk, fontFamily: font.heavy },

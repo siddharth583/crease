@@ -7,7 +7,9 @@ import { PlayerAvatar } from '../components/Avatar.tsx';
 import { Columns, Page, useLayout } from '../components/layout.tsx';
 import { NameSuggestions } from '../components/NameSuggestions.tsx';
 import { Stars } from '../components/Stars.tsx';
-import { Button, Card, FadeIn, IconButton, PressableScale, Screen, SectionLabel, Segmented, ToggleRow, useToast, WideHead } from '../components/ui.tsx';
+import { CountUp, Rise } from '../components/motion.tsx';
+import { RoleIcon, ROLE_NAME } from '../components/TeamsX.tsx';
+import { Button, Card, Chip, FadeIn, IconButton, PressableScale, Screen, SectionLabel, Segmented, ToggleRow, useToast, WideHead } from '../components/ui.tsx';
 import { CATEGORIES, CATEGORY_LABEL, categoryOf, linkEmails, overall, ROLE_LABEL, type Category, type SquadPlayer } from '../engine/squad.ts';
 import type { Role } from '../engine/types.ts';
 import { MATCHES_TO_RATE, squadRatings, type PlayerRatings } from '../engine/ratings.ts';
@@ -17,6 +19,7 @@ import { pickPhoto, pickTextFile } from '../store/files.ts';
 import { useSquad } from '../store/squad.ts';
 import { parsePhotos, photoFor, photoKey } from '../engine/photos.ts';
 import { useAccess, usePhotos, useSetPhoto } from '../store/sync.tsx';
+import { nameKey } from '../engine/teams.ts';
 import { colors, font, radius, space, type } from '../theme.ts';
 
 const ROLES: { value: Role; label: string }[] = [
@@ -65,20 +68,28 @@ function PlayerRow({
   open,
   onToggle,
   editorBelow,
+  admin,
+  rank,
   ...props
 }: RowProps & {
   open: boolean;
   onToggle: () => void;
   /** On a tablet or laptop the editor opens across the grid under this card's row, not inside the card. */
   editorBelow?: boolean;
+  /** Only the admin sees the edit pill. */
+  admin?: boolean;
+  rank: number;
 }) {
   const { p, shown, r } = props;
+  const stars = Math.max(1, Math.min(5, Math.round(overall(shown))));
   return (
-    <Card style={[styles.row, editorBelow && styles.rowGrid, editorBelow && open && styles.rowOpen]}>
+    <Card style={[styles.row, editorBelow && styles.rowGrid, editorBelow && open && styles.rowOpen, !editorBelow && open && styles.rowOpen]}>
       <PressableScale scaleTo={0.98} onPress={onToggle} style={styles.rowHead} accessibilityLabel={`${p.name}, ${ROLE_LABEL[p.role]}`}>
-        <PlayerAvatar name={p.name} size={44} />
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{overall(shown).toFixed(1)}</Text>
+        <View>
+          <PlayerAvatar name={p.name} size={52} />
+          <View style={styles.rank}>
+            <Text style={styles.rankText}>{rank}</Text>
+          </View>
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.name} numberOfLines={1}>
@@ -86,16 +97,29 @@ function PlayerRow({
             {p.keeper ? <Text style={styles.wk}>{'\u00A0\u00A0'}{p.keeper === 'sometimes' ? '(WK)' : 'WK'}</Text> : null}
           </Text>
           <View style={styles.mini}>
-            <View style={styles.cat}>
-              <Text style={styles.catText}>{CATEGORY_LABEL[categoryOf(p)]}</Text>
+            <RoleIcon role={p.role} size={20} />
+            <Text style={styles.miniText}>{ROLE_NAME[p.role]}</Text>
+            <Stars value={stars} size={12} />
+          </View>
+          <View style={styles.mini}>
+            <View style={styles.cat} accessibilityLabel={`Auction category ${CATEGORY_LABEL[categoryOf(p)]}`}>
+              <Text style={styles.catText}>Auction · {CATEGORY_LABEL[categoryOf(p)]}</Text>
             </View>
-            <Text style={styles.miniText}>Bat {shown.bat}</Text>
-            <Text style={styles.miniText}>Bowl {shown.bowl}</Text>
-            <Text style={styles.miniText}>Field {shown.field}</Text>
+            <Text style={styles.miniText}>Bat {shown.bat} · Bowl {shown.bowl} · Field {shown.field}</Text>
             {r?.form != null && <FormBadge form={r.form} />}
           </View>
         </View>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.faint} />
+        <View style={{ alignItems: 'center', gap: 6 }}>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{overall(shown).toFixed(1)}</Text>
+          </View>
+          {admin && (
+            <View style={[styles.editPill, open && { backgroundColor: colors.accent }]}>
+              <Ionicons name={open ? 'checkmark' : 'create-outline'} size={13} color={open ? colors.onAccent : colors.text} />
+              <Text style={[styles.editText, open && { color: colors.onAccent }]}>{open ? 'Done' : 'Edit'}</Text>
+            </View>
+          )}
+        </View>
       </PressableScale>
       {open && !editorBelow && <PlayerEditor {...props} />}
     </Card>
@@ -268,7 +292,15 @@ export default function SquadScreen() {
   const toast = useToast();
   const [open, setOpen] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const sorted = [...squad].sort((a, b) => overall(shownOf(b)) - overall(shownOf(a)) || a.name.localeCompare(b.name));
+  const { savedTeams } = useMatches();
+  const [q, setQ] = useState('');
+  const [roleF, setRoleF] = useState<Role | null>(null);
+  const [teamF, setTeamF] = useState<string | null>(null);
+  const sortedAll = [...squad].sort((a, b) => overall(shownOf(b)) - overall(shownOf(a)) || a.name.localeCompare(b.name));
+  const teamsF = savedTeams.filter((t) => t.players.length >= 1).slice(0, 4);
+  const inTeam = (p: SquadPlayer) => !teamF || Boolean(savedTeams.find((t) => t.name === teamF)?.players.some((x) => nameKey(x.name) === nameKey(p.name)));
+  const isRole = (p: SquadPlayer, r: Role) => (r === 'wk' ? p.role === 'wk' || p.keeper === true : p.role === r);
+  const sorted = sortedAll.filter((p) => inTeam(p) && (!roleF || isRole(p, roleF)) && (!q.trim() || p.name.toLowerCase().includes(q.trim().toLowerCase())));
 
   const add = () => {
     const n = name.trim();
@@ -311,6 +343,8 @@ export default function SquadScreen() {
     <FadeIn key={p.id} delay={Math.min(i, 10) * 25} style={wide && { flex: 1 }}>
       <PlayerRow
         {...rowProps(p)}
+        admin={admin}
+        rank={sortedAll.indexOf(p) + 1}
         open={admin && open === p.id}
         onToggle={() => admin && setOpen(open === p.id ? null : p.id)}
         editorBelow={wide}
@@ -320,21 +354,21 @@ export default function SquadScreen() {
 
   const addCard = (
     <>
-      {/* On a tablet or laptop it sits in a row with two buttons: the same 56 high as they are. */}
-      <Card style={[styles.addCard, wide && { marginTop: 0, paddingVertical: 5 }]}>
+      <View style={wide ? styles.addCard : { gap: space.sm }}>
         <TextInput
           value={name}
           onChangeText={setName}
           onSubmitEditing={add}
-          placeholder="Add a regular"
+          placeholder="New player's name"
           placeholderTextColor={colors.faint}
-          style={[styles.input, { flex: 1 }]}
+          style={[styles.input, wide && { flex: 1 }]}
           maxLength={24}
           autoCapitalize="words"
           returnKeyType="done"
+          accessibilityLabel="Add a regular"
         />
-        <IconButton icon="add" label="Add to squad" active={Boolean(name.trim())} disabled={!name.trim()} onPress={add} />
-      </Card>
+        <Button icon="person-add" label="Add player" disabled={!name.trim()} onPress={add} />
+      </View>
       <NameSuggestions value={name} taken={squad.map((p) => p.name)} onPick={setName} />
     </>
   );
@@ -374,11 +408,81 @@ export default function SquadScreen() {
       }}
     />
   );
-  const label = <SectionLabel right={admin ? <Text style={styles.hint}>Tap to edit</Text> : undefined}>Best first</SectionLabel>;
+  const label = <SectionLabel right={<Text style={styles.hint}>{sorted.length === squad.length ? `${squad.length} players` : `${sorted.length} of ${squad.length}`}{admin ? ' · tap Edit to change' : ''}</Text>}>Best first</SectionLabel>;
+  const count = (r: Role) => squad.filter((p) => isRole(p, r)).length;
   const lead = (
-    <Text style={styles.lead}>
-      Your {squad.length} regulars. Every match gives each of them a rating out of 10, and their stars come from those matches: they set them up for the auction.
-    </Text>
+    <View style={styles.summary}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+        <CountUp value={squad.length} style={styles.bigCount} />
+        <Text style={styles.bigLabel}>regulars in the club</Text>
+      </View>
+      <View style={styles.roleCounts}>
+        {ROLES.map((r) => (
+          <View key={r.value} style={styles.roleCount}>
+            <RoleIcon role={r.value} size={22} />
+            <CountUp value={count(r.value)} delay={200} style={styles.roleN} />
+            <Text style={styles.hint}>{r.label}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.lead}>Every match gives each of them a rating out of 10, and their stars come from those matches: they set them up for the auction.</Text>
+    </View>
+  );
+  const filters = (
+    <View style={{ gap: space.sm }}>
+      <View style={styles.search}>
+        <Ionicons name="search" size={17} color={colors.faint} />
+        <TextInput
+          value={q}
+          onChangeText={setQ}
+          placeholder="Search the squad"
+          placeholderTextColor={colors.faint}
+          style={styles.searchInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Search the squad"
+        />
+        {q ? (
+          <PressableScale hitSlop={10} scaleTo={0.85} accessibilityLabel="Clear search" onPress={() => setQ('')}>
+            <Ionicons name="close-circle" size={18} color={colors.faint} />
+          </PressableScale>
+        ) : null}
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+        <Chip label="All roles" selected={roleF === null} onPress={() => setRoleF(null)} />
+        {ROLES.map((r) => (
+          <Chip key={r.value} label={r.label} selected={roleF === r.value} onPress={() => setRoleF(roleF === r.value ? null : r.value)} />
+        ))}
+        {teamsF.length > 0 && <View style={styles.chipGap} />}
+        {teamsF.map((t) => (
+          <Chip key={t.id} icon="shield-outline" label={t.name} selected={teamF === t.name} onPress={() => setTeamF(teamF === t.name ? null : t.name)} />
+        ))}
+      </ScrollView>
+    </View>
+  );
+  const adminPanel = admin ? (
+    <Card style={{ gap: space.md }}>
+      <View style={styles.adminHead}>
+        <Ionicons name="lock-closed" size={13} color={colors.gold} />
+        <Text style={styles.adminTag}>Admin only</Text>
+        <Text style={styles.hint}>Add, edit and remove players</Text>
+      </View>
+      {addCard}
+      <View style={wide ? { flexDirection: 'row', gap: space.sm } : { gap: space.sm }}>
+        <View style={wide && { flex: 1 }}>{emailLinker}</View>
+        <View style={wide && { flex: 1 }}>{importPhotos}</View>
+      </View>
+    </Card>
+  ) : (
+    <Text style={styles.hint}>Everyone sees the squad. Only the club admin can add or change players.</Text>
+  );
+  const empty = sorted.length === 0 && (
+    <Card style={{ alignItems: 'center', gap: space.sm }}>
+      <Ionicons name="search" size={26} color={colors.faint} />
+      <Text style={styles.name}>No one matches</Text>
+      <Text style={styles.hint}>Try another name, or clear the filters.</Text>
+      <Chip label="Clear filters" onPress={() => (setQ(''), setRoleF(null), setTeamF(null))} />
+    </Card>
   );
 
   // A tablet or laptop: the squad as a grid, two or three a line, best first across each line. The player being edited
@@ -440,36 +544,26 @@ export default function SquadScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {wide ? (
-            <Page>
-              <View style={styles.leadWide}>{lead}</View>
-              {admin && (
-                <Columns tablet={3} gap={space.sm} style={{ marginTop: space.lg }}>
-                  <View>{addCard}</View>
-                  <View>{emailLinker}</View>
-                  <View>{importPhotos}</View>
-                </Columns>
-              )}
+            <Page style={{ gap: space.md }}>
+              {lead}
+              {adminPanel}
+              {filters}
               {label}
+              {empty}
               {grid}
               {admin && <Text style={styles.foot}>Renaming someone keeps their stats and photo under the new name.</Text>}
             </Page>
           ) : (
-            <>
+            <View style={{ gap: space.md }}>
               <Text style={styles.title}>The squad</Text>
               {lead}
-
-              {admin && (
-                <>
-                  {addCard}
-                  {emailLinker}
-                  {importPhotos}
-                </>
-              )}
-
+              {adminPanel}
+              {filters}
               {label}
+              {empty}
               <View style={{ gap: space.sm }}>{sorted.map(row)}</View>
               {admin && <Text style={styles.foot}>Renaming someone keeps their stats and photo under the new name.</Text>}
-            </>
+            </View>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -487,9 +581,25 @@ const styles = StyleSheet.create({
   editorWide: { gap: space.md, borderColor: colors.accent },
   editorHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md },
   editorTitle: { flex: 1, color: colors.text, fontSize: 22, fontFamily: font.posterBlack, letterSpacing: -0.6 },
-  lead: { color: colors.muted, fontSize: 14, fontFamily: font.medium, marginTop: 4, lineHeight: 20 },
+  lead: { color: colors.muted, fontSize: 13, fontFamily: font.medium, lineHeight: 19 },
   hint: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
-  addCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.lg, padding: space.sm, paddingLeft: space.sm },
+  addCard: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  summary: { gap: space.md },
+  bigCount: { color: colors.text, fontSize: 56, lineHeight: 58, fontFamily: font.posterBlack, letterSpacing: -2, ...type.num },
+  bigLabel: { color: colors.muted, fontSize: 15, fontFamily: font.semibold, marginBottom: 8 },
+  roleCounts: { flexDirection: 'row', gap: space.lg, flexWrap: 'wrap' },
+  roleCount: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  roleN: { color: colors.text, fontSize: 18, fontFamily: font.posterBlack, ...type.num },
+  search: { flexDirection: 'row', alignItems: 'center', gap: space.sm, height: 48, paddingHorizontal: space.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderHi },
+  searchInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: 15, fontFamily: font.medium, height: 46 },
+  chipRow: { gap: space.sm, alignItems: 'center', paddingRight: space.md },
+  chipGap: { width: 1, height: 22, backgroundColor: colors.borderHi, marginHorizontal: 2 },
+  adminHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  adminTag: { ...type.label, color: colors.gold },
+  rank: { position: 'absolute', left: -4, top: -4, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.borderHi },
+  rankText: { color: colors.muted, fontSize: 10, fontFamily: font.heavy, ...type.num },
+  editPill: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 28, paddingHorizontal: 9, borderRadius: radius.pill, backgroundColor: colors.surfaceHi, borderWidth: 1, borderColor: colors.borderHi },
+  editText: { color: colors.text, fontSize: 12, fontFamily: font.bold },
   input: {
     color: colors.text,
     fontSize: 15,
@@ -511,8 +621,8 @@ const styles = StyleSheet.create({
   name: { color: colors.text, fontSize: 16, fontFamily: font.bold },
   wk: { color: colors.cyan, fontSize: 11, fontFamily: font.heavy },
   mini: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 3, flexWrap: 'wrap' },
-  cat: { backgroundColor: colors.surfaceHi, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  catText: { color: colors.text, fontSize: 10, fontFamily: font.heavy, letterSpacing: 0.5 },
+  cat: { backgroundColor: colors.goldDim, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1 },
+  catText: { color: colors.gold, fontSize: 10, fontFamily: font.heavy, letterSpacing: 0.5 },
   catHint: { color: colors.faint, fontSize: 12, fontFamily: font.regular },
   miniText: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
   editor: { gap: space.md, padding: space.md, paddingTop: 0 },

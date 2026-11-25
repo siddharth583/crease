@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { MatchRating } from '../engine/ratings.ts';
 import { colors, font, radius, space, type } from '../theme.ts';
+import { GrowBar, PopIn } from './motion.tsx';
 import { usePageTone } from './ui.tsx';
 
 // A player's match ratings out of 10 and the form they make, the same on the squad list and the player's page.
@@ -21,15 +22,20 @@ export function FormBadge({ form }: { form: number }) {
   );
 }
 
-/** Their ratings, newest first, each with the day it was played. */
+/** Their ratings, newest first, each with the day it was played. Each chip pops in, one after another. */
 export function RatingChips({ history, max = 8 }: { history: MatchRating[]; max?: number }) {
   const tone = usePageTone();
   return (
     <View style={styles.chips}>
-      {history.slice(0, max).map((m) => (
-        <View key={m.matchId} style={styles.cell}>
-          <View style={[styles.chip, ratingTone(m.rating), tone && m.rating >= 8 && { backgroundColor: tone.accent }]}>
-            <Text style={[styles.chipText, m.rating >= 8 && { color: tone?.onAccent ?? colors.onAccent }]}>{m.rating.toFixed(1)}</Text>
+      {history.slice(0, max).map((m, i) => (
+        <View key={m.matchId} style={styles.cell} accessibilityLabel={`Rated ${m.rating.toFixed(1)} out of 10 on ${day(m.date)}`}>
+          <PopIn delay={i * 60} turn={-6}>
+            <View style={[styles.chip, ratingTone(m.rating), tone && m.rating >= 8 && { backgroundColor: tone.accent }]}>
+              <Text style={[styles.chipText, m.rating >= 8 && { color: tone?.onAccent ?? colors.onAccent }]}>{m.rating.toFixed(1)}</Text>
+            </View>
+          </PopIn>
+          <View style={styles.meter}>
+            <GrowBar share={m.rating / 10} delay={200 + i * 60} trackStyle={styles.meterTrack} style={[styles.meterFill, m.rating >= 8 && { backgroundColor: colors.gold }, m.rating < 5 && { backgroundColor: colors.danger }]} />
           </View>
           <Text style={styles.day} numberOfLines={1}>
             {day(m.date)}
@@ -47,6 +53,9 @@ const styles = StyleSheet.create({
   cell: { alignItems: 'center', gap: 3, width: 46 },
   chip: { width: 44, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceHi },
   chipText: { fontFamily: font.posterBlack, fontSize: 15, color: colors.text, ...type.num },
+  meter: { width: 36 },
+  meterTrack: { height: 3, borderRadius: 2, backgroundColor: colors.surfaceHi, overflow: 'hidden' },
+  meterFill: { height: 3, borderRadius: 2, backgroundColor: colors.accent },
   day: { color: colors.faint, fontSize: 10, fontFamily: font.medium },
   top: { backgroundColor: colors.accent },
   good: { backgroundColor: colors.cyanDim },

@@ -1,8 +1,9 @@
+import { inPlay, UNUSED_EXTRAS, UNUSED_WICKETS } from '../engine/clubRules.ts';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { canChangeLegality, playerName, replaceBall, setBowlerFrom, type BallView, type InningsState } from '../engine/engine.ts';
 import type { BallEvent, Extra, Match, WicketKind } from '../engine/types.ts';
-import { colors, font, space, type } from '../theme.ts';
+import { colors, font, radius, space, type } from '../theme.ts';
 import { BallChip, Button, Chip, Segmented, Sheet } from './ui.tsx';
 
 const EDIT_KINDS: { value: 'none' | Extra; label: string }[] = [
@@ -122,7 +123,7 @@ export function BallEditSheet({
 
   const bowlerPart = (
     <>
-      <Text style={styles.label}>Bowler</Text>
+      <Text style={styles.label}>Who bowled it?</Text>
       <Text style={styles.note}>
         {opensOver
           ? `Who bowled over ${o + 1}.`
@@ -152,10 +153,13 @@ export function BallEditSheet({
     <Sheet visible onClose={onClose} title="Fix this ball">
       <ScrollView contentContainerStyle={{ gap: space.md, paddingBottom: space.md }}>
         <View style={styles.now}>
-          <BallChip ball={ball} size={44} />
-          <Text style={styles.nowText}>
-            Over {o + 1}, ball {position + 1} · scored as {ball.label === '•' ? 'a dot ball' : ball.label}
-          </Text>
+          <BallChip ball={ball} size={52} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.nowTitle}>
+              Over {o + 1} · ball {position + 1}
+            </Text>
+            <Text style={styles.nowText}>Scored as {ball.label === '•' ? 'a dot ball' : ball.label}. Change it below and everything after it follows.</Text>
+          </View>
         </View>
         {event.wicket ? (
           <>
@@ -163,8 +167,9 @@ export function BallEditSheet({
               {playerName(match, event.wicket.playerOut)} stays out (everything after was scored without them). Fix how,
               or who took it.
             </Text>
+            <Text style={styles.label}>How was it out?</Text>
             <View style={styles.wrap}>
-              {WICKET_EDIT_KINDS.map((k) => (
+              {inPlay(WICKET_EDIT_KINDS, UNUSED_WICKETS, how).map((k) => (
                 <Chip key={k.value} tone="danger" label={k.label} selected={how === k.value} onPress={() => setHow(k.value)} />
               ))}
             </View>
@@ -206,13 +211,15 @@ export function BallEditSheet({
                 <Chip label="Bounce" icon={bounce ? 'checkmark' : undefined} selected={bounce} onPress={() => setBounce(!bounce)} />
               </View>
             )}
+            <Text style={styles.label}>What happened on the ball?</Text>
             {bounce ? (
               <Text style={styles.note}>
                 A bounce{calledWide ? ', called a wide' : ball.label.startsWith('BNb') ? ', called a no ball' : ''}. Untick Bounce if it wasn’t one.
               </Text>
             ) : (
-              <Segmented value={kind} onChange={pickKind} options={EDIT_KINDS} />
+              <Segmented value={kind} onChange={pickKind} options={inPlay(EDIT_KINDS, UNUSED_EXTRAS, kind)} />
             )}
+            <Text style={styles.label}>{byes ? 'Runs they ran' : wide ? 'Runs (the wide’s own run only)' : 'Runs'}</Text>
             <View style={styles.wrap}>
               {[0, 1, 2, 3, 4, 5, 6].map((r) => (
                 <Chip key={r} label={String(r)} selected={runs === r} disabled={(!bounce && byes && r === 0) || (wide && r > 0)} onPress={() => setRuns(r)} />
@@ -239,8 +246,9 @@ export function BallEditSheet({
 
 const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  now: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  nowText: { flex: 1, color: colors.text, fontSize: 16, fontFamily: font.bold },
+  now: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.surfaceHi, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderHi, padding: space.md },
+  nowTitle: { color: colors.text, fontSize: 18, fontFamily: font.poster },
+  nowText: { color: colors.muted, fontSize: 12.5, fontFamily: font.medium, lineHeight: 17, marginTop: 2 },
   note: { color: colors.muted, fontSize: 13, fontFamily: font.regular, lineHeight: 19 },
   label: { ...type.label, color: colors.muted, marginTop: space.xs },
   error: { color: colors.danger, fontSize: 13, fontFamily: font.semibold, lineHeight: 19 },

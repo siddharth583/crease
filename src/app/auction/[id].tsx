@@ -1,19 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stars } from '../../components/Stars.tsx';
 import { Columns, Page, useLayout } from '../../components/layout.tsx';
 import { Button, Card, FadeIn, GhostWord, IconButton, PitchStripes, PopText, PressableScale, Screen, SectionLabel, tap, useToast, WideHead } from '../../components/ui.tsx';
+import { TeamCrest, TeamWash } from '../../components/TeamCrest.tsx';
 import { auctionState, money, nextBid, passPlayer, rosterPlayer, sell, undoAuction, type Auction, type AuctionState } from '../../engine/auction.ts';
 import { CATEGORY_LABEL, categoryOf, overall, ROLE_LABEL } from '../../engine/squad.ts';
 import { careerStats, playerKey } from '../../engine/stats.ts';
 import { plural } from '../../engine/text.ts';
-import { CountUp, PopIn } from '../../components/motion.tsx';
+import { Confetti, CountUp, PopIn, Pulse, Rise, Sheen, useReducedMotion } from '../../components/motion.tsx';
+import { OvalGround, SeamDivider } from '../../components/cricket.tsx';
+import { PlayerAvatar } from '../../components/Avatar.tsx';
 import { useMatches } from '../../store/matches.tsx';
 import { useSquad } from '../../store/squad.ts';
-import { colors, edge, font, hero, ownTeamTheme, radius, space, type, HERO_BG } from '../../theme.ts';
+import { colors, edge, font, gradients, hero, ownTeamTheme, radius, space, type, HERO_BG } from '../../theme.ts';
 
 /**
  * Each side's colour: its own team colours when it has them, else volt and the light violet. Both are bright, so they
@@ -22,18 +26,39 @@ import { colors, edge, font, hero, ownTeamTheme, radius, space, type, HERO_BG } 
 const tintOf = (name: string, i: number) => ownTeamTheme(name)?.accent ?? [colors.accent, hero.violet][i];
 const onTintOf = (name: string) => ownTeamTheme(name)?.onAccent ?? colors.onAccent;
 
-/** A captain's purse and side so far. */
-function SidePanel({ s, i, leading }: { s: AuctionState['sides'][number]; i: 0 | 1; leading: boolean }) {
+/** What is left of a purse, as a bar that eases to its new length. */
+function PurseBar({ fraction, color }: { fraction: number; color: string }) {
+  const v = useRef(new Animated.Value(fraction)).current;
+  useEffect(() => {
+    Animated.spring(v, { toValue: fraction, useNativeDriver: false, speed: 10, bounciness: 4 }).start();
+  }, [fraction, v]);
   return (
-    <View style={[styles.side, leading && { borderColor: tintOf(s.name, i) }]}>
-      <View style={[styles.sideBar, { backgroundColor: tintOf(s.name, i) }]} />
-      <Text style={styles.sideName} numberOfLines={1}>
-        {s.name}
-      </Text>
+    <View style={styles.purseTrack}>
+      <Animated.View style={[styles.purseFill, { backgroundColor: color, width: v.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'], extrapolate: 'clamp' }) }]} />
+    </View>
+  );
+}
+
+/** A captain's purse and side so far, as a scoreboard panel. */
+function SidePanel({ s, i, leading, total, size }: { s: AuctionState['sides'][number]; i: 0 | 1; leading: boolean; total: number; size: number }) {
+  const tint = tintOf(s.name, i);
+  return (
+    <View style={[styles.side, leading && { borderColor: tint }]} accessibilityLabel={`${s.name}: ${money(s.left)} left, ${s.players.length} of ${size} players`}>
+      <LinearGradient pointerEvents="none" colors={gradients.hero} style={StyleSheet.absoluteFill} />
+      <TeamWash color={tint} strength={leading ? 0.34 : 0.16} />
+      <View style={styles.sideTitle}>
+        <TeamCrest name={s.name} size={30} />
+        <Text style={styles.sideName} numberOfLines={1}>
+          {s.name}
+        </Text>
+        {leading && <Pulse color={tint} />}
+      </View>
+      <Text style={styles.purseLabel}>PURSE LEFT</Text>
       <CountUp value={s.left} format={money} style={styles.purse} duration={800} />
+      <PurseBar fraction={total ? s.left / total : 0} color={tint} />
       {/* Two lines if it needs them: on a phone the max bid was cut off at the card's edge. */}
       <Text style={styles.sideMeta} numberOfLines={2}>
-        {plural(s.players.length, 'player')} · {s.slots ? `max bid ${money(s.maxBid)}` : 'full'}
+        {s.players.length} of {size} players · {s.slots ? `max bid ${money(s.maxBid)}` : 'full'}
       </Text>
     </View>
   );
@@ -48,7 +73,11 @@ function Results({ a, s }: { a: Auction; s: AuctionState }) {
       {s.sides.map((side, i) => (
         <FadeIn key={i} delay={i * 80} style={wide && { flex: 1 }}>
           <Card style={[{ padding: 0, overflow: 'hidden' }, wide && { flex: 1 }]}>
-            <View style={[styles.resultHead, { borderLeftColor: tintOf(side.name, i) }]}>
+            <View style={styles.resultHead}>
+              <TeamWash color={tintOf(side.name, i)} strength={0.2} />
+              <View style={{ marginRight: space.md }}>
+                <TeamCrest name={side.name} size={40} />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.resultTeam} numberOfLines={1}>
                   {side.name}
@@ -124,7 +153,7 @@ export default function AuctionScreen() {
   const sidesN = (
     <View style={styles.sides}>
       {s.sides.map((side, i) => (
-        <SidePanel key={i} s={side} i={i as 0 | 1} leading={bid?.side === i} />
+        <SidePanel key={i} s={side} i={i as 0 | 1} leading={bid?.side === i} total={a.settings.purse} size={s.sideSize} />
       ))}
     </View>
   );
@@ -179,31 +208,39 @@ export default function AuctionScreen() {
           <Columns weights={[3, 2]} gap={wide ? space.lg : 0}>
           <View>
             <View style={[styles.lot, wide && { marginTop: 0, padding: space.xxl }]}>
-              <PitchStripes opacity={0.06} tint="255,255,255" />
-              <GhostWord size={130} style={{ color: hero.ink(0.05) }}>
-                {String(lot)}
-              </GhostWord>
+              <LinearGradient pointerEvents="none" colors={gradients.hero} style={StyleSheet.absoluteFill} />
+              <OvalGround opacity={0.09} />
+              <PitchStripes opacity={0.05} tint="255,255,255" />
+              <Sheen />
               <View style={styles.lotTop}>
-                <Text style={styles.lotRole}>
-                  {CATEGORY_LABEL[categoryOf(p)]} · {ROLE_LABEL[p.role]}
-                  {p.keeper ? ' · keeps' : ''}
-                </Text>
+                <Text style={styles.lotKicker}>LOT {lot} OF {a.order.length}</Text>
                 {s.lastCall ? (
                   <View style={styles.lastCall}>
                     <Text style={styles.lastCallText}>LAST CALL</Text>
                   </View>
                 ) : (
-                  <Text style={styles.overall}>★ {overall(p).toFixed(1)}</Text>
+                  <Text style={styles.overall}>★ {overall(p).toFixed(1)} overall</Text>
                 )}
               </View>
-              <Text style={[styles.lotName, wide && { fontSize: 52, lineHeight: 58 }]} numberOfLines={2}>
-                {p.name}
-              </Text>
+              <View key={p.id} style={styles.lotBody}>
+                <PopIn turn={-6} style={styles.photoRing}>
+                  <PlayerAvatar name={p.name} size={wide ? 104 : 84} />
+                </PopIn>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.lotRole}>
+                    {CATEGORY_LABEL[categoryOf(p)]} · {ROLE_LABEL[p.role]}
+                    {p.keeper ? ' · keeps' : ''}
+                  </Text>
+                  <Text style={[styles.lotName, wide && { fontSize: 46, lineHeight: 50 }]} numberOfLines={2}>
+                    {p.name}
+                  </Text>
+                </View>
+              </View>
               <View style={styles.ratings}>
                 {(['bat', 'bowl', 'field'] as const).map((k) => (
                   <View key={k} style={styles.rating}>
-                    <Text style={styles.ratingLabel}>{k === 'bat' ? 'BAT' : k === 'bowl' ? 'BOWL' : 'FIELD'}</Text>
-                    <Stars value={p[k]} size={13} label={k} />
+                    <Text style={styles.ratingLabel}>{k === 'bat' ? 'BATTING' : k === 'bowl' ? 'BOWLING' : 'FIELDING'}</Text>
+                    <Stars value={p[k]} size={14} label={k} />
                   </View>
                 ))}
               </View>
@@ -212,6 +249,7 @@ export default function AuctionScreen() {
                   ? `${career.matches} match${career.matches === 1 ? '' : 'es'} · ${plural(career.batting.runs, 'run')} · ${plural(career.bowling.wickets, 'wicket')} · best ${career.batting.highest}${career.batting.highestNotOut ? '*' : ''}`
                   : 'No matches on record yet'}
               </Text>
+              <SeamDivider color={hero.ink(0.18)} style={{ marginTop: space.md }} />
               <View style={styles.bidBox}>
                 <Text style={styles.bidLabel}>{bid ? `${s.sides[bid.side].name} bids` : `Base price · ${CATEGORY_LABEL[categoryOf(p)]}`}</Text>
                 <PopText value={money(bid ? bid.amount : s.opening)} style={[styles.bidValue, bid && { color: tintOf(s.sides[bid.side].name, bid.side) }]} />
@@ -235,6 +273,7 @@ export default function AuctionScreen() {
                       {side.name}
                     </Text>
                     <Text style={[styles.bidAmount, { color: onTintOf(side.name) }]}>{bid?.side === k ? 'LEADING' : `BID ${money(amount)}`}</Text>
+                    {!ok && bid?.side !== k && <Text style={[styles.bidWhy, { color: onTintOf(side.name) }]}>{side.slots <= 0 ? 'side is full' : 'over the limit'}</Text>}
                   </PressableScale>
                 );
               })}
@@ -280,8 +319,16 @@ export default function AuctionScreen() {
           <>
             {wide && sidesN}
             <View style={styles.doneHead}>
-              <Ionicons name="trophy" size={22} color={colors.onAccent} />
-              <Text style={styles.doneText}>Auction done. Here are the teams.</Text>
+              <LinearGradient pointerEvents="none" colors={gradients.hero} style={StyleSheet.absoluteFill} />
+              <OvalGround opacity={0.1} />
+              <Confetti count={30} height={420} />
+              <PopIn style={styles.doneIcon}>
+                <Ionicons name="trophy" size={24} color={hero.gold} />
+              </PopIn>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.doneKicker}>THE HAMMER’S DOWN</Text>
+                <Text style={styles.doneText}>Auction done. Here are the teams.</Text>
+              </View>
             </View>
             <Results a={a} s={s} />
           </>
@@ -308,7 +355,9 @@ export default function AuctionScreen() {
       )}
       {sold && (
         <View pointerEvents="none" style={styles.stampWrap}>
+          <Confetti count={40} height={700} />
           <PopIn key={sold.key} turn={-18} style={[styles.stamp, { borderColor: tintOf(s.sides[sold.side].name, sold.side) }]}>
+            <TeamCrest name={sold.to} size={44} />
             <Text style={[styles.stampWord, { color: tintOf(s.sides[sold.side].name, sold.side) }]}>Sold!</Text>
             <Text style={styles.stampName} numberOfLines={1}>
               {sold.name}
@@ -335,7 +384,7 @@ const styles = StyleSheet.create({
   sides: { flexDirection: 'row', gap: space.sm },
   side: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: HERO_BG,
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: radius.lg,
@@ -344,13 +393,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...edge,
   },
-  sideBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
-  sideName: { color: colors.text, fontSize: 15, fontFamily: font.poster },
-  purse: { fontFamily: font.posterBlack, fontSize: 25, lineHeight: 28, color: colors.text, ...type.num },
-  sideMeta: { color: colors.muted, fontSize: 11, fontFamily: font.semibold },
+  sideTitle: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  sideName: { color: hero.text, fontSize: 15, fontFamily: font.poster, flexShrink: 1 },
+  purseLabel: { ...type.label, fontSize: 9, color: hero.muted, marginTop: space.sm },
+  purseTrack: { height: 4, borderRadius: 2, backgroundColor: hero.ink(0.12), marginVertical: 6, overflow: 'hidden' },
+  purseFill: { height: 4, borderRadius: 2 },
+  lotKicker: { ...type.label, color: hero.gold, letterSpacing: 2 },
+  lotBody: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginTop: space.md },
+  photoRing: { borderRadius: 60, borderWidth: 2, borderColor: hero.gold, padding: 3 },
+  bidWhy: { fontSize: 11, fontFamily: font.semibold, opacity: 0.8 },
+  purse: { fontFamily: font.posterBlack, fontSize: 28, lineHeight: 32, color: hero.text, ...type.num },
+  sideMeta: { color: hero.muted, fontSize: 11, fontFamily: font.semibold },
   lot: { backgroundColor: HERO_BG, borderRadius: radius.xl, padding: space.xl, marginTop: space.md, overflow: 'hidden' },
   lotTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  lotRole: { ...type.label, color: hero.accent },
+  lotRole: { ...type.label, color: hero.accent, fontSize: 10 },
   overall: { color: hero.muted, fontSize: 13, fontFamily: font.bold },
   lastCall: { backgroundColor: colors.danger, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 3 },
   lastCallText: { color: '#FFFFFF', fontSize: 11, fontFamily: font.heavy, letterSpacing: 1 },
@@ -363,22 +419,24 @@ const styles = StyleSheet.create({
   bidLabel: { color: hero.muted, fontSize: 13, fontFamily: font.bold, flex: 1 },
   bidValue: { fontFamily: font.posterBlack, fontSize: 46, lineHeight: 52, color: hero.text, ...type.num },
   bidRow: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
-  bidButton: { borderRadius: radius.lg, padding: space.md, alignItems: 'center', minHeight: 76, justifyContent: 'center', ...edge },
+  bidButton: { borderRadius: radius.lg, padding: space.md, alignItems: 'center', minHeight: 92, justifyContent: 'center', ...edge },
   bidWho: { color: colors.onAccent, fontSize: 13, fontFamily: font.bold },
-  bidAmount: { color: colors.onAccent, fontSize: 18, fontFamily: font.posterBlack, ...type.num },
+  bidAmount: { color: colors.onAccent, fontSize: 22, fontFamily: font.posterBlack, ...type.num },
   help: { color: colors.muted, fontSize: 13, fontFamily: font.medium, textAlign: 'center', marginTop: space.md, lineHeight: 18 },
   count: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
   next: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   nextName: { flex: 1, color: colors.text, fontSize: 14, fontFamily: font.semibold },
   again: { color: colors.danger, fontSize: 11, fontFamily: font.bold },
   nextRole: { color: colors.faint, fontSize: 12, fontFamily: font.medium },
-  doneHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.accent, borderRadius: radius.md, padding: space.md, marginVertical: space.md, ...edge },
-  doneText: { color: colors.onAccent, fontSize: 18, fontFamily: font.poster, flex: 1 },
-  resultHead: { flexDirection: 'row', alignItems: 'center', padding: space.md, borderLeftWidth: 4, borderBottomWidth: 1, borderBottomColor: colors.border },
+  doneHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: HERO_BG, borderRadius: radius.xl, padding: space.lg, marginVertical: space.md, overflow: 'hidden' },
+  doneIcon: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: hero.gold, alignItems: 'center', justifyContent: 'center' },
+  doneKicker: { ...type.label, color: hero.gold, fontSize: 10, letterSpacing: 2 },
+  doneText: { color: hero.text, fontSize: 19, fontFamily: font.posterBlack, letterSpacing: -0.4 },
+  resultHead: { flexDirection: 'row', alignItems: 'center', padding: space.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   resultTeam: { color: colors.text, fontSize: 21, fontFamily: font.posterBlack },
   resultMeta: { color: colors.muted, fontSize: 12, fontFamily: font.medium },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  resultNo: { width: 18, color: colors.faint, fontFamily: font.posterBlack, fontSize: 16 },
+  resultNo: { width: 18, color: colors.gold, fontFamily: font.posterBlack, fontSize: 16 },
   resultName: { color: colors.text, fontSize: 15, fontFamily: font.bold },
   resultRole: { color: colors.muted, fontSize: 12, fontFamily: font.regular },
   cap: { color: colors.accentInk, fontSize: 10, fontFamily: font.heavy },

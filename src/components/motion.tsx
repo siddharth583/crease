@@ -265,7 +265,7 @@ export function Rise({ children, index = 0, style, step = 55 }: { children: Reac
   );
 }
 
-const CONFETTI = ['#D7FF3A', '#F1F5EE', '#7FE6FF', '#FFCB52', '#B9A6FF'];
+const CONFETTI = ['#D7FF3A', '#F4F1E6', '#7FE6FF', '#FFCB52', '#B9A6FF'];
 
 /** A short burst of confetti falling over a win. Plays once when it mounts. */
 export function Confetti({ count = 28, height = 520 }: { count?: number; height?: number }) {
